@@ -207,8 +207,8 @@ class BarkDetector:
                 return
 
             # Run inference
-            with torch.no_grad():
-                probability = self._model(features).detach().item()
+            with torch.inference_mode():
+                probability = self._model(features).item()
 
         except Exception as e:
             logger.debug("feature_extraction_error", error=str(e))

@@ -281,7 +281,7 @@ async def get_configuration(
     """Get current configuration (sanitized).
 
     Returns configuration values without sensitive data
-    like API keys or webhook secrets.
+    like API keys, webhook secrets, or filesystem paths.
     """
     return ConfigurationSchema(
         audio={
@@ -292,7 +292,7 @@ async def get_configuration(
             "volume_percent": settings.audio.volume_percent,
         },
         model={
-            "path": str(settings.model.path),
+            # Path redacted - only expose operational parameters
             "threshold": settings.model.threshold,
             "target_sample_rate": settings.model.target_sample_rate,
         },
@@ -302,15 +302,16 @@ async def get_configuration(
             "num_elements": settings.doa.num_elements,
             "angle_min": settings.doa.angle_min,
             "angle_max": settings.doa.angle_max,
+            "method": settings.doa.method,
         },
         evidence={
-            "directory": str(settings.evidence.directory),
+            # Directory path redacted for security
             "past_context_seconds": settings.evidence.past_context_seconds,
             "future_context_seconds": settings.evidence.future_context_seconds,
             "include_metadata": settings.evidence.include_metadata,
         },
         server={
-            "host": settings.server.host,
+            # Host redacted - only expose port for client use
             "port": settings.server.port,
             "enable_websocket": settings.server.enable_websocket,
         },

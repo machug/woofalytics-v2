@@ -186,8 +186,8 @@ class ServerConfig(BaseModel):
     """Web server configuration."""
 
     host: str = Field(
-        default="0.0.0.0",
-        description="Host address to bind to.",
+        default="127.0.0.1",
+        description="Host address to bind to. Defaults to localhost for security.",
     )
     port: int = Field(
         default=8000,

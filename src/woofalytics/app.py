@@ -13,10 +13,11 @@ from contextlib import asynccontextmanager
 from pathlib import Path
 from typing import AsyncGenerator
 
-from fastapi import FastAPI, Request
+from fastapi import FastAPI, Request, Response
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse
 from fastapi.staticfiles import StaticFiles
+from starlette.middleware.base import BaseHTTPMiddleware
 import structlog
 
 from woofalytics import __version__
@@ -26,6 +27,22 @@ from woofalytics.evidence.storage import EvidenceStorage
 from woofalytics.api.websocket import broadcast_bark_event
 
 logger = structlog.get_logger(__name__)
+
+
+class SecurityHeadersMiddleware(BaseHTTPMiddleware):
+    """Add security headers to all responses."""
+
+    async def dispatch(self, request: Request, call_next) -> Response:
+        response = await call_next(request)
+        # Prevent MIME sniffing
+        response.headers["X-Content-Type-Options"] = "nosniff"
+        # Prevent clickjacking
+        response.headers["X-Frame-Options"] = "DENY"
+        # XSS protection (legacy, but still useful for older browsers)
+        response.headers["X-XSS-Protection"] = "1; mode=block"
+        # Don't expose server version
+        response.headers["Server"] = "Woofalytics"
+        return response
 
 
 @asynccontextmanager
@@ -131,6 +148,9 @@ def create_app() -> FastAPI:
         allow_methods=["GET", "POST", "OPTIONS"],
         allow_headers=["Content-Type", "Accept"],
     )
+
+    # Security headers middleware
+    app.add_middleware(SecurityHeadersMiddleware)
 
     # Import and include API routes
     from woofalytics.api.routes import router as api_router
