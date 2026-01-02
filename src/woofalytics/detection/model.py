@@ -1,28 +1,29 @@
 """Bark detection ML model and inference.
 
-This module handles loading the TorchScript model and running
-inference on audio frames.
+This module handles loading the detection model and running
+inference on audio frames. Supports both CLAP (zero-shot) and
+legacy MLP models.
 """
 
 from __future__ import annotations
 
 import asyncio
-import threading
 import time
 from collections import deque
+from collections.abc import Callable
 from dataclasses import dataclass, field
 from datetime import datetime
 from pathlib import Path
-from typing import Callable
 
 import numpy as np
-import torch
 import structlog
+import torch
 
-from woofalytics.config import Settings, ModelConfig
-from woofalytics.audio.capture import AsyncAudioCapture, AudioFrame
-from woofalytics.detection.features import FeatureExtractor, create_default_extractor
+from woofalytics.audio.capture import AsyncAudioCapture
+from woofalytics.config import Settings
+from woofalytics.detection.clap import CLAPConfig, CLAPDetector
 from woofalytics.detection.doa import DirectionEstimator
+from woofalytics.detection.features import FeatureExtractor, create_default_extractor
 
 logger = structlog.get_logger(__name__)
 
@@ -56,12 +57,17 @@ class BarkDetector:
 
     This class coordinates audio capture, feature extraction,
     model inference, and event handling.
+
+    Supports two detection backends:
+    - CLAP: Zero-shot audio classification (recommended, better speech rejection)
+    - Legacy MLP: TorchScript traced model (requires traced_model.pt)
     """
 
     settings: Settings
 
     # Private state
     _model: torch.jit.ScriptModule | None = field(default=None, init=False)
+    _clap_detector: CLAPDetector | None = field(default=None, init=False)
     _feature_extractor: FeatureExtractor | None = field(default=None, init=False)
     _doa_estimator: DirectionEstimator | None = field(default=None, init=False)
     _audio_capture: AsyncAudioCapture | None = field(default=None, init=False)
@@ -76,20 +82,49 @@ class BarkDetector:
     _total_barks: int = field(default=0, init=False)
 
     def __post_init__(self) -> None:
-        self._load_model()
-        self._setup_components()
+        if self.settings.model.use_clap:
+            self._load_clap_model()
+        else:
+            self._load_model()
+            self._setup_components()
+
+    def _load_clap_model(self) -> None:
+        """Load the CLAP zero-shot audio classifier."""
+        config = CLAPConfig(
+            model_name=self.settings.model.clap_model,
+            threshold=self.settings.model.clap_threshold,
+            device=self.settings.model.clap_device,
+        )
+        self._clap_detector = CLAPDetector(config)
+        # Lazy loading - model loads on first inference
+        logger.info(
+            "clap_detector_configured",
+            model=config.model_name,
+            threshold=config.threshold,
+            device=config.device,
+        )
+
+        # Still set up DOA estimator for direction detection
+        if self.settings.doa.enabled:
+            self._doa_estimator = DirectionEstimator(
+                element_spacing=self.settings.doa.element_spacing,
+                num_elements=self.settings.doa.num_elements,
+                angle_min=self.settings.doa.angle_min,
+                angle_max=self.settings.doa.angle_max,
+                method=self.settings.doa.method,
+            )
 
     def _load_model(self) -> None:
-        """Load the TorchScript model."""
+        """Load the TorchScript model (legacy)."""
         model_path = Path(self.settings.model.path)
 
         if not model_path.exists():
             raise FileNotFoundError(f"Model file not found: {model_path}")
 
-        logger.info("loading_model", path=str(model_path))
+        logger.info("loading_legacy_model", path=str(model_path))
         self._model = torch.jit.load(str(model_path))
         self._model.eval()
-        logger.info("model_loaded")
+        logger.info("legacy_model_loaded")
 
     def _setup_components(self) -> None:
         """Initialize feature extractor and DOA estimator."""
@@ -155,9 +190,12 @@ class BarkDetector:
 
     async def _inference_loop(self) -> None:
         """Main inference loop."""
-        # Calculate inference interval based on window settings
-        # We want to run inference every ~80ms (8 chunks of 10ms each)
-        interval = 0.08  # 80ms
+        # CLAP uses ~1s audio windows and is slower, so run less frequently
+        # Legacy MLP uses 80ms windows and is fast
+        if self.settings.model.use_clap:
+            interval = 0.5  # 500ms - CLAP needs more audio and is heavier
+        else:
+            interval = 0.08  # 80ms for legacy MLP
 
         while self._running:
             try:
@@ -171,6 +209,82 @@ class BarkDetector:
 
     async def _run_inference(self) -> None:
         """Run a single inference on recent audio."""
+        if self.settings.model.use_clap:
+            await self._run_clap_inference()
+        else:
+            await self._run_legacy_inference()
+
+    async def _run_clap_inference(self) -> None:
+        """Run inference using CLAP zero-shot classifier."""
+        if not self._audio_capture or not self._clap_detector:
+            return
+
+        # CLAP needs more audio context (~1 second for good classification)
+        # At 44100 Hz with 441 samples per chunk = 10ms per chunk
+        # 100 chunks = 1 second of audio
+        frames = self._audio_capture.get_recent_frames(count=100)
+        if len(frames) < 50:  # Need at least 500ms
+            return
+
+        # Combine frames into single array
+        audio_data = b"".join(f.data for f in frames)
+        audio_array = np.frombuffer(audio_data, dtype=np.int16)
+
+        # Reshape to (channels, samples)
+        channels = self.settings.audio.channels
+        audio_array = audio_array.reshape((channels, -1), order="F")
+
+        # Extract DOA if enabled
+        doa_bartlett, doa_capon, doa_mem = None, None, None
+        if self._doa_estimator and channels >= 2:
+            doa_bartlett, doa_capon, doa_mem = self._doa_estimator.estimate(audio_array)
+
+        # Run CLAP detection
+        try:
+            probability, is_barking, label_scores = self._clap_detector.detect(
+                audio_array,
+                sample_rate=self.settings.audio.sample_rate,
+            )
+        except Exception as e:
+            logger.debug("clap_inference_error", error=str(e))
+            return
+
+        # Create event
+        event = BarkEvent(
+            timestamp=datetime.now(),
+            probability=probability,
+            is_barking=is_barking,
+            doa_bartlett=doa_bartlett,
+            doa_capon=doa_capon,
+            doa_mem=doa_mem,
+        )
+
+        self._last_event = event
+
+        # Track barks
+        if is_barking:
+            self._total_barks += 1
+            # Log top label for debugging
+            top_label = max(label_scores, key=label_scores.get) if label_scores else "unknown"
+            logger.info(
+                "bark_detected",
+                probability=f"{probability:.3f}",
+                top_label=top_label,
+                doa=doa_bartlett,
+            )
+
+        # Keep history
+        self._event_history.append(event)
+
+        # Notify callbacks
+        for callback in self._callbacks:
+            try:
+                callback(event)
+            except Exception as e:
+                logger.warning("callback_error", error=str(e))
+
+    async def _run_legacy_inference(self) -> None:
+        """Run inference using legacy TorchScript MLP model."""
         if not self._audio_capture or not self._model or not self._feature_extractor:
             return
 

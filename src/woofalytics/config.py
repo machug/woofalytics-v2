@@ -67,9 +67,30 @@ class AudioConfig(BaseModel):
 class ModelConfig(BaseModel):
     """ML model configuration."""
 
+    # CLAP zero-shot detection (recommended)
+    use_clap: bool = Field(
+        default=True,
+        description="Use CLAP zero-shot model instead of legacy MLP. Recommended for better speech rejection.",
+    )
+    clap_model: str = Field(
+        default="laion/clap-htsat-unfused",
+        description="Hugging Face model ID for CLAP.",
+    )
+    clap_threshold: float = Field(
+        default=0.6,
+        ge=0.0,
+        le=1.0,
+        description="CLAP bark detection threshold.",
+    )
+    clap_device: str = Field(
+        default="cpu",
+        description="Device for CLAP inference ('cpu' or 'cuda').",
+    )
+
+    # Legacy MLP model settings (used when use_clap=False)
     path: Path = Field(
         default=Path("./models/traced_model.pt"),
-        description="Path to TorchScript traced model file.",
+        description="Path to TorchScript traced model file (legacy).",
     )
     target_sample_rate: int = Field(
         default=16000,
@@ -79,7 +100,7 @@ class ModelConfig(BaseModel):
         default=0.88,
         ge=0.0,
         le=1.0,
-        description="Bark detection probability threshold.",
+        description="Bark detection probability threshold (legacy MLP).",
     )
     window_ms: int = Field(
         default=6,
