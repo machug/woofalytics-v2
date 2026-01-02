@@ -127,12 +127,14 @@ class CLAPDetector:
         if audio.dtype == np.int16:
             audio = audio.astype(np.float32) / 32768.0
 
-        # Ensure float32
-        audio = audio.astype(np.float32)
+        # Ensure float32, 1D, and contiguous (required by transformers pipeline)
+        # The pipeline expects shape (n,) with float32 values
+        audio = np.ascontiguousarray(audio.flatten(), dtype=np.float32)
 
-        # Run classification
+        # Run classification - pass audio array directly as shown in HF docs example:
+        # classifier(audio, candidate_labels=["Sound of a dog", ...])
         results = self._pipeline(
-            {"raw": audio, "sampling_rate": sample_rate},
+            audio,
             candidate_labels=self._all_labels,
         )
 

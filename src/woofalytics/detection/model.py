@@ -80,6 +80,7 @@ class BarkDetector:
     _callbacks: list[Callable[[BarkEvent], None]] = field(default_factory=list, init=False)
     _start_time: float = field(default=0.0, init=False)
     _total_barks: int = field(default=0, init=False)
+    _inference_count: int = field(default=0, init=False)
 
     def __post_init__(self) -> None:
         if self.settings.model.use_clap:
@@ -217,6 +218,7 @@ class BarkDetector:
     async def _run_clap_inference(self) -> None:
         """Run inference using CLAP zero-shot classifier."""
         if not self._audio_capture or not self._clap_detector:
+            logger.warning("clap_inference_skipped", reason="missing audio_capture or clap_detector")
             return
 
         # CLAP needs more audio context (~1 second for good classification)
@@ -224,6 +226,7 @@ class BarkDetector:
         # 100 chunks = 1 second of audio
         frames = self._audio_capture.get_recent_frames(count=100)
         if len(frames) < 50:  # Need at least 500ms
+            logger.debug("clap_inference_waiting", frames=len(frames), needed=50)
             return
 
         # Combine frames into single array
@@ -246,7 +249,7 @@ class BarkDetector:
                 sample_rate=self.settings.audio.sample_rate,
             )
         except Exception as e:
-            logger.debug("clap_inference_error", error=str(e))
+            logger.warning("clap_inference_error", error=str(e), error_type=type(e).__name__)
             return
 
         # Create event
@@ -260,6 +263,18 @@ class BarkDetector:
         )
 
         self._last_event = event
+        self._inference_count += 1
+
+        # Log periodic status (every 20 inferences = ~10 seconds)
+        if self._inference_count % 20 == 0:
+            top_label = max(label_scores, key=label_scores.get) if label_scores else "unknown"
+            logger.info(
+                "clap_inference_status",
+                count=self._inference_count,
+                probability=f"{probability:.3f}",
+                top_label=top_label,
+                total_barks=self._total_barks,
+            )
 
         # Track barks
         if is_barking:
