@@ -186,6 +186,8 @@ async def get_evidence_stats(
     Returns totals for recordings, duration, and bark count.
     """
     stats = evidence.get_stats()
+    # Redact filesystem path for security (consistent with /api/config)
+    stats.pop("storage_directory", None)
     return EvidenceStatsSchema(**stats)
 
 

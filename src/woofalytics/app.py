@@ -140,14 +140,11 @@ def create_app() -> FastAPI:
     )
 
     # CORS middleware - restrict to localhost by default for security
-    # In production, set specific origins via WOOFALYTICS__SERVER__CORS_ORIGINS
-    cors_origins = settings.server.cors_origins or [
-        "http://localhost:8000",
-        "http://127.0.0.1:8000",
-    ]
+    # Note: CORS origins are configured at startup via lifespan, but we need
+    # sensible defaults here. For custom origins, set WOOFALYTICS__SERVER__CORS_ORIGINS
     app.add_middleware(
         CORSMiddleware,
-        allow_origins=cors_origins,
+        allow_origins=["http://localhost:8000", "http://127.0.0.1:8000"],
         allow_credentials=False,  # No auth system, no credentials needed
         allow_methods=["GET", "POST", "OPTIONS"],
         allow_headers=["Content-Type", "Accept"],

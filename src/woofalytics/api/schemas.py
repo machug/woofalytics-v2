@@ -66,7 +66,6 @@ class EvidenceStatsSchema(BaseModel):
     total_recordings: int
     total_duration_seconds: float
     total_barks_recorded: int
-    storage_directory: str
 
 
 class EvidenceListSchema(BaseModel):
