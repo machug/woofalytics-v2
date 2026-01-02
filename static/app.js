@@ -11,6 +11,10 @@ class WoofalyticsApp {
         this.events = [];
         this.maxEvents = 50;
 
+        // SVG gauge constants
+        this.gaugeRadius = 54;
+        this.gaugeCircumference = 2 * Math.PI * this.gaugeRadius;
+
         this.init();
     }
 
@@ -44,7 +48,7 @@ class WoofalyticsApp {
 
         this.ws.onclose = () => {
             console.log('WebSocket disconnected');
-            this.updateStatus('error', 'Disconnected');
+            this.updateStatus('disconnected', 'Disconnected');
             this.scheduleReconnect();
         };
 
@@ -99,37 +103,55 @@ class WoofalyticsApp {
     // UI Updates
     updateStatus(status, text) {
         const el = document.getElementById('status');
-        el.className = `status-indicator ${status}`;
+        el.className = `status-badge ${status}`;
         el.querySelector('.status-text').textContent = text;
     }
 
     updateBarkEvent(data) {
-        // Update probability meter
+        // Update probability gauge (SVG circular)
         const probability = data.probability * 100;
-        document.getElementById('probability-bar').style.width = `${probability}%`;
-        document.getElementById('probability-value').textContent = `${probability.toFixed(1)}%`;
+        const gaugeFill = document.getElementById('gauge-fill');
+        const offset = this.gaugeCircumference - (probability / 100) * this.gaugeCircumference;
+        gaugeFill.style.strokeDashoffset = offset;
 
-        // Update bark status
-        const barkStatus = document.getElementById('bark-status');
+        // Update probability value text
+        document.getElementById('probability-value').textContent = Math.round(probability);
+
+        // Update bark panel state
+        const barkPanel = document.getElementById('bark-panel');
+        const barkIcon = document.getElementById('bark-icon');
+        const barkText = document.getElementById('bark-text');
+
         if (data.is_barking) {
-            barkStatus.className = 'bark-status barking';
-            barkStatus.querySelector('.bark-icon').textContent = '🔊';
-            barkStatus.querySelector('.bark-text').textContent = 'BARK DETECTED!';
+            barkPanel.classList.add('barking');
+            barkIcon.innerHTML = `
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <path d="M11 5L6 9H2v6h4l5 4V5z"/>
+                    <path d="M19.07 4.93a10 10 0 010 14.14"/>
+                    <path d="M15.54 8.46a5 5 0 010 7.07"/>
+                </svg>
+            `;
+            barkText.textContent = 'BARK DETECTED!';
         } else {
-            barkStatus.className = 'bark-status';
-            barkStatus.querySelector('.bark-icon').textContent = '🔇';
-            barkStatus.querySelector('.bark-text').textContent = 'No bark detected';
+            barkPanel.classList.remove('barking');
+            barkIcon.innerHTML = `
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <path d="M11 5L6 9H2v6h4l5 4V5z"/>
+                    <line x1="23" y1="9" x2="17" y2="15"/>
+                    <line x1="17" y1="9" x2="23" y2="15"/>
+                </svg>
+            `;
+            barkText.textContent = 'Monitoring';
         }
 
         // Update DOA compass
         if (data.doa) {
             const angle = data.doa.bartlett;
-            // Convert 0-180 to -90 to 90 for needle rotation
-            const rotation = angle - 90;
-            document.getElementById('doa-needle').style.transform =
-                `translateX(-50%) rotate(${rotation}deg)`;
-            document.getElementById('doa-value').textContent =
-                `${angle}° (${data.doa.direction})`;
+            // Convert 0-180 to position on the horizontal track
+            // 0° = left, 90° = center, 180° = right
+            const position = (angle / 180) * 100;
+            document.getElementById('doa-needle').style.left = `${position}%`;
+            document.getElementById('doa-value').textContent = `${angle}°`;
         }
 
         // Add to events list
@@ -146,19 +168,36 @@ class WoofalyticsApp {
 
     renderEvents() {
         const container = document.getElementById('events-list');
+        const countEl = document.getElementById('event-count');
+
+        // Update event count
+        const barkCount = this.events.filter(e => e.is_barking).length;
+        countEl.textContent = `${barkCount} bark${barkCount !== 1 ? 's' : ''}`;
 
         if (this.events.length === 0) {
-            container.innerHTML = '<p class="events-empty">No events yet</p>';
+            container.innerHTML = `
+                <div class="events-empty">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
+                        <circle cx="12" cy="12" r="10"/>
+                        <path d="M12 6v6l4 2"/>
+                    </svg>
+                    <span>Waiting for events...</span>
+                </div>
+            `;
             return;
         }
 
         const html = this.events.slice(0, 10).map(event => {
             const time = new Date(event.timestamp).toLocaleTimeString();
-            const prob = (event.probability * 100).toFixed(1);
+            const prob = (event.probability * 100).toFixed(0);
             const barking = event.is_barking ? 'barking' : '';
+            const icon = event.is_barking
+                ? '<svg viewBox="0 0 24 24" fill="currentColor"><circle cx="12" cy="12" r="6"/></svg>'
+                : '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="4"/></svg>';
 
             return `
                 <div class="event-item ${barking}">
+                    <span class="event-icon">${icon}</span>
                     <span class="event-time">${time}</span>
                     <span class="event-prob">${prob}%</span>
                 </div>
@@ -169,8 +208,33 @@ class WoofalyticsApp {
     }
 
     updateAudioLevel(level, peak) {
-        document.getElementById('audio-level').style.width = `${level * 100}%`;
-        document.getElementById('audio-peak').style.left = `${peak * 100}%`;
+        // Convert 0-1 to percentage
+        const levelPercent = Math.min(100, level * 100);
+        const peakPercent = Math.min(100, peak * 100);
+
+        document.getElementById('audio-level').style.width = `${levelPercent}%`;
+        document.getElementById('audio-peak').style.left = `${peakPercent}%`;
+
+        // Update VU segment highlights based on level
+        const segments = document.querySelectorAll('.vu-segments span');
+        const activeCount = Math.floor((levelPercent / 100) * segments.length);
+        segments.forEach((seg, i) => {
+            if (i < activeCount) {
+                seg.classList.add('active');
+                // Color segments based on level (green < yellow < red)
+                if (i >= segments.length * 0.8) {
+                    seg.classList.add('red');
+                    seg.classList.remove('yellow');
+                } else if (i >= segments.length * 0.6) {
+                    seg.classList.add('yellow');
+                    seg.classList.remove('red');
+                } else {
+                    seg.classList.remove('yellow', 'red');
+                }
+            } else {
+                seg.classList.remove('active', 'yellow', 'red');
+            }
+        });
     }
 
     updateSystemStatus(data) {
@@ -178,8 +242,8 @@ class WoofalyticsApp {
         document.getElementById('uptime').textContent = this.formatUptime(data.uptime_seconds || 0);
 
         if (data.microphone) {
-            const micName = data.microphone.length > 15
-                ? data.microphone.substring(0, 15) + '...'
+            const micName = data.microphone.length > 20
+                ? data.microphone.substring(0, 20) + '...'
                 : data.microphone;
             document.getElementById('microphone').textContent = micName;
         }
@@ -218,30 +282,47 @@ class WoofalyticsApp {
             const container = document.getElementById('evidence-list');
 
             if (!data.evidence || data.evidence.length === 0) {
-                container.innerHTML = '<p class="evidence-empty">No recordings yet</p>';
+                container.innerHTML = `
+                    <div class="evidence-empty">
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
+                            <path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z"/>
+                            <path d="M14 2v6h6"/>
+                            <path d="M12 18v-6"/>
+                            <path d="M9 15l3 3 3-3"/>
+                        </svg>
+                        <span>No recordings yet</span>
+                    </div>
+                `;
                 return;
             }
 
             const html = data.evidence.map(item => {
-                const date = new Date(item.timestamp_local).toLocaleString();
+                const date = new Date(item.timestamp_local);
+                const timeStr = date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+                const dateStr = date.toLocaleDateString([], { month: 'short', day: 'numeric' });
                 const duration = item.duration_seconds.toFixed(1);
-                const peak = (item.peak_probability * 100).toFixed(1);
+                const peak = (item.peak_probability * 100).toFixed(0);
 
                 return `
                     <div class="evidence-item">
+                        <div class="evidence-icon">
+                            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                <path d="M9 18V5l12-2v13"/>
+                                <circle cx="6" cy="18" r="3"/>
+                                <circle cx="18" cy="16" r="3"/>
+                            </svg>
+                        </div>
                         <div class="evidence-info">
-                            <div class="evidence-filename">${item.filename}</div>
-                            <div class="evidence-meta">
-                                ${date} | ${duration}s | Peak: ${peak}% | ${item.bark_count_in_clip} barks
-                            </div>
+                            <span class="evidence-time">${timeStr} · ${dateStr}</span>
+                            <span class="evidence-meta">${duration}s · ${peak}% peak · ${item.bark_count_in_clip} bark${item.bark_count_in_clip !== 1 ? 's' : ''}</span>
                         </div>
                         <div class="evidence-actions">
-                            <a href="/api/evidence/${item.filename}" class="btn-download" download>
-                                Download WAV
-                            </a>
-                            <a href="/api/evidence/${item.filename.replace('.wav', '.json')}"
-                               class="btn-download" download>
-                                Metadata
+                            <a href="/api/evidence/${item.filename}" class="btn-icon" title="Download WAV" download>
+                                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                    <path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4"/>
+                                    <polyline points="7 10 12 15 17 10"/>
+                                    <line x1="12" y1="15" x2="12" y2="3"/>
+                                </svg>
                             </a>
                         </div>
                     </div>

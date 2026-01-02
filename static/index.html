@@ -4,103 +4,169 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Woofalytics - Bark Detection</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700&display=swap" rel="stylesheet">
     <link rel="stylesheet" href="/static/styles.css">
     <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🐕</text></svg>">
 </head>
 <body>
     <div class="app">
         <header class="header">
-            <h1>🐕 Woofalytics</h1>
-            <div class="status-indicator" id="status">
+            <div class="brand">
+                <svg class="brand-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2z"/>
+                    <circle cx="8" cy="10" r="1.5" fill="currentColor"/>
+                    <circle cx="16" cy="10" r="1.5" fill="currentColor"/>
+                    <path d="M9 16c.85.63 1.885 1 3 1s2.15-.37 3-1"/>
+                </svg>
+                <h1>Woofalytics</h1>
+            </div>
+            <div class="status-badge" id="status">
                 <span class="status-dot"></span>
                 <span class="status-text">Connecting...</span>
             </div>
         </header>
 
         <main class="dashboard">
-            <!-- Bark Probability Meter -->
-            <section class="card probability-card">
-                <h2>Bark Probability</h2>
-                <div class="probability-meter">
-                    <div class="meter-bar" id="probability-bar"></div>
-                    <div class="meter-value" id="probability-value">--</div>
+            <!-- Primary Row: Bark Detection -->
+            <section class="panel panel-bark" id="bark-panel">
+                <div class="bark-gauge">
+                    <svg class="gauge-ring" viewBox="0 0 120 120">
+                        <circle class="gauge-bg" cx="60" cy="60" r="54" />
+                        <circle class="gauge-fill" id="gauge-fill" cx="60" cy="60" r="54" />
+                    </svg>
+                    <div class="gauge-center">
+                        <span class="gauge-value" id="probability-value">0</span>
+                        <span class="gauge-unit">%</span>
+                    </div>
                 </div>
-                <div class="bark-status" id="bark-status">
-                    <span class="bark-icon">🔇</span>
-                    <span class="bark-text">No bark detected</span>
+                <div class="bark-info">
+                    <div class="bark-label">Bark Probability</div>
+                    <div class="bark-status" id="bark-status">
+                        <span class="status-icon" id="bark-icon">
+                            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                <path d="M11 5L6 9H2v6h4l5 4V5z"/>
+                                <line x1="23" y1="9" x2="17" y2="15"/>
+                                <line x1="17" y1="9" x2="23" y2="15"/>
+                            </svg>
+                        </span>
+                        <span class="status-label" id="bark-text">Monitoring</span>
+                    </div>
                 </div>
             </section>
 
-            <!-- Direction of Arrival -->
-            <section class="card doa-card">
-                <h2>Direction</h2>
-                <div class="doa-compass">
-                    <div class="compass-ring">
-                        <div class="compass-labels">
-                            <span class="label-left">Left</span>
-                            <span class="label-front">Front</span>
-                            <span class="label-right">Right</span>
+            <!-- Direction Compass -->
+            <section class="panel panel-direction">
+                <h2 class="panel-title">Direction</h2>
+                <div class="compass">
+                    <div class="compass-track">
+                        <div class="compass-markers">
+                            <span class="marker marker-left">L</span>
+                            <span class="marker marker-center">Front</span>
+                            <span class="marker marker-right">R</span>
                         </div>
-                        <div class="compass-needle" id="doa-needle"></div>
+                        <div class="compass-needle" id="doa-needle">
+                            <div class="needle-head"></div>
+                        </div>
                     </div>
-                </div>
-                <div class="doa-value" id="doa-value">--°</div>
-            </section>
-
-            <!-- Stats -->
-            <section class="card stats-card">
-                <h2>Statistics</h2>
-                <div class="stats-grid">
-                    <div class="stat">
-                        <span class="stat-value" id="total-barks">0</span>
-                        <span class="stat-label">Barks Detected</span>
-                    </div>
-                    <div class="stat">
-                        <span class="stat-value" id="uptime">0:00</span>
-                        <span class="stat-label">Uptime</span>
-                    </div>
-                    <div class="stat">
-                        <span class="stat-value" id="evidence-count">0</span>
-                        <span class="stat-label">Evidence Files</span>
-                    </div>
-                    <div class="stat">
-                        <span class="stat-value" id="microphone">--</span>
-                        <span class="stat-label">Microphone</span>
-                    </div>
+                    <div class="compass-value" id="doa-value">--</div>
                 </div>
             </section>
 
             <!-- Audio Level -->
-            <section class="card audio-card">
-                <h2>Audio Level</h2>
-                <div class="audio-meter">
-                    <div class="vu-meter">
-                        <div class="vu-bar" id="audio-level"></div>
+            <section class="panel panel-audio">
+                <h2 class="panel-title">Audio Level</h2>
+                <div class="vu-meter">
+                    <div class="vu-track">
+                        <div class="vu-segments">
+                            <span></span><span></span><span></span><span></span><span></span>
+                            <span></span><span></span><span></span><span></span><span></span>
+                            <span></span><span></span><span></span><span></span><span></span>
+                            <span></span><span></span><span></span><span></span><span></span>
+                        </div>
+                        <div class="vu-fill" id="audio-level"></div>
                         <div class="vu-peak" id="audio-peak"></div>
+                    </div>
+                    <div class="vu-labels">
+                        <span>-40</span>
+                        <span>-20</span>
+                        <span>-10</span>
+                        <span>0 dB</span>
                     </div>
                 </div>
             </section>
 
-            <!-- Recent Events -->
-            <section class="card events-card">
-                <h2>Recent Events</h2>
-                <div class="events-list" id="events-list">
-                    <p class="events-empty">No events yet</p>
+            <!-- Statistics Strip -->
+            <section class="panel panel-stats">
+                <div class="stat-item">
+                    <span class="stat-value" id="total-barks">0</span>
+                    <span class="stat-label">Barks</span>
+                </div>
+                <div class="stat-divider"></div>
+                <div class="stat-item">
+                    <span class="stat-value" id="uptime">0:00</span>
+                    <span class="stat-label">Uptime</span>
+                </div>
+                <div class="stat-divider"></div>
+                <div class="stat-item">
+                    <span class="stat-value" id="evidence-count">0</span>
+                    <span class="stat-label">Recordings</span>
+                </div>
+                <div class="stat-divider"></div>
+                <div class="stat-item stat-mic">
+                    <span class="stat-value" id="microphone">--</span>
+                    <span class="stat-label">Microphone</span>
                 </div>
             </section>
 
-            <!-- Evidence Files -->
-            <section class="card evidence-card">
-                <h2>Evidence Recordings</h2>
-                <div class="evidence-list" id="evidence-list">
-                    <p class="evidence-empty">No recordings yet</p>
+            <!-- Recent Events -->
+            <section class="panel panel-events">
+                <div class="panel-header">
+                    <h2 class="panel-title">Recent Activity</h2>
+                    <span class="event-count" id="event-count">0 events</span>
                 </div>
-                <button class="btn-refresh" onclick="loadEvidence()">Refresh</button>
+                <div class="events-list" id="events-list">
+                    <div class="events-empty">
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
+                            <circle cx="12" cy="12" r="10"/>
+                            <path d="M12 6v6l4 2"/>
+                        </svg>
+                        <span>Waiting for events...</span>
+                    </div>
+                </div>
+            </section>
+
+            <!-- Evidence Recordings -->
+            <section class="panel panel-evidence">
+                <div class="panel-header">
+                    <h2 class="panel-title">Evidence Recordings</h2>
+                    <button class="btn-icon" onclick="loadEvidence()" title="Refresh">
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                            <path d="M23 4v6h-6"/>
+                            <path d="M1 20v-6h6"/>
+                            <path d="M3.51 9a9 9 0 0114.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0020.49 15"/>
+                        </svg>
+                    </button>
+                </div>
+                <div class="evidence-list" id="evidence-list">
+                    <div class="evidence-empty">
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
+                            <path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z"/>
+                            <path d="M14 2v6h6"/>
+                            <path d="M12 18v-6"/>
+                            <path d="M9 15l3 3 3-3"/>
+                        </svg>
+                        <span>No recordings yet</span>
+                    </div>
+                </div>
             </section>
         </main>
 
         <footer class="footer">
-            <p>Woofalytics v2.0.0 | <a href="/api/docs">API Docs</a></p>
+            <span>Woofalytics v2.0.0</span>
+            <span class="footer-divider">·</span>
+            <a href="/api/docs">API Documentation</a>
         </footer>
     </div>
 
