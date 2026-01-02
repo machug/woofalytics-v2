@@ -211,6 +211,14 @@ async def websocket_audio_endpoint(websocket: WebSocket) -> None:
 
     detector = websocket.app.state.detector
 
+    # Send initial message to confirm connection
+    success = await manager.send_personal(websocket, {
+        "type": "audio_level",
+        "data": {"level": 0.0, "peak": 0.0},
+    })
+    if not success:
+        return  # Client disconnected immediately
+
     try:
         while True:
             # Calculate current audio level from recent frames
