@@ -24,7 +24,7 @@ from woofalytics import __version__
 from woofalytics.config import Settings, load_settings, configure_logging
 from woofalytics.detection.model import BarkDetector
 from woofalytics.evidence.storage import EvidenceStorage
-from woofalytics.api.websocket import broadcast_bark_event
+from woofalytics.api.websocket import broadcast_bark_event, ConnectionManager
 
 logger = structlog.get_logger(__name__)
 
@@ -84,14 +84,18 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
         ),
     )
 
+    # Create WebSocket connection manager
+    ws_manager = ConnectionManager()
+
     # Register callbacks
     detector.add_callback(lambda event: asyncio.create_task(evidence.on_bark_event(event)))
-    detector.add_callback(lambda event: asyncio.create_task(broadcast_bark_event(event)))
+    detector.add_callback(lambda event: asyncio.create_task(broadcast_bark_event(event, ws_manager)))
 
     # Store in app.state for dependency injection
     app.state.settings = settings
     app.state.detector = detector
     app.state.evidence = evidence
+    app.state.ws_manager = ws_manager
 
     # Start background task for evidence saving
     async def evidence_saver() -> None:
@@ -175,22 +179,6 @@ def create_app() -> FastAPI:
         return {"message": "Woofalytics API running", "docs": "/api/docs"}
 
     return app
-
-
-# Dependency injection helpers
-def get_settings(request: Request) -> Settings:
-    """Get settings from app state."""
-    return request.app.state.settings
-
-
-def get_detector(request: Request) -> BarkDetector:
-    """Get bark detector from app state."""
-    return request.app.state.detector
-
-
-def get_evidence(request: Request) -> EvidenceStorage:
-    """Get evidence storage from app state."""
-    return request.app.state.evidence
 
 
 # Create the application instance

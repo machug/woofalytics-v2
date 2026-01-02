@@ -88,10 +88,6 @@ class ConnectionManager:
         return len(self.active_connections)
 
 
-# Global connection manager
-manager = ConnectionManager()
-
-
 def bark_event_to_message(event: BarkEvent) -> dict[str, Any]:
     """Convert a BarkEvent to a WebSocket message."""
     message: dict[str, Any] = {
@@ -115,10 +111,12 @@ def bark_event_to_message(event: BarkEvent) -> dict[str, Any]:
     return message
 
 
-async def broadcast_bark_event(event: BarkEvent) -> None:
+async def broadcast_bark_event(event: BarkEvent, manager: ConnectionManager) -> None:
     """Broadcast a bark event to all connected WebSocket clients.
 
-    This function should be registered as a callback on the BarkDetector.
+    Args:
+        event: The bark detection event to broadcast.
+        manager: The WebSocket connection manager from app.state.
     """
     if manager.connection_count > 0:
         message = bark_event_to_message(event)
@@ -145,9 +143,9 @@ async def websocket_bark_endpoint(websocket: WebSocket) -> None:
         }
     }
     """
+    manager = websocket.app.state.ws_manager
     await manager.connect(websocket)
 
-    # Register callback for bark events
     detector = websocket.app.state.detector
 
     # Send initial status
@@ -196,6 +194,7 @@ async def websocket_audio_endpoint(websocket: WebSocket) -> None:
     Sends audio level updates at ~10Hz for VU meter visualization.
     Format: {"type": "audio_level", "data": {"level": 0.75, "peak": 0.92}}
     """
+    manager = websocket.app.state.ws_manager
     await manager.connect(websocket)
 
     detector = websocket.app.state.detector
@@ -234,8 +233,3 @@ async def websocket_audio_endpoint(websocket: WebSocket) -> None:
     except Exception as e:
         logger.warning("websocket_audio_error", error=str(e))
         await manager.disconnect(websocket)
-
-
-def get_manager() -> ConnectionManager:
-    """Get the global connection manager."""
-    return manager
