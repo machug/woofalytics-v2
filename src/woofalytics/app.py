@@ -19,6 +19,7 @@ from fastapi.responses import FileResponse
 from fastapi.staticfiles import StaticFiles
 import structlog
 
+from woofalytics import __version__
 from woofalytics.config import Settings, load_settings, configure_logging
 from woofalytics.detection.model import BarkDetector
 from woofalytics.evidence.storage import EvidenceStorage
@@ -46,7 +47,7 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
 
     logger.info(
         "woofalytics_starting",
-        version="2.0.0",
+        version=__version__,
         log_level=settings.log_level,
     )
 
@@ -58,10 +59,10 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
 
     evidence = EvidenceStorage(
         config=settings.evidence,
-        audio_capture=detector._audio_capture,
+        audio_capture=detector.audio_capture,
         microphone_name=(
-            detector._audio_capture.microphone.name
-            if detector._audio_capture and detector._audio_capture.microphone
+            detector.audio_capture.microphone.name
+            if detector.audio_capture and detector.audio_capture.microphone
             else "Unknown"
         ),
     )
@@ -110,20 +111,25 @@ def create_app() -> FastAPI:
     app = FastAPI(
         title="Woofalytics",
         description="AI-powered dog bark detection with evidence collection",
-        version="2.0.0",
+        version=__version__,
         lifespan=lifespan,
         docs_url="/api/docs",
         redoc_url="/api/redoc",
         openapi_url="/api/openapi.json",
     )
 
-    # CORS middleware
+    # CORS middleware - restrict to localhost by default for security
+    # In production, set specific origins via WOOFALYTICS__SERVER__CORS_ORIGINS
+    cors_origins = settings.server.cors_origins or [
+        "http://localhost:8000",
+        "http://127.0.0.1:8000",
+    ]
     app.add_middleware(
         CORSMiddleware,
-        allow_origins=["*"],
-        allow_credentials=True,
-        allow_methods=["*"],
-        allow_headers=["*"],
+        allow_origins=cors_origins,
+        allow_credentials=False,  # No auth system, no credentials needed
+        allow_methods=["GET", "POST", "OPTIONS"],
+        allow_headers=["Content-Type", "Accept"],
     )
 
     # Import and include API routes

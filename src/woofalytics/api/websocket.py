@@ -203,8 +203,8 @@ async def websocket_audio_endpoint(websocket: WebSocket) -> None:
     try:
         while True:
             # Calculate current audio level from recent frames
-            if detector._audio_capture:
-                frames = detector._audio_capture.get_recent_frames(count=2)
+            if detector.audio_capture:
+                frames = detector.audio_capture.get_recent_frames(count=2)
                 if frames:
                     import numpy as np
 

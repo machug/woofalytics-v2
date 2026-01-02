@@ -17,6 +17,8 @@ from pathlib import Path
 
 import uvicorn
 
+from woofalytics import __version__
+
 
 def parse_args() -> argparse.Namespace:
     """Parse command line arguments."""
@@ -71,7 +73,7 @@ Examples:
     parser.add_argument(
         "--version",
         action="version",
-        version="%(prog)s 2.0.0",
+        version=f"%(prog)s {__version__}",
     )
 
     parser.add_argument(
@@ -127,7 +129,7 @@ def main() -> int:
 ╦ ╦┌─┐┌─┐┌─┐┌─┐┬ ┬ ┬┌┬┐┬┌─┐┌─┐
 ║║║│ ││ │├┤ ├─┤│ └┬┘ │ ││  └─┐
 ╚╩╝└─┘└─┘└  ┴ ┴┴─┘┴  ┴ ┴└─┘└─┘
-           v2.0.0
+           v{__version__}
 
 AI-powered dog bark detection with evidence collection
 Starting server at http://{host}:{port}

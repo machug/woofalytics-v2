@@ -36,6 +36,7 @@ class DirectionEstimator:
         num_elements: int = 2,
         angle_min: int = 0,
         angle_max: int = 180,
+        method: str = "bartlett",
     ) -> None:
         """Initialize direction estimator.
 
@@ -45,11 +46,13 @@ class DirectionEstimator:
             num_elements: Number of microphone elements in the array.
             angle_min: Minimum scanning angle in degrees.
             angle_max: Maximum scanning angle in degrees.
+            method: DOA algorithm to use: 'bartlett', 'capon', or 'mem'.
         """
         self.element_spacing = element_spacing
         self.num_elements = num_elements
         self.angle_min = angle_min
         self.angle_max = angle_max
+        self.method = method
 
         # Generate array geometry
         self._array_alignment = np.arange(0, num_elements, 1) * element_spacing
@@ -73,7 +76,7 @@ class DirectionEstimator:
     def estimate(
         self,
         audio: np.ndarray,
-    ) -> tuple[int, int, int]:
+    ) -> tuple[int | None, int | None, int | None]:
         """Estimate direction of arrival for audio.
 
         Args:
@@ -82,11 +85,13 @@ class DirectionEstimator:
 
         Returns:
             Tuple of (bartlett_angle, capon_angle, mem_angle) in degrees.
-            All three algorithms are run for comparison.
+            Only the configured algorithm is run; others are None.
         """
         if audio.shape[0] < 2:
             logger.warning("doa_insufficient_channels", channels=audio.shape[0])
-            return (90, 90, 90)  # Return front-facing as default
+            return (90, None, None) if self.method == "bartlett" else \
+                   (None, 90, None) if self.method == "capon" else \
+                   (None, None, 90)
 
         # Transpose to (samples, channels) for correlation estimation
         audio_transposed = audio.T
@@ -95,44 +100,40 @@ class DirectionEstimator:
             # Estimate correlation matrix
             corr_matrix = corr_matrix_estimate(audio_transposed, imp="fast")
 
-            # Run all three DOA algorithms
-            bartlett_spectrum = DOA_Bartlett(corr_matrix, self._scanning_vectors)
-            capon_spectrum = DOA_Capon(corr_matrix, self._scanning_vectors)
-            mem_spectrum = DOA_MEM(corr_matrix, self._scanning_vectors)
-
-            # Find peak angles
-            bartlett_angle = int(self._incident_angles[np.argmax(bartlett_spectrum)])
-            capon_angle = int(self._incident_angles[np.argmax(capon_spectrum)])
-            mem_angle = int(self._incident_angles[np.argmax(mem_spectrum)])
-
-            return (bartlett_angle, capon_angle, mem_angle)
+            # Run only the configured DOA algorithm
+            if self.method == "capon":
+                spectrum = DOA_Capon(corr_matrix, self._scanning_vectors)
+                angle = int(self._incident_angles[np.argmax(spectrum)])
+                return (None, angle, None)
+            elif self.method == "mem":
+                spectrum = DOA_MEM(corr_matrix, self._scanning_vectors)
+                angle = int(self._incident_angles[np.argmax(spectrum)])
+                return (None, None, angle)
+            else:  # bartlett (default)
+                spectrum = DOA_Bartlett(corr_matrix, self._scanning_vectors)
+                angle = int(self._incident_angles[np.argmax(spectrum)])
+                return (angle, None, None)
 
         except Exception as e:
             logger.warning("doa_estimation_error", error=str(e))
-            return (90, 90, 90)
+            return (90, None, None) if self.method == "bartlett" else \
+                   (None, 90, None) if self.method == "capon" else \
+                   (None, None, 90)
 
-    def estimate_single(
-        self,
-        audio: np.ndarray,
-        method: str = "bartlett",
-    ) -> int:
-        """Estimate DOA using a single method.
+    def estimate_single(self, audio: np.ndarray) -> int:
+        """Estimate DOA using the configured method.
 
         Args:
             audio: Audio array of shape (channels, samples).
-            method: One of "bartlett", "capon", or "mem".
 
         Returns:
             Estimated angle in degrees.
         """
         bartlett, capon, mem = self.estimate(audio)
-
-        if method == "capon":
-            return capon
-        elif method == "mem":
-            return mem
-        else:
-            return bartlett
+        # Return whichever one is not None
+        return bartlett if bartlett is not None else \
+               capon if capon is not None else \
+               mem if mem is not None else 90
 
     def get_spectrum(
         self,

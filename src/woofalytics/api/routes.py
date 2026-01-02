@@ -201,16 +201,25 @@ async def download_evidence(
 
     Returns the file for download.
     """
-    file_path = settings.evidence.directory / filename
+    # Security: reject any path components in filename FIRST
+    if "/" in filename or "\\" in filename or ".." in filename:
+        raise HTTPException(status_code=400, detail="Invalid filename")
 
+    # Only allow expected file types
+    if not (filename.endswith(".wav") or filename.endswith(".json")):
+        raise HTTPException(status_code=400, detail="Invalid file type")
+
+    # Build path and validate it's within evidence directory BEFORE checking existence
+    evidence_dir = settings.evidence.directory.resolve()
+    file_path = (evidence_dir / filename).resolve()
+
+    # Verify path is within evidence directory (defense in depth)
+    if not file_path.is_relative_to(evidence_dir):
+        raise HTTPException(status_code=403, detail="Access denied")
+
+    # Now safe to check existence
     if not file_path.exists():
         raise HTTPException(status_code=404, detail="Evidence file not found")
-
-    # Security: ensure the path is within the evidence directory
-    try:
-        file_path.resolve().relative_to(settings.evidence.directory.resolve())
-    except ValueError:
-        raise HTTPException(status_code=403, detail="Access denied")
 
     media_type = "audio/wav" if filename.endswith(".wav") else "application/json"
 

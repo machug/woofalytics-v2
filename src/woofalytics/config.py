@@ -126,6 +126,10 @@ class DOAConfig(BaseModel):
         le=360,
         description="Maximum scanning angle in degrees.",
     )
+    method: str = Field(
+        default="bartlett",
+        description="DOA algorithm to use: 'bartlett' (fast), 'capon' (high-res), or 'mem' (best for close sources).",
+    )
 
 
 class WebhookConfig(BaseModel):
@@ -194,6 +198,10 @@ class ServerConfig(BaseModel):
     enable_websocket: bool = Field(
         default=True,
         description="Enable WebSocket endpoint for real-time updates.",
+    )
+    cors_origins: list[str] | None = Field(
+        default=None,
+        description="Allowed CORS origins. Defaults to localhost only if not set.",
     )
 
 
