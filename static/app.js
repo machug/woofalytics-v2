@@ -111,47 +111,58 @@ class WoofalyticsApp {
         // Update probability gauge (SVG circular)
         const probability = data.probability * 100;
         const gaugeFill = document.getElementById('gauge-fill');
-        const offset = this.gaugeCircumference - (probability / 100) * this.gaugeCircumference;
-        gaugeFill.style.strokeDashoffset = offset;
+        if (gaugeFill) {
+            const offset = this.gaugeCircumference - (probability / 100) * this.gaugeCircumference;
+            gaugeFill.style.strokeDashoffset = offset;
+        }
 
         // Update probability value text
-        document.getElementById('probability-value').textContent = Math.round(probability);
+        const probValue = document.getElementById('probability-value');
+        if (probValue) {
+            probValue.textContent = Math.round(probability);
+        }
 
         // Update bark panel state
         const barkPanel = document.getElementById('bark-panel');
         const barkIcon = document.getElementById('bark-icon');
         const barkText = document.getElementById('bark-text');
 
-        if (data.is_barking) {
-            barkPanel.classList.add('barking');
-            barkIcon.innerHTML = `
-                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                    <path d="M11 5L6 9H2v6h4l5 4V5z"/>
-                    <path d="M19.07 4.93a10 10 0 010 14.14"/>
-                    <path d="M15.54 8.46a5 5 0 010 7.07"/>
-                </svg>
-            `;
-            barkText.textContent = 'BARK DETECTED!';
-        } else {
-            barkPanel.classList.remove('barking');
-            barkIcon.innerHTML = `
-                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                    <path d="M11 5L6 9H2v6h4l5 4V5z"/>
-                    <line x1="23" y1="9" x2="17" y2="15"/>
-                    <line x1="17" y1="9" x2="23" y2="15"/>
-                </svg>
-            `;
-            barkText.textContent = 'Monitoring';
+        if (barkPanel && barkIcon && barkText) {
+            if (data.is_barking) {
+                barkPanel.classList.add('barking');
+                barkIcon.innerHTML = `
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                        <path d="M11 5L6 9H2v6h4l5 4V5z"/>
+                        <path d="M19.07 4.93a10 10 0 010 14.14"/>
+                        <path d="M15.54 8.46a5 5 0 010 7.07"/>
+                    </svg>
+                `;
+                barkText.textContent = 'BARK DETECTED!';
+            } else {
+                barkPanel.classList.remove('barking');
+                barkIcon.innerHTML = `
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                        <path d="M11 5L6 9H2v6h4l5 4V5z"/>
+                        <line x1="23" y1="9" x2="17" y2="15"/>
+                        <line x1="17" y1="9" x2="23" y2="15"/>
+                    </svg>
+                `;
+                barkText.textContent = 'Monitoring';
+            }
         }
 
         // Update DOA compass
         if (data.doa) {
             const angle = data.doa.bartlett;
-            // Convert 0-180 to position on the horizontal track
-            // 0° = left, 90° = center, 180° = right
-            const position = (angle / 180) * 100;
-            document.getElementById('doa-needle').style.left = `${position}%`;
-            document.getElementById('doa-value').textContent = `${angle}°`;
+            const needle = document.getElementById('doa-needle');
+            const doaValue = document.getElementById('doa-value');
+            if (needle && doaValue) {
+                // Convert 0-180 to position on the horizontal track
+                // 0° = left, 90° = center, 180° = right
+                const position = (angle / 180) * 100;
+                needle.style.left = `${position}%`;
+                doaValue.textContent = `${angle}°`;
+            }
         }
 
         // Add to events list
