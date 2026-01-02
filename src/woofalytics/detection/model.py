@@ -279,13 +279,19 @@ class BarkDetector:
         # Track barks
         if is_barking:
             self._total_barks += 1
-            # Log top label for debugging
-            top_label = max(label_scores, key=label_scores.get) if label_scores else "unknown"
+            # Log all scores for debugging speech veto effectiveness
             logger.info(
                 "bark_detected",
                 probability=f"{probability:.3f}",
-                top_label=top_label,
                 doa=doa_bartlett,
+                scores={k: f"{v:.3f}" for k, v in sorted(label_scores.items(), key=lambda x: -x[1])[:5]},
+            )
+        elif probability >= self.settings.model.clap_threshold:
+            # Bark was above threshold but vetoed (likely by speech detection)
+            logger.info(
+                "bark_vetoed",
+                probability=f"{probability:.3f}",
+                scores={k: f"{v:.3f}" for k, v in sorted(label_scores.items(), key=lambda x: -x[1])[:5]},
             )
 
         # Keep history

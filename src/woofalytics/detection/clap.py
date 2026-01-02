@@ -23,24 +23,34 @@ class CLAPConfig:
     model_name: str = "laion/clap-htsat-unfused"
 
     # Labels for zero-shot classification
+    # More specific labels to help distinguish real barks from speech
     positive_labels: list[str] = field(default_factory=lambda: [
-        "dog barking",
-        "dog bark",
-        "dogs barking",
-        "puppy barking",
+        "dog barking loudly",
+        "angry dog barking",
+        "dog bark sound effect",
+        "multiple dogs barking",
     ])
 
-    negative_labels: list[str] = field(default_factory=lambda: [
-        "human speech",
-        "person talking",
-        "human saying the word bark",
-        "person speaking",
+    # Speech labels that should veto bark detection
+    speech_labels: list[str] = field(default_factory=lambda: [
+        "human voice",
+        "person speaking words",
+        "man talking",
+        "woman talking",
+    ])
+
+    # Other non-bark sounds
+    other_labels: list[str] = field(default_factory=lambda: [
         "silence",
         "background noise",
+        "music",
     ])
 
     # Threshold for bark detection (probability that it's a bark vs not)
-    threshold: float = 0.6
+    threshold: float = 0.5
+
+    # If any speech label exceeds this, veto the bark detection
+    speech_veto_threshold: float = 0.15
 
     # Device for inference
     device: str = "cpu"
@@ -63,6 +73,7 @@ class CLAPDetector:
         self._pipeline: Any = None
         self._all_labels: list[str] = []
         self._positive_indices: set[int] = set()
+        self._speech_indices: set[int] = set()
 
     def load(self) -> None:
         """Load the CLAP model.
@@ -83,14 +94,25 @@ class CLAPDetector:
             device=self.config.device,
         )
 
-        # Combine all labels
-        self._all_labels = self.config.positive_labels + self.config.negative_labels
+        # Combine all labels: positive, speech (for veto), and other
+        self._all_labels = (
+            self.config.positive_labels +
+            self.config.speech_labels +
+            self.config.other_labels
+        )
         self._positive_indices = set(range(len(self.config.positive_labels)))
+
+        # Track speech label indices for veto logic
+        speech_start = len(self.config.positive_labels)
+        speech_end = speech_start + len(self.config.speech_labels)
+        self._speech_indices = set(range(speech_start, speech_end))
 
         logger.info(
             "clap_model_loaded",
             positive_labels=self.config.positive_labels,
-            negative_labels=self.config.negative_labels,
+            speech_labels=self.config.speech_labels,
+            other_labels=self.config.other_labels,
+            speech_veto_threshold=self.config.speech_veto_threshold,
         )
 
     @property
@@ -152,7 +174,29 @@ class CLAPDetector:
         if total > 0:
             bark_prob = bark_prob / total
 
-        is_barking = bark_prob >= self.config.threshold
+        # Check for speech veto - if any speech label is high, don't trigger bark
+        max_speech_score = max(
+            label_scores.get(label, 0.0)
+            for label in self.config.speech_labels
+        )
+        speech_detected = max_speech_score >= self.config.speech_veto_threshold
+
+        # Apply detection logic with speech veto
+        is_barking = bark_prob >= self.config.threshold and not speech_detected
+
+        # Log when speech veto is applied
+        if bark_prob >= self.config.threshold and speech_detected:
+            top_speech = max(
+                ((label, label_scores.get(label, 0.0)) for label in self.config.speech_labels),
+                key=lambda x: x[1],
+            )
+            logger.debug(
+                "bark_vetoed_by_speech",
+                bark_prob=f"{bark_prob:.3f}",
+                speech_label=top_speech[0],
+                speech_score=f"{top_speech[1]:.3f}",
+                threshold=self.config.speech_veto_threshold,
+            )
 
         return bark_prob, is_barking, label_scores
 
