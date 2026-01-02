@@ -13,18 +13,36 @@ from contextlib import asynccontextmanager
 from pathlib import Path
 from typing import AsyncGenerator
 
-from fastapi import FastAPI, Request
+from fastapi import FastAPI, Request, Response
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse
 from fastapi.staticfiles import StaticFiles
+from starlette.middleware.base import BaseHTTPMiddleware
 import structlog
 
+from woofalytics import __version__
 from woofalytics.config import Settings, load_settings, configure_logging
 from woofalytics.detection.model import BarkDetector
 from woofalytics.evidence.storage import EvidenceStorage
-from woofalytics.api.websocket import broadcast_bark_event
+from woofalytics.api.websocket import broadcast_bark_event, ConnectionManager
 
 logger = structlog.get_logger(__name__)
+
+
+class SecurityHeadersMiddleware(BaseHTTPMiddleware):
+    """Add security headers to all responses."""
+
+    async def dispatch(self, request: Request, call_next) -> Response:
+        response = await call_next(request)
+        # Prevent MIME sniffing
+        response.headers["X-Content-Type-Options"] = "nosniff"
+        # Prevent clickjacking
+        response.headers["X-Frame-Options"] = "DENY"
+        # XSS protection (legacy, but still useful for older browsers)
+        response.headers["X-XSS-Protection"] = "1; mode=block"
+        # Don't expose server version
+        response.headers["Server"] = "Woofalytics"
+        return response
 
 
 @asynccontextmanager
@@ -46,7 +64,7 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
 
     logger.info(
         "woofalytics_starting",
-        version="2.0.0",
+        version=__version__,
         log_level=settings.log_level,
     )
 
@@ -58,22 +76,26 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
 
     evidence = EvidenceStorage(
         config=settings.evidence,
-        audio_capture=detector._audio_capture,
+        audio_capture=detector.audio_capture,
         microphone_name=(
-            detector._audio_capture.microphone.name
-            if detector._audio_capture and detector._audio_capture.microphone
+            detector.audio_capture.microphone.name
+            if detector.audio_capture and detector.audio_capture.microphone
             else "Unknown"
         ),
     )
 
+    # Create WebSocket connection manager
+    ws_manager = ConnectionManager()
+
     # Register callbacks
     detector.add_callback(lambda event: asyncio.create_task(evidence.on_bark_event(event)))
-    detector.add_callback(lambda event: asyncio.create_task(broadcast_bark_event(event)))
+    detector.add_callback(lambda event: asyncio.create_task(broadcast_bark_event(event, ws_manager)))
 
     # Store in app.state for dependency injection
     app.state.settings = settings
     app.state.detector = detector
     app.state.evidence = evidence
+    app.state.ws_manager = ws_manager
 
     # Start background task for evidence saving
     async def evidence_saver() -> None:
@@ -110,21 +132,26 @@ def create_app() -> FastAPI:
     app = FastAPI(
         title="Woofalytics",
         description="AI-powered dog bark detection with evidence collection",
-        version="2.0.0",
+        version=__version__,
         lifespan=lifespan,
         docs_url="/api/docs",
         redoc_url="/api/redoc",
         openapi_url="/api/openapi.json",
     )
 
-    # CORS middleware
+    # CORS middleware - restrict to localhost by default for security
+    # Note: CORS origins are configured at startup via lifespan, but we need
+    # sensible defaults here. For custom origins, set WOOFALYTICS__SERVER__CORS_ORIGINS
     app.add_middleware(
         CORSMiddleware,
-        allow_origins=["*"],
-        allow_credentials=True,
-        allow_methods=["*"],
-        allow_headers=["*"],
+        allow_origins=["http://localhost:8000", "http://127.0.0.1:8000"],
+        allow_credentials=False,  # No auth system, no credentials needed
+        allow_methods=["GET", "POST", "OPTIONS"],
+        allow_headers=["Content-Type", "Accept"],
     )
+
+    # Security headers middleware
+    app.add_middleware(SecurityHeadersMiddleware)
 
     # Import and include API routes
     from woofalytics.api.routes import router as api_router
@@ -149,22 +176,6 @@ def create_app() -> FastAPI:
         return {"message": "Woofalytics API running", "docs": "/api/docs"}
 
     return app
-
-
-# Dependency injection helpers
-def get_settings(request: Request) -> Settings:
-    """Get settings from app state."""
-    return request.app.state.settings
-
-
-def get_detector(request: Request) -> BarkDetector:
-    """Get bark detector from app state."""
-    return request.app.state.detector
-
-
-def get_evidence(request: Request) -> EvidenceStorage:
-    """Get evidence storage from app state."""
-    return request.app.state.evidence
 
 
 # Create the application instance

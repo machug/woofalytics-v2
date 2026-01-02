@@ -11,6 +11,8 @@ from typing import Any
 
 from pydantic import BaseModel, Field
 
+from woofalytics import __version__
+
 
 class BarkEventSchema(BaseModel):
     """A bark detection event."""
@@ -37,7 +39,7 @@ class HealthSchema(BaseModel):
     """Health check response."""
 
     status: str = "healthy"
-    version: str = "2.0.0"
+    version: str = __version__
     uptime_seconds: float
     total_barks_detected: int
     evidence_files_count: int
@@ -64,7 +66,6 @@ class EvidenceStatsSchema(BaseModel):
     total_recordings: int
     total_duration_seconds: float
     total_barks_recorded: int
-    storage_directory: str
 
 
 class EvidenceListSchema(BaseModel):

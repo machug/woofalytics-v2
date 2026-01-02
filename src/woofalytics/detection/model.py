@@ -9,10 +9,11 @@ from __future__ import annotations
 import asyncio
 import threading
 import time
+from collections import deque
 from dataclasses import dataclass, field
 from datetime import datetime
 from pathlib import Path
-from typing import TYPE_CHECKING, Callable
+from typing import Callable
 
 import numpy as np
 import torch
@@ -22,9 +23,6 @@ from woofalytics.config import Settings, ModelConfig
 from woofalytics.audio.capture import AsyncAudioCapture, AudioFrame
 from woofalytics.detection.features import FeatureExtractor, create_default_extractor
 from woofalytics.detection.doa import DirectionEstimator
-
-if TYPE_CHECKING:
-    from woofalytics.events.filter import EventFilter
 
 logger = structlog.get_logger(__name__)
 
@@ -70,7 +68,9 @@ class BarkDetector:
     _running: bool = field(default=False, init=False)
     _inference_task: asyncio.Task | None = field(default=None, init=False)
     _last_event: BarkEvent | None = field(default=None, init=False)
-    _event_history: list[BarkEvent] = field(default_factory=list, init=False)
+    _event_history: deque[BarkEvent] = field(
+        default_factory=lambda: deque(maxlen=100), init=False
+    )
     _callbacks: list[Callable[[BarkEvent], None]] = field(default_factory=list, init=False)
     _start_time: float = field(default=0.0, init=False)
     _total_barks: int = field(default=0, init=False)
@@ -103,7 +103,13 @@ class BarkDetector:
                 num_elements=self.settings.doa.num_elements,
                 angle_min=self.settings.doa.angle_min,
                 angle_max=self.settings.doa.angle_max,
+                method=self.settings.doa.method,
             )
+
+    @property
+    def audio_capture(self) -> AsyncAudioCapture | None:
+        """Get the audio capture instance (available after start())."""
+        return self._audio_capture
 
     async def start(self) -> None:
         """Start the bark detector.
@@ -201,8 +207,8 @@ class BarkDetector:
                 return
 
             # Run inference
-            with torch.no_grad():
-                probability = self._model(features).detach().item()
+            with torch.inference_mode():
+                probability = self._model(features).item()
 
         except Exception as e:
             logger.debug("feature_extraction_error", error=str(e))
@@ -230,10 +236,8 @@ class BarkDetector:
                 doa=doa_bartlett,
             )
 
-        # Keep history (last 100 events)
+        # Keep history (deque with maxlen=100 auto-discards oldest)
         self._event_history.append(event)
-        if len(self._event_history) > 100:
-            self._event_history.pop(0)
 
         # Notify callbacks
         for callback in self._callbacks:
@@ -248,7 +252,7 @@ class BarkDetector:
 
     def get_recent_events(self, count: int = 10) -> list[BarkEvent]:
         """Get recent bark detection events."""
-        return self._event_history[-count:]
+        return list(self._event_history)[-count:]
 
     def add_callback(self, callback: Callable[[BarkEvent], None]) -> None:
         """Add a callback to be called on each detection event."""

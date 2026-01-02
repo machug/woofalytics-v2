@@ -186,6 +186,8 @@ async def get_evidence_stats(
     Returns totals for recordings, duration, and bark count.
     """
     stats = evidence.get_stats()
+    # Redact filesystem path for security (consistent with /api/config)
+    stats.pop("storage_directory", None)
     return EvidenceStatsSchema(**stats)
 
 
@@ -201,16 +203,25 @@ async def download_evidence(
 
     Returns the file for download.
     """
-    file_path = settings.evidence.directory / filename
+    # Security: reject any path components in filename FIRST
+    if "/" in filename or "\\" in filename or ".." in filename:
+        raise HTTPException(status_code=400, detail="Invalid filename")
 
+    # Only allow expected file types
+    if not (filename.endswith(".wav") or filename.endswith(".json")):
+        raise HTTPException(status_code=400, detail="Invalid file type")
+
+    # Build path and validate it's within evidence directory BEFORE checking existence
+    evidence_dir = settings.evidence.directory.resolve()
+    file_path = (evidence_dir / filename).resolve()
+
+    # Verify path is within evidence directory (defense in depth)
+    if not file_path.is_relative_to(evidence_dir):
+        raise HTTPException(status_code=403, detail="Access denied")
+
+    # Now safe to check existence
     if not file_path.exists():
         raise HTTPException(status_code=404, detail="Evidence file not found")
-
-    # Security: ensure the path is within the evidence directory
-    try:
-        file_path.resolve().relative_to(settings.evidence.directory.resolve())
-    except ValueError:
-        raise HTTPException(status_code=403, detail="Access denied")
 
     media_type = "audio/wav" if filename.endswith(".wav") else "application/json"
 
@@ -272,7 +283,7 @@ async def get_configuration(
     """Get current configuration (sanitized).
 
     Returns configuration values without sensitive data
-    like API keys or webhook secrets.
+    like API keys, webhook secrets, or filesystem paths.
     """
     return ConfigurationSchema(
         audio={
@@ -283,7 +294,7 @@ async def get_configuration(
             "volume_percent": settings.audio.volume_percent,
         },
         model={
-            "path": str(settings.model.path),
+            # Path redacted - only expose operational parameters
             "threshold": settings.model.threshold,
             "target_sample_rate": settings.model.target_sample_rate,
         },
@@ -293,15 +304,16 @@ async def get_configuration(
             "num_elements": settings.doa.num_elements,
             "angle_min": settings.doa.angle_min,
             "angle_max": settings.doa.angle_max,
+            "method": settings.doa.method,
         },
         evidence={
-            "directory": str(settings.evidence.directory),
+            # Directory path redacted for security
             "past_context_seconds": settings.evidence.past_context_seconds,
             "future_context_seconds": settings.evidence.future_context_seconds,
             "include_metadata": settings.evidence.include_metadata,
         },
         server={
-            "host": settings.server.host,
+            # Host redacted - only expose port for client use
             "port": settings.server.port,
             "enable_websocket": settings.server.enable_websocket,
         },

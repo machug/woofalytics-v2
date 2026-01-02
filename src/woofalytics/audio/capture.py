@@ -129,7 +129,7 @@ class AsyncAudioCapture:
 
         if self._thread and self._thread.is_alive():
             # Wait for thread to finish with timeout
-            loop = asyncio.get_event_loop()
+            loop = asyncio.get_running_loop()
             await loop.run_in_executor(None, self._thread.join, 2.0)
 
         logger.info("audio_capture_stopped")
