@@ -37,6 +37,7 @@ dependencies = [
     "rich>=13.9",
     "websockets>=14.0",
     "aiofiles>=24.1",
+    "matplotlib>=3.10.8",
 ]
 
 [project.optional-dependencies]
