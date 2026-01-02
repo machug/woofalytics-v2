@@ -31,7 +31,8 @@ htmlcov/
 
 # Project specific
 data/
-evidence/
+/evidence/
+!src/woofalytics/evidence/
 models/*.onnx
 logs/
 *.wav
