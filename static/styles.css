@@ -1,0 +1,465 @@
+/* Woofalytics - Modern Dashboard Styles */
+
+:root {
+    --bg-primary: #1a1a2e;
+    --bg-secondary: #16213e;
+    --bg-card: #0f3460;
+    --text-primary: #eaeaea;
+    --text-secondary: #a0a0a0;
+    --accent-primary: #e94560;
+    --accent-secondary: #0f3460;
+    --success: #00d26a;
+    --warning: #f39c12;
+    --danger: #e74c3c;
+    --border-radius: 12px;
+    --shadow: 0 4px 20px rgba(0, 0, 0, 0.3);
+}
+
+* {
+    box-sizing: border-box;
+    margin: 0;
+    padding: 0;
+}
+
+body {
+    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, sans-serif;
+    background: var(--bg-primary);
+    color: var(--text-primary);
+    min-height: 100vh;
+    line-height: 1.6;
+}
+
+.app {
+    max-width: 1400px;
+    margin: 0 auto;
+    padding: 20px;
+}
+
+/* Header */
+.header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 20px 0;
+    border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+    margin-bottom: 30px;
+}
+
+.header h1 {
+    font-size: 2rem;
+    font-weight: 700;
+    background: linear-gradient(135deg, var(--accent-primary), #ff6b8a);
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+}
+
+.status-indicator {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 8px 16px;
+    background: var(--bg-card);
+    border-radius: 20px;
+}
+
+.status-dot {
+    width: 10px;
+    height: 10px;
+    border-radius: 50%;
+    background: var(--warning);
+    animation: pulse 2s infinite;
+}
+
+.status-indicator.connected .status-dot {
+    background: var(--success);
+}
+
+.status-indicator.error .status-dot {
+    background: var(--danger);
+}
+
+@keyframes pulse {
+    0%, 100% { opacity: 1; }
+    50% { opacity: 0.5; }
+}
+
+/* Dashboard Grid */
+.dashboard {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+    gap: 20px;
+}
+
+/* Cards */
+.card {
+    background: var(--bg-card);
+    border-radius: var(--border-radius);
+    padding: 24px;
+    box-shadow: var(--shadow);
+}
+
+.card h2 {
+    font-size: 1rem;
+    text-transform: uppercase;
+    letter-spacing: 1px;
+    color: var(--text-secondary);
+    margin-bottom: 20px;
+}
+
+/* Probability Meter */
+.probability-card {
+    grid-column: span 2;
+}
+
+.probability-meter {
+    position: relative;
+    height: 60px;
+    background: var(--bg-secondary);
+    border-radius: 30px;
+    overflow: hidden;
+    margin-bottom: 20px;
+}
+
+.meter-bar {
+    height: 100%;
+    width: 0%;
+    background: linear-gradient(90deg, var(--success), var(--warning), var(--danger));
+    transition: width 0.2s ease;
+    border-radius: 30px;
+}
+
+.meter-value {
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    transform: translate(-50%, -50%);
+    font-size: 1.5rem;
+    font-weight: bold;
+    text-shadow: 0 2px 4px rgba(0, 0, 0, 0.5);
+}
+
+.bark-status {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 10px;
+    padding: 15px;
+    background: var(--bg-secondary);
+    border-radius: 8px;
+    font-size: 1.2rem;
+}
+
+.bark-status.barking {
+    background: var(--accent-primary);
+    animation: bark-pulse 0.5s ease infinite;
+}
+
+@keyframes bark-pulse {
+    0%, 100% { transform: scale(1); }
+    50% { transform: scale(1.02); }
+}
+
+.bark-icon {
+    font-size: 1.5rem;
+}
+
+/* DOA Compass */
+.doa-compass {
+    display: flex;
+    justify-content: center;
+    margin-bottom: 20px;
+}
+
+.compass-ring {
+    position: relative;
+    width: 200px;
+    height: 100px;
+    border: 3px solid var(--text-secondary);
+    border-bottom: none;
+    border-radius: 100px 100px 0 0;
+    overflow: hidden;
+}
+
+.compass-labels {
+    position: absolute;
+    width: 100%;
+    top: 10px;
+    display: flex;
+    justify-content: space-between;
+    padding: 0 10px;
+    font-size: 0.8rem;
+    color: var(--text-secondary);
+}
+
+.label-front {
+    position: absolute;
+    left: 50%;
+    transform: translateX(-50%);
+    top: 5px;
+}
+
+.compass-needle {
+    position: absolute;
+    bottom: 0;
+    left: 50%;
+    width: 4px;
+    height: 80px;
+    background: var(--accent-primary);
+    transform-origin: bottom center;
+    transform: translateX(-50%) rotate(0deg);
+    transition: transform 0.3s ease;
+    border-radius: 2px;
+}
+
+.compass-needle::after {
+    content: '';
+    position: absolute;
+    top: 0;
+    left: 50%;
+    transform: translateX(-50%);
+    width: 12px;
+    height: 12px;
+    background: var(--accent-primary);
+    border-radius: 50%;
+}
+
+.doa-value {
+    text-align: center;
+    font-size: 2rem;
+    font-weight: bold;
+}
+
+/* Stats Grid */
+.stats-grid {
+    display: grid;
+    grid-template-columns: repeat(2, 1fr);
+    gap: 20px;
+}
+
+.stat {
+    text-align: center;
+    padding: 15px;
+    background: var(--bg-secondary);
+    border-radius: 8px;
+}
+
+.stat-value {
+    display: block;
+    font-size: 1.8rem;
+    font-weight: bold;
+    color: var(--accent-primary);
+}
+
+.stat-label {
+    font-size: 0.85rem;
+    color: var(--text-secondary);
+}
+
+/* Audio Level */
+.audio-meter {
+    padding: 10px 0;
+}
+
+.vu-meter {
+    position: relative;
+    height: 30px;
+    background: var(--bg-secondary);
+    border-radius: 15px;
+    overflow: hidden;
+}
+
+.vu-bar {
+    height: 100%;
+    width: 0%;
+    background: linear-gradient(90deg, var(--success), var(--warning));
+    transition: width 0.05s linear;
+}
+
+.vu-peak {
+    position: absolute;
+    top: 0;
+    width: 3px;
+    height: 100%;
+    background: var(--accent-primary);
+    transition: left 0.05s linear;
+}
+
+/* Events List */
+.events-card {
+    grid-column: span 2;
+}
+
+.events-list {
+    max-height: 300px;
+    overflow-y: auto;
+}
+
+.events-empty, .evidence-empty {
+    text-align: center;
+    color: var(--text-secondary);
+    padding: 20px;
+}
+
+.event-item {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 12px;
+    background: var(--bg-secondary);
+    border-radius: 8px;
+    margin-bottom: 8px;
+}
+
+.event-item.barking {
+    border-left: 4px solid var(--accent-primary);
+}
+
+.event-time {
+    font-size: 0.85rem;
+    color: var(--text-secondary);
+}
+
+.event-prob {
+    font-weight: bold;
+}
+
+/* Evidence List */
+.evidence-card {
+    grid-column: span 2;
+}
+
+.evidence-list {
+    max-height: 400px;
+    overflow-y: auto;
+    margin-bottom: 15px;
+}
+
+.evidence-item {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 15px;
+    background: var(--bg-secondary);
+    border-radius: 8px;
+    margin-bottom: 8px;
+}
+
+.evidence-info {
+    flex: 1;
+}
+
+.evidence-filename {
+    font-weight: bold;
+    margin-bottom: 5px;
+}
+
+.evidence-meta {
+    font-size: 0.85rem;
+    color: var(--text-secondary);
+}
+
+.evidence-actions {
+    display: flex;
+    gap: 10px;
+}
+
+.btn-download {
+    padding: 8px 16px;
+    background: var(--accent-primary);
+    color: white;
+    border: none;
+    border-radius: 6px;
+    cursor: pointer;
+    text-decoration: none;
+    font-size: 0.9rem;
+    transition: background 0.2s;
+}
+
+.btn-download:hover {
+    background: #ff6b8a;
+}
+
+.btn-refresh {
+    width: 100%;
+    padding: 12px;
+    background: var(--bg-secondary);
+    color: var(--text-primary);
+    border: 2px solid var(--accent-primary);
+    border-radius: 8px;
+    cursor: pointer;
+    font-size: 1rem;
+    transition: all 0.2s;
+}
+
+.btn-refresh:hover {
+    background: var(--accent-primary);
+}
+
+/* Footer */
+.footer {
+    text-align: center;
+    padding: 30px;
+    color: var(--text-secondary);
+    font-size: 0.9rem;
+}
+
+.footer a {
+    color: var(--accent-primary);
+    text-decoration: none;
+}
+
+.footer a:hover {
+    text-decoration: underline;
+}
+
+/* Responsive */
+@media (max-width: 768px) {
+    .probability-card,
+    .events-card,
+    .evidence-card {
+        grid-column: span 1;
+    }
+
+    .header {
+        flex-direction: column;
+        gap: 15px;
+        text-align: center;
+    }
+
+    .stats-grid {
+        grid-template-columns: 1fr;
+    }
+
+    .evidence-item {
+        flex-direction: column;
+        gap: 10px;
+    }
+
+    .evidence-actions {
+        width: 100%;
+    }
+
+    .btn-download {
+        flex: 1;
+        text-align: center;
+    }
+}
+
+/* Scrollbar */
+::-webkit-scrollbar {
+    width: 8px;
+}
+
+::-webkit-scrollbar-track {
+    background: var(--bg-secondary);
+    border-radius: 4px;
+}
+
+::-webkit-scrollbar-thumb {
+    background: var(--accent-primary);
+    border-radius: 4px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+    background: #ff6b8a;
+}

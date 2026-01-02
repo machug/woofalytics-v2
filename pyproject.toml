@@ -1,0 +1,113 @@
+[project]
+name = "woofalytics"
+version = "2.0.0"
+description = "AI-powered dog bark detection with evidence collection for Raspberry Pi"
+readme = "README.md"
+license = { text = "MIT" }
+requires-python = ">=3.11"
+authors = [
+    { name = "Original: woofalytics team" },
+]
+keywords = ["dog", "bark", "detection", "raspberry-pi", "audio", "ml", "pytorch"]
+classifiers = [
+    "Development Status :: 4 - Beta",
+    "Environment :: Console",
+    "Framework :: FastAPI",
+    "Intended Audience :: Developers",
+    "License :: OSI Approved :: MIT License",
+    "Operating System :: POSIX :: Linux",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Topic :: Multimedia :: Sound/Audio :: Analysis",
+    "Topic :: Scientific/Engineering :: Artificial Intelligence",
+]
+dependencies = [
+    "numpy>=2.0",
+    "torch>=2.5",
+    "torchaudio>=2.5",
+    "pyaudio>=0.2.14",
+    "pyargus>=1.1",
+    "fastapi>=0.115",
+    "uvicorn[standard]>=0.32",
+    "pydantic>=2.10",
+    "pydantic-settings>=2.6",
+    "httpx>=0.28",
+    "pyyaml>=6.0",
+    "structlog>=24.4",
+    "rich>=13.9",
+    "websockets>=14.0",
+    "aiofiles>=24.1",
+]
+
+[project.optional-dependencies]
+dev = [
+    "pytest>=8.3",
+    "pytest-asyncio>=0.24",
+    "pytest-cov>=6.0",
+    "ruff>=0.8",
+    "mypy>=1.13",
+    "pre-commit>=4.0",
+]
+
+[project.scripts]
+woofalytics = "woofalytics.__main__:main"
+
+[project.urls]
+Homepage = "https://github.com/YOUR_USERNAME/woofalytics-v2"
+Documentation = "https://github.com/YOUR_USERNAME/woofalytics-v2#readme"
+Repository = "https://github.com/YOUR_USERNAME/woofalytics-v2"
+Issues = "https://github.com/YOUR_USERNAME/woofalytics-v2/issues"
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/woofalytics"]
+
+[tool.ruff]
+target-version = "py311"
+line-length = 100
+src = ["src", "tests"]
+
+[tool.ruff.lint]
+select = [
+    "E",      # pycodestyle errors
+    "F",      # pyflakes
+    "I",      # isort
+    "UP",     # pyupgrade
+    "B",      # flake8-bugbear
+    "SIM",    # flake8-simplify
+    "RUF",    # ruff-specific
+    "ASYNC",  # flake8-async
+    "PTH",    # flake8-use-pathlib
+]
+ignore = [
+    "E501",   # line too long (handled by formatter)
+]
+
+[tool.ruff.lint.isort]
+known-first-party = ["woofalytics"]
+
+[tool.mypy]
+python_version = "3.11"
+strict = true
+warn_return_any = true
+warn_unused_configs = true
+exclude = ["tests"]
+
+[tool.pytest.ini_options]
+asyncio_mode = "auto"
+testpaths = ["tests"]
+addopts = "-v --tb=short"
+
+[tool.coverage.run]
+source = ["src/woofalytics"]
+branch = true
+
+[tool.coverage.report]
+exclude_lines = [
+    "pragma: no cover",
+    "if TYPE_CHECKING:",
+    "raise NotImplementedError",
+]

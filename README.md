@@ -1,0 +1,696 @@
+# 🐕 Woofalytics v2.0
+
+**AI-powered dog bark detection with evidence collection for Raspberry Pi**
+
+A complete modernization of the original woofalytics project, built for tracking nuisance barking and collecting timestamped evidence for council complaints.
+
+---
+
+## Table of Contents
+
+- [Project Goals](#project-goals)
+- [Architecture Overview](#architecture-overview)
+- [File Structure](#file-structure)
+- [Module Documentation](#module-documentation)
+- [Configuration System](#configuration-system)
+- [API Reference](#api-reference)
+- [Web UI](#web-ui)
+- [Hardware Requirements](#hardware-requirements)
+- [Installation](#installation)
+- [Docker Deployment](#docker-deployment)
+- [Development](#development)
+- [Testing](#testing)
+- [Design Decisions](#design-decisions)
+- [Known Issues & TODOs](#known-issues--todos)
+- [Original Project](#original-project)
+
+---
+
+## Project Goals
+
+This project was created with specific intentions:
+
+1. **Learning** - Push modern Python patterns to the limits (deliberately over-engineered)
+2. **Evidence Collection** - Reliable recording for council complaints about barking dogs
+3. **Hardware Optimization** - Maximize Raspberry Pi 4B capabilities
+4. **Best Practices** - Latest patterns, proper architecture, comprehensive documentation
+
+### Key Features
+
+- **Real-time Bark Detection** - ML-powered using TorchScript models (~80ms inference)
+- **Direction of Arrival (DOA)** - Know which direction barks come from using stereo microphones
+- **Evidence Recording** - Automatic 30-second clips with JSON metadata sidecars
+- **Modern Web UI** - Real-time dashboard with WebSocket updates
+- **REST API** - Full OpenAPI documentation at `/api/docs`
+- **Docker Support** - Easy deployment with Docker Compose
+- **Flexible Configuration** - YAML config with environment variable overrides
+
+---
+
+## Architecture Overview
+
+```
+┌─────────────────────────────────────────────────────────────────┐
+│                        FastAPI Application                       │
+│  ┌──────────────┐  ┌──────────────┐  ┌──────────────────────┐  │
+│  │  REST API    │  │  WebSocket   │  │   Static Files       │  │
+│  │  /api/*      │  │  /ws/bark    │  │   /static/*          │  │
+│  │              │  │  /ws/audio   │  │                      │  │
+│  └──────┬───────┘  └──────┬───────┘  └──────────────────────┘  │
+│         │                 │                                      │
+│         └────────┬────────┘                                      │
+│                  ▼                                               │
+│  ┌─────────────────────────────────────────────────────────┐   │
+│  │                    BarkDetector                          │   │
+│  │  - Coordinates audio capture, inference, callbacks       │   │
+│  │  - Runs inference loop every 80ms                        │   │
+│  │  - Produces BarkEvent objects                            │   │
+│  └─────────────────────────────────────────────────────────┘   │
+│         │                 │                    │                 │
+│         ▼                 ▼                    ▼                 │
+│  ┌─────────────┐  ┌─────────────┐  ┌───────────────────────┐   │
+│  │ AudioCapture│  │  Features   │  │   DOA Estimator       │   │
+│  │ Ring Buffer │  │  Extractor  │  │   (Bartlett/Capon/MEM)│   │
+│  └─────────────┘  └─────────────┘  └───────────────────────┘   │
+│         │                                                        │
+│         ▼                                                        │
+│  ┌─────────────────────────────────────────────────────────┐   │
+│  │                  EvidenceStorage                         │   │
+│  │  - Records WAV clips on bark detection                   │   │
+│  │  - Creates JSON metadata sidecars                        │   │
+│  │  - Maintains evidence index                              │   │
+│  └─────────────────────────────────────────────────────────┘   │
+└─────────────────────────────────────────────────────────────────┘
+```
+
+### Data Flow
+
+1. **Audio Capture** (`audio/capture.py`) runs in a background thread, filling a ring buffer
+2. **BarkDetector** (`detection/model.py`) reads 8 frames (80ms) from buffer every inference cycle
+3. **FeatureExtractor** (`detection/features.py`) converts audio to 80-dim Mel filterbank features
+4. **TorchScript Model** runs inference, returning bark probability (0.0-1.0)
+5. **DOA Estimator** (`detection/doa.py`) calculates direction using pyargus algorithms
+6. **BarkEvent** is created and broadcast to all registered callbacks
+7. **EvidenceStorage** (`evidence/storage.py`) records clips when barks are detected
+8. **WebSocket** broadcasts events to connected web clients in real-time
+
+---
+
+## File Structure
+
+```
+woofalytics-v2/
+├── src/woofalytics/
+│   ├── __init__.py              # Package version and exports
+│   ├── __main__.py              # CLI entry point (python -m woofalytics)
+│   ├── app.py                   # FastAPI application with lifespan
+│   ├── config.py                # Pydantic v2 settings system
+│   │
+│   ├── audio/
+│   │   ├── __init__.py          # Module exports
+│   │   ├── devices.py           # Microphone discovery (PyAudio wrapper)
+│   │   └── capture.py           # Async audio capture with ring buffer
+│   │
+│   ├── detection/
+│   │   ├── __init__.py          # Module exports
+│   │   ├── model.py             # BarkDetector orchestrator + BarkEvent
+│   │   ├── features.py          # Mel filterbank feature extraction
+│   │   └── doa.py               # Direction of arrival estimation
+│   │
+│   ├── evidence/
+│   │   ├── __init__.py          # Module exports
+│   │   ├── storage.py           # Evidence recording and management
+│   │   └── metadata.py          # JSON metadata models
+│   │
+│   ├── events/
+│   │   └── __init__.py          # (Placeholder for event filtering)
+│   │
+│   └── api/
+│       ├── __init__.py          # Module exports
+│       ├── routes.py            # REST API endpoints
+│       ├── schemas.py           # Pydantic response models
+│       └── websocket.py         # WebSocket endpoints + ConnectionManager
+│
+├── static/
+│   ├── index.html               # Dashboard HTML
+│   ├── styles.css               # Dark theme CSS
+│   └── app.js                   # WebSocket client + UI logic
+│
+├── models/
+│   └── traced_model.pt          # TorchScript bark detection model
+│
+├── evidence/                    # Evidence recordings (created at runtime)
+│
+├── tests/
+│   ├── __init__.py
+│   ├── conftest.py              # Pytest fixtures
+│   ├── test_config.py           # Configuration tests
+│   ├── test_audio.py            # Audio module tests
+│   ├── test_detection.py        # Detection module tests
+│   └── test_evidence.py         # Evidence module tests
+│
+├── pyproject.toml               # Python packaging (PEP 517/518)
+├── Dockerfile                   # Multi-stage Docker build
+├── docker-compose.yml           # Docker Compose for RPi
+├── config.yaml                  # Default configuration
+├── .env.example                 # Environment variable template
+└── README.md                    # This file
+```
+
+---
+
+## Module Documentation
+
+### `config.py` - Configuration System
+
+**Pattern**: Pydantic v2 with proper nesting (BaseModel for nested, BaseSettings for root only)
+
+```python
+# Nested configs use BaseModel (NOT BaseSettings)
+class AudioConfig(BaseModel):
+    device_name: str | None = None
+    sample_rate: int = 44100
+    channels: int = 2
+    # ...
+
+# Only root uses BaseSettings
+class Settings(BaseSettings):
+    model_config = SettingsConfigDict(
+        env_prefix="WOOFALYTICS__",
+        env_nested_delimiter="__",
+    )
+    audio: AudioConfig = Field(default_factory=AudioConfig)
+    # ...
+```
+
+**Environment Variables**:
+- Prefix: `WOOFALYTICS__`
+- Nested delimiter: `__`
+- Example: `WOOFALYTICS__AUDIO__SAMPLE_RATE=48000`
+
+### `audio/devices.py` - Microphone Discovery
+
+- `MicrophoneInfo` - Dataclass for device info
+- `list_microphones(min_channels)` - List all input devices
+- `find_microphone(device_name, min_channels)` - Auto-detect or filter by name
+- `set_microphone_volume(percent)` - ALSA amixer wrapper (Linux only)
+
+### `audio/capture.py` - Async Audio Capture
+
+- `AudioFrame` - Single frame with timestamp, raw bytes, metadata
+- `AsyncAudioCapture` - Runs PyAudio in background thread, async interface
+  - Ring buffer (default 30 seconds)
+  - `get_recent_frames(count)` - Get N most recent frames
+  - `get_buffer_as_array(seconds)` - Get audio as numpy array
+
+### `detection/features.py` - Feature Extraction
+
+- `FeatureExtractor` - Converts audio to Mel filterbank features
+  - Resamples from source rate (44.1kHz) to model rate (16kHz)
+  - 80 Mel bins, 25ms frame, 10ms hop
+  - Uses `torchaudio.compliance.kaldi.fbank` for Kaldi compatibility
+  - Output: `(1, 480)` tensor (6 frames × 80 mels)
+
+### `detection/doa.py` - Direction of Arrival
+
+- `DirectionEstimator` - Estimates sound direction using ULA geometry
+  - **Bartlett** - Simple beamforming (default)
+  - **Capon (MVDR)** - Higher resolution
+  - **MEM** - Maximum entropy, best for close sources
+- `angle_to_direction(angle)` - Converts degrees to "left", "front", "right", etc.
+
+### `detection/model.py` - Bark Detector
+
+- `BarkEvent` - Detection event with timestamp, probability, DOA
+- `BarkDetector` - Main orchestrator
+  - Loads TorchScript model
+  - Runs inference loop (80ms interval)
+  - Manages callbacks for event notification
+  - Tracks statistics (uptime, total barks)
+
+### `evidence/metadata.py` - Metadata Models
+
+- `DetectionInfo` - Probability, bark count, DOA values
+- `DeviceInfo` - Hostname, microphone name
+- `EvidenceMetadata` - Complete metadata for a recording
+- `EvidenceIndex` - Index of all evidence files
+
+### `evidence/storage.py` - Evidence Storage
+
+- `EvidenceStorage` - Records bark clips
+  - Triggers on bark detection
+  - Records past context (15s) + future context (15s)
+  - Saves WAV + JSON sidecar
+  - Maintains searchable index
+
+### `api/routes.py` - REST Endpoints
+
+See [API Reference](#api-reference) below.
+
+### `api/websocket.py` - WebSocket Streaming
+
+- `ConnectionManager` - Manages active WebSocket connections
+- `/ws/bark` - Real-time bark events
+- `/ws/audio` - Real-time audio levels (VU meter)
+
+### `app.py` - FastAPI Application
+
+- Uses `lifespan` context manager for startup/shutdown
+- Dependency injection via `app.state`
+- Mounts static files, includes routers
+
+---
+
+## Configuration System
+
+### config.yaml
+
+```yaml
+audio:
+  device_name: null        # null = auto-detect, or "ReSpeaker"
+  sample_rate: 44100       # Hz
+  channels: 2              # Minimum 2 for DOA
+  chunk_size: 441          # Samples per chunk (~10ms at 44.1kHz)
+  volume_percent: 75       # Microphone gain (0-100)
+
+model:
+  path: ./models/traced_model.pt
+  target_sample_rate: 16000
+  threshold: 0.88          # Detection threshold (0.0-1.0)
+
+doa:
+  enabled: true
+  element_spacing: 0.1     # In wavelengths
+  num_elements: 2
+  angle_min: 0
+  angle_max: 180
+
+evidence:
+  directory: ./evidence
+  past_context_seconds: 15
+  future_context_seconds: 15
+  include_metadata: true
+
+webhook:
+  enabled: false
+  ifttt_event: woof
+  # ifttt_key: set via environment
+
+server:
+  host: 0.0.0.0
+  port: 8000
+  enable_websocket: true
+
+log_level: INFO            # DEBUG, INFO, WARNING, ERROR
+log_format: console        # console or json
+```
+
+### Environment Variables
+
+```bash
+# Override any config value
+WOOFALYTICS__LOG_LEVEL=DEBUG
+WOOFALYTICS__MODEL__THRESHOLD=0.90
+WOOFALYTICS__AUDIO__DEVICE_NAME=ReSpeaker
+WOOFALYTICS__WEBHOOK__IFTTT_KEY=your_secret_key
+```
+
+---
+
+## API Reference
+
+### Health & Status
+
+| Endpoint | Method | Description |
+|----------|--------|-------------|
+| `/api/health` | GET | Health check with uptime, bark count, evidence count |
+| `/api/status` | GET | Detector status (running, uptime, last event) |
+| `/api/config` | GET | Current configuration (sanitized, no secrets) |
+
+### Bark Detection
+
+| Endpoint | Method | Description |
+|----------|--------|-------------|
+| `/api/bark` | GET | Latest bark event |
+| `/api/bark/probability` | GET | Just the probability value |
+| `/api/bark/recent?count=10` | GET | Recent events (1-100) |
+| `/api/direction` | GET | Current DOA with all methods |
+
+### Evidence
+
+| Endpoint | Method | Description |
+|----------|--------|-------------|
+| `/api/evidence?count=20` | GET | List recent evidence |
+| `/api/evidence/stats` | GET | Storage statistics |
+| `/api/evidence/{filename}` | GET | Download WAV or JSON file |
+| `/api/evidence/date/{YYYY-MM-DD}` | GET | Evidence by date |
+
+### WebSocket
+
+| Endpoint | Description |
+|----------|-------------|
+| `/ws/bark` | Real-time bark events (JSON) |
+| `/ws/audio` | Audio level updates at 10Hz |
+
+### OpenAPI Documentation
+
+- Swagger UI: `/api/docs`
+- ReDoc: `/api/redoc`
+- OpenAPI JSON: `/api/openapi.json`
+
+---
+
+## Web UI
+
+The dashboard (`/static/index.html`) provides:
+
+1. **Bark Probability Meter** - Real-time bar showing current probability
+2. **DOA Compass** - Semi-circle showing sound direction
+3. **Statistics** - Uptime, total barks, evidence count
+4. **Audio Level** - VU meter for microphone input
+5. **Recent Events** - List of recent detections
+6. **Evidence List** - Download recordings and metadata
+
+The UI uses vanilla JavaScript with WebSocket for real-time updates. No frameworks required.
+
+---
+
+## Hardware Requirements
+
+### Minimum
+
+- **Raspberry Pi 4 Model B** (2GB+ RAM)
+- **Any USB microphone** (1+ channels)
+
+### Recommended for DOA
+
+- **ReSpeaker 2-Mic HAT** (~$12) - HAT form factor, 2 mics
+- **ReSpeaker 4-Mic Array** (~$35) - 360° coverage
+
+### ReSpeaker HAT Setup
+
+```bash
+# Install seeed-voicecard driver
+git clone https://github.com/respeaker/seeed-voicecard
+cd seeed-voicecard
+sudo ./install.sh
+sudo reboot
+```
+
+---
+
+## Installation
+
+### Quick Start (Docker)
+
+```bash
+git clone https://github.com/your-user/woofalytics.git
+cd woofalytics-v2
+cp .env.example .env
+docker-compose up -d
+```
+
+### Manual Installation
+
+```bash
+# System dependencies (Debian/Ubuntu/Raspberry Pi OS)
+sudo apt-get update
+sudo apt-get install -y \
+    python3.11 python3.11-venv \
+    portaudio19-dev libasound2-dev \
+    alsa-utils
+
+# Create virtual environment
+python3.11 -m venv venv
+source venv/bin/activate
+
+# Install package
+pip install -e .
+
+# Verify audio devices
+woofalytics --list-devices
+
+# Run
+woofalytics
+```
+
+### CLI Options
+
+```
+woofalytics [OPTIONS]
+
+Options:
+  -c, --config PATH       Config file (default: config.yaml)
+  --host TEXT             Override host
+  -p, --port INTEGER      Override port
+  --reload                Enable hot reload (dev)
+  --log-level LEVEL       Override log level
+  --list-devices          List audio devices and exit
+  --version               Show version
+```
+
+---
+
+## Docker Deployment
+
+### Dockerfile Features
+
+- Multi-stage build (builder + runtime)
+- Non-root user (`woofalytics`)
+- Audio libraries pre-installed
+- Health check included
+- Evidence volume for persistence
+
+### docker-compose.yml
+
+```yaml
+services:
+  woofalytics:
+    build: .
+    ports:
+      - "8000:8000"
+    devices:
+      - /dev/snd:/dev/snd    # Audio device access
+    group_add:
+      - audio                 # Audio group membership
+    volumes:
+      - ./config.yaml:/home/woofalytics/app/config.yaml:ro
+      - ./evidence:/home/woofalytics/app/evidence
+      - ./models:/home/woofalytics/app/models:ro
+    environment:
+      - TZ=Europe/London
+      - WOOFALYTICS__WEBHOOK__IFTTT_KEY=${IFTTT_KEY:-}
+    restart: unless-stopped
+```
+
+### Commands
+
+```bash
+# Build and start
+docker-compose up -d --build
+
+# View logs
+docker-compose logs -f
+
+# Stop
+docker-compose down
+
+# Rebuild after code changes
+docker-compose up -d --build --force-recreate
+```
+
+---
+
+## Development
+
+### Setup
+
+```bash
+# Install with dev dependencies
+pip install -e ".[dev]"
+
+# Install pre-commit hooks (optional)
+pre-commit install
+```
+
+### Running
+
+```bash
+# With hot reload
+woofalytics --reload --log-level DEBUG
+
+# Or directly with uvicorn
+uvicorn woofalytics.app:app --reload --host 0.0.0.0 --port 8000
+```
+
+### Code Quality
+
+```bash
+# Linting
+ruff check src/woofalytics
+
+# Type checking
+mypy src/woofalytics
+
+# Format
+ruff format src/woofalytics
+```
+
+---
+
+## Testing
+
+### Run Tests
+
+```bash
+# All tests
+pytest
+
+# With coverage
+pytest --cov=woofalytics --cov-report=html
+
+# Specific module
+pytest tests/test_config.py -v
+
+# With output
+pytest -s
+```
+
+### Test Structure
+
+- `conftest.py` - Shared fixtures (mock PyAudio, test settings, etc.)
+- `test_config.py` - Configuration validation
+- `test_audio.py` - Audio frame and device tests
+- `test_detection.py` - DOA and bark event tests
+- `test_evidence.py` - Metadata and storage tests
+
+### Mocking
+
+Tests mock PyAudio to run without audio hardware:
+
+```python
+@pytest.fixture
+def mock_pyaudio():
+    with patch("pyaudio.PyAudio") as mock:
+        # Configure mock device list
+        yield mock
+```
+
+---
+
+## Design Decisions
+
+### Why Pydantic v2 with BaseModel for Nested Configs?
+
+Using `BaseSettings` for nested configs causes environment variable conflicts. The correct pattern:
+- `BaseModel` for nested configs (AudioConfig, ModelConfig, etc.)
+- `BaseSettings` only for root Settings class
+- Environment variables work with `__` delimiter: `WOOFALYTICS__AUDIO__SAMPLE_RATE`
+
+### Why Async Audio Capture?
+
+PyAudio is blocking, but FastAPI is async. Solution:
+- Run PyAudio in a background daemon thread
+- Use thread-safe ring buffer (deque with lock)
+- Async methods for control (`start()`, `stop()`)
+- Sync methods for buffer access (called from any context)
+
+### Why Three DOA Algorithms?
+
+Each has trade-offs:
+- **Bartlett** - Robust, works well with noise
+- **Capon** - Better resolution, more sensitive to calibration
+- **MEM** - Best for multiple sources, computationally heavier
+
+### Why 80ms Inference Interval?
+
+Balances latency vs CPU usage on RPi 4:
+- 8 audio chunks × 10ms = 80ms of audio
+- Produces 6 Mel frames (enough for model)
+- ~12.5 inferences/second
+
+### Why JSON Sidecars for Evidence?
+
+For council complaints, metadata must be:
+- Human-readable (JSON, not binary)
+- Separate from audio (can't be embedded in WAV easily)
+- Include precise timestamps, probabilities, device info
+
+---
+
+## Known Issues & TODOs
+
+### Not Yet Implemented
+
+1. **Event Filter** (`events/filter.py`) - Rate limiting/debouncing
+2. **Webhook Notifications** - IFTTT integration
+3. **Evidence Cleanup** - Automatic old file removal
+4. **Audio Spectrogram** - Visual display in web UI
+
+### Potential Improvements
+
+1. **Prometheus Metrics** - For Grafana dashboards
+2. **Home Assistant Integration** - MQTT or REST
+3. **Multi-dog Differentiation** - Train custom models
+4. **SMS/Push Notifications** - Via Pushover/Twilio
+
+### Known Limitations
+
+1. **Linux Only** - ALSA volume control is Linux-specific
+2. **x86/ARM** - PyTorch may need ARM-specific wheels on RPi
+3. **No GPU** - Inference is CPU-only (fine for RPi)
+
+---
+
+## Original Project
+
+This is a fork/rewrite of the original woofalytics project. Key changes:
+
+| Aspect | Original | v2.0 |
+|--------|----------|------|
+| Python | 3.9+ | 3.11+ |
+| Web Framework | Basic HTTP | FastAPI |
+| Config | Hardcoded | Pydantic v2 |
+| Microphone | Andrea only | Any USB mic |
+| Real-time | Polling | WebSocket |
+| Evidence | WAV only | WAV + JSON metadata |
+| Deployment | Manual | Docker |
+| Tests | None | pytest suite |
+
+---
+
+## License
+
+MIT License - See original project for attribution.
+
+## Contributing
+
+1. Fork the repository
+2. Create a feature branch
+3. Run tests: `pytest`
+4. Run linting: `ruff check src/`
+5. Submit a pull request
+
+---
+
+## Quick Reference
+
+```bash
+# Start the server
+woofalytics
+
+# List audio devices
+woofalytics --list-devices
+
+# Run with debug logging
+woofalytics --log-level DEBUG
+
+# Docker
+docker-compose up -d
+
+# Run tests
+pytest
+
+# Check API docs
+open http://localhost:8000/api/docs
+```

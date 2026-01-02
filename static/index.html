@@ -1,0 +1,109 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Woofalytics - Bark Detection</title>
+    <link rel="stylesheet" href="/static/styles.css">
+    <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🐕</text></svg>">
+</head>
+<body>
+    <div class="app">
+        <header class="header">
+            <h1>🐕 Woofalytics</h1>
+            <div class="status-indicator" id="status">
+                <span class="status-dot"></span>
+                <span class="status-text">Connecting...</span>
+            </div>
+        </header>
+
+        <main class="dashboard">
+            <!-- Bark Probability Meter -->
+            <section class="card probability-card">
+                <h2>Bark Probability</h2>
+                <div class="probability-meter">
+                    <div class="meter-bar" id="probability-bar"></div>
+                    <div class="meter-value" id="probability-value">--</div>
+                </div>
+                <div class="bark-status" id="bark-status">
+                    <span class="bark-icon">🔇</span>
+                    <span class="bark-text">No bark detected</span>
+                </div>
+            </section>
+
+            <!-- Direction of Arrival -->
+            <section class="card doa-card">
+                <h2>Direction</h2>
+                <div class="doa-compass">
+                    <div class="compass-ring">
+                        <div class="compass-labels">
+                            <span class="label-left">Left</span>
+                            <span class="label-front">Front</span>
+                            <span class="label-right">Right</span>
+                        </div>
+                        <div class="compass-needle" id="doa-needle"></div>
+                    </div>
+                </div>
+                <div class="doa-value" id="doa-value">--°</div>
+            </section>
+
+            <!-- Stats -->
+            <section class="card stats-card">
+                <h2>Statistics</h2>
+                <div class="stats-grid">
+                    <div class="stat">
+                        <span class="stat-value" id="total-barks">0</span>
+                        <span class="stat-label">Barks Detected</span>
+                    </div>
+                    <div class="stat">
+                        <span class="stat-value" id="uptime">0:00</span>
+                        <span class="stat-label">Uptime</span>
+                    </div>
+                    <div class="stat">
+                        <span class="stat-value" id="evidence-count">0</span>
+                        <span class="stat-label">Evidence Files</span>
+                    </div>
+                    <div class="stat">
+                        <span class="stat-value" id="microphone">--</span>
+                        <span class="stat-label">Microphone</span>
+                    </div>
+                </div>
+            </section>
+
+            <!-- Audio Level -->
+            <section class="card audio-card">
+                <h2>Audio Level</h2>
+                <div class="audio-meter">
+                    <div class="vu-meter">
+                        <div class="vu-bar" id="audio-level"></div>
+                        <div class="vu-peak" id="audio-peak"></div>
+                    </div>
+                </div>
+            </section>
+
+            <!-- Recent Events -->
+            <section class="card events-card">
+                <h2>Recent Events</h2>
+                <div class="events-list" id="events-list">
+                    <p class="events-empty">No events yet</p>
+                </div>
+            </section>
+
+            <!-- Evidence Files -->
+            <section class="card evidence-card">
+                <h2>Evidence Recordings</h2>
+                <div class="evidence-list" id="evidence-list">
+                    <p class="evidence-empty">No recordings yet</p>
+                </div>
+                <button class="btn-refresh" onclick="loadEvidence()">Refresh</button>
+            </section>
+        </main>
+
+        <footer class="footer">
+            <p>Woofalytics v2.0.0 | <a href="/api/docs">API Docs</a></p>
+        </footer>
+    </div>
+
+    <script src="/static/app.js"></script>
+</body>
+</html>

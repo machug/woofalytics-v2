@@ -1,0 +1,74 @@
+# Woofalytics Docker Compose Configuration
+# For running on Raspberry Pi or other Linux hosts
+
+services:
+  woofalytics:
+    build:
+      context: .
+      dockerfile: Dockerfile
+
+    container_name: woofalytics
+
+    # Expose web interface
+    ports:
+      - "8000:8000"
+
+    # Audio device access (required for microphone)
+    devices:
+      - /dev/snd:/dev/snd
+
+    # Add to audio group for device access
+    group_add:
+      - audio
+
+    # Volume mounts
+    volumes:
+      # Configuration file (read-only)
+      - ./config.yaml:/home/woofalytics/app/config.yaml:ro
+
+      # Evidence directory (persistent)
+      - ./evidence:/home/woofalytics/app/evidence
+
+      # Models directory (can be updated without rebuild)
+      - ./models:/home/woofalytics/app/models:ro
+
+    # Environment variables
+    environment:
+      # Timezone (adjust for your location)
+      - TZ=Europe/London
+
+      # IFTTT webhook key (optional, for notifications)
+      - WOOFALYTICS__WEBHOOK__IFTTT_KEY=${IFTTT_KEY:-}
+
+      # Override log level if needed
+      - WOOFALYTICS__LOG_LEVEL=${LOG_LEVEL:-INFO}
+
+    # Restart policy
+    restart: unless-stopped
+
+    # Resource limits (adjust for RPi 4)
+    deploy:
+      resources:
+        limits:
+          memory: 1G
+        reservations:
+          memory: 512M
+
+    # Logging configuration
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"
+
+    # Health check
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/api/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 10s
+
+# Optional: Named volume for evidence (alternative to bind mount)
+# volumes:
+#   evidence_data:

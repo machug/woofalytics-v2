@@ -1,0 +1,46 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+.venv/
+venv/
+ENV/
+env/
+*.egg-info/
+dist/
+build/
+.eggs/
+
+# IDE
+.idea/
+.vscode/
+*.swp
+*.swo
+
+# Testing
+.pytest_cache/
+.coverage
+htmlcov/
+.tox/
+
+# Environment
+.env
+*.env.local
+
+# Project specific
+data/
+evidence/
+models/*.onnx
+logs/
+*.wav
+*.mp3
+*.ogg
+
+# System
+.DS_Store
+Thumbs.db
+
+# Claude Code
+.beads/

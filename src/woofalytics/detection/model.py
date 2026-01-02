@@ -1,0 +1,291 @@
+"""Bark detection ML model and inference.
+
+This module handles loading the TorchScript model and running
+inference on audio frames.
+"""
+
+from __future__ import annotations
+
+import asyncio
+import threading
+import time
+from dataclasses import dataclass, field
+from datetime import datetime
+from pathlib import Path
+from typing import TYPE_CHECKING, Callable
+
+import numpy as np
+import torch
+import structlog
+
+from woofalytics.config import Settings, ModelConfig
+from woofalytics.audio.capture import AsyncAudioCapture, AudioFrame
+from woofalytics.detection.features import FeatureExtractor, create_default_extractor
+from woofalytics.detection.doa import DirectionEstimator
+
+if TYPE_CHECKING:
+    from woofalytics.events.filter import EventFilter
+
+logger = structlog.get_logger(__name__)
+
+
+@dataclass
+class BarkEvent:
+    """A bark detection event."""
+
+    timestamp: datetime
+    probability: float
+    is_barking: bool
+    doa_bartlett: int | None = None
+    doa_capon: int | None = None
+    doa_mem: int | None = None
+
+    def to_dict(self) -> dict:
+        """Convert to dictionary for JSON serialization."""
+        return {
+            "timestamp": self.timestamp.isoformat(),
+            "probability": self.probability,
+            "is_barking": self.is_barking,
+            "doa_bartlett": self.doa_bartlett,
+            "doa_capon": self.doa_capon,
+            "doa_mem": self.doa_mem,
+        }
+
+
+@dataclass
+class BarkDetector:
+    """Main bark detection orchestrator.
+
+    This class coordinates audio capture, feature extraction,
+    model inference, and event handling.
+    """
+
+    settings: Settings
+
+    # Private state
+    _model: torch.jit.ScriptModule | None = field(default=None, init=False)
+    _feature_extractor: FeatureExtractor | None = field(default=None, init=False)
+    _doa_estimator: DirectionEstimator | None = field(default=None, init=False)
+    _audio_capture: AsyncAudioCapture | None = field(default=None, init=False)
+    _running: bool = field(default=False, init=False)
+    _inference_task: asyncio.Task | None = field(default=None, init=False)
+    _last_event: BarkEvent | None = field(default=None, init=False)
+    _event_history: list[BarkEvent] = field(default_factory=list, init=False)
+    _callbacks: list[Callable[[BarkEvent], None]] = field(default_factory=list, init=False)
+    _start_time: float = field(default=0.0, init=False)
+    _total_barks: int = field(default=0, init=False)
+
+    def __post_init__(self) -> None:
+        self._load_model()
+        self._setup_components()
+
+    def _load_model(self) -> None:
+        """Load the TorchScript model."""
+        model_path = Path(self.settings.model.path)
+
+        if not model_path.exists():
+            raise FileNotFoundError(f"Model file not found: {model_path}")
+
+        logger.info("loading_model", path=str(model_path))
+        self._model = torch.jit.load(str(model_path))
+        self._model.eval()
+        logger.info("model_loaded")
+
+    def _setup_components(self) -> None:
+        """Initialize feature extractor and DOA estimator."""
+        self._feature_extractor = create_default_extractor(
+            source_sample_rate=self.settings.audio.sample_rate
+        )
+
+        if self.settings.doa.enabled:
+            self._doa_estimator = DirectionEstimator(
+                element_spacing=self.settings.doa.element_spacing,
+                num_elements=self.settings.doa.num_elements,
+                angle_min=self.settings.doa.angle_min,
+                angle_max=self.settings.doa.angle_max,
+            )
+
+    async def start(self) -> None:
+        """Start the bark detector.
+
+        This starts audio capture and begins running inference.
+        """
+        if self._running:
+            logger.warning("detector_already_running")
+            return
+
+        self._running = True
+        self._start_time = time.time()
+
+        # Start audio capture
+        self._audio_capture = AsyncAudioCapture(config=self.settings.audio)
+        await self._audio_capture.start()
+
+        # Start inference loop
+        self._inference_task = asyncio.create_task(self._inference_loop())
+
+        logger.info("bark_detector_started")
+
+    async def stop(self) -> None:
+        """Stop the bark detector."""
+        if not self._running:
+            return
+
+        self._running = False
+
+        # Stop inference task
+        if self._inference_task:
+            self._inference_task.cancel()
+            try:
+                await self._inference_task
+            except asyncio.CancelledError:
+                pass
+
+        # Stop audio capture
+        if self._audio_capture:
+            await self._audio_capture.stop()
+
+        logger.info("bark_detector_stopped")
+
+    async def _inference_loop(self) -> None:
+        """Main inference loop."""
+        # Calculate inference interval based on window settings
+        # We want to run inference every ~80ms (8 chunks of 10ms each)
+        interval = 0.08  # 80ms
+
+        while self._running:
+            try:
+                await self._run_inference()
+                await asyncio.sleep(interval)
+            except asyncio.CancelledError:
+                break
+            except Exception as e:
+                logger.error("inference_error", error=str(e))
+                await asyncio.sleep(0.1)
+
+    async def _run_inference(self) -> None:
+        """Run a single inference on recent audio."""
+        if not self._audio_capture or not self._model or not self._feature_extractor:
+            return
+
+        # Get recent audio frames (need about 80ms of audio)
+        frames = self._audio_capture.get_recent_frames(count=8)
+        if len(frames) < 8:
+            return  # Not enough data yet
+
+        # Combine frames into single array
+        audio_data = b"".join(f.data for f in frames)
+        audio_array = np.frombuffer(audio_data, dtype=np.int16)
+
+        # Reshape to (channels, samples)
+        channels = self.settings.audio.channels
+        audio_array = audio_array.reshape((channels, -1), order="F")
+
+        # Extract DOA if enabled
+        doa_bartlett, doa_capon, doa_mem = None, None, None
+        if self._doa_estimator and channels >= 2:
+            doa_bartlett, doa_capon, doa_mem = self._doa_estimator.estimate(audio_array)
+
+        # Extract features
+        try:
+            features = self._feature_extractor.extract_from_int16(audio_array)
+
+            # Expected size check
+            expected_size = 480  # 6 frames * 80 mels
+            if features.shape[1] != expected_size:
+                logger.debug(
+                    "feature_size_mismatch",
+                    expected=expected_size,
+                    actual=features.shape[1],
+                )
+                return
+
+            # Run inference
+            with torch.no_grad():
+                probability = self._model(features).detach().item()
+
+        except Exception as e:
+            logger.debug("feature_extraction_error", error=str(e))
+            return
+
+        # Create event
+        is_barking = probability >= self.settings.model.threshold
+        event = BarkEvent(
+            timestamp=datetime.now(),
+            probability=probability,
+            is_barking=is_barking,
+            doa_bartlett=doa_bartlett,
+            doa_capon=doa_capon,
+            doa_mem=doa_mem,
+        )
+
+        self._last_event = event
+
+        # Track barks
+        if is_barking:
+            self._total_barks += 1
+            logger.info(
+                "bark_detected",
+                probability=f"{probability:.3f}",
+                doa=doa_bartlett,
+            )
+
+        # Keep history (last 100 events)
+        self._event_history.append(event)
+        if len(self._event_history) > 100:
+            self._event_history.pop(0)
+
+        # Notify callbacks
+        for callback in self._callbacks:
+            try:
+                callback(event)
+            except Exception as e:
+                logger.warning("callback_error", error=str(e))
+
+    def get_last_event(self) -> BarkEvent | None:
+        """Get the most recent bark detection event."""
+        return self._last_event
+
+    def get_recent_events(self, count: int = 10) -> list[BarkEvent]:
+        """Get recent bark detection events."""
+        return self._event_history[-count:]
+
+    def add_callback(self, callback: Callable[[BarkEvent], None]) -> None:
+        """Add a callback to be called on each detection event."""
+        self._callbacks.append(callback)
+
+    def remove_callback(self, callback: Callable[[BarkEvent], None]) -> None:
+        """Remove a previously added callback."""
+        if callback in self._callbacks:
+            self._callbacks.remove(callback)
+
+    @property
+    def is_running(self) -> bool:
+        """Check if detector is running."""
+        return self._running
+
+    @property
+    def uptime_seconds(self) -> float:
+        """Get uptime in seconds."""
+        if self._start_time == 0:
+            return 0.0
+        return time.time() - self._start_time
+
+    @property
+    def total_barks_detected(self) -> int:
+        """Get total number of barks detected."""
+        return self._total_barks
+
+    def get_status(self) -> dict:
+        """Get detector status as dictionary."""
+        return {
+            "running": self._running,
+            "uptime_seconds": self.uptime_seconds,
+            "total_barks": self._total_barks,
+            "last_event": self._last_event.to_dict() if self._last_event else None,
+            "microphone": (
+                self._audio_capture.microphone.name
+                if self._audio_capture and self._audio_capture.microphone
+                else None
+            ),
+        }
