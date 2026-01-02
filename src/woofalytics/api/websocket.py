@@ -43,10 +43,13 @@ class ConnectionManager:
 
     async def disconnect(self, websocket: WebSocket) -> None:
         """Remove a WebSocket connection."""
+        removed = False
         async with self._lock:
             if websocket in self.active_connections:
                 self.active_connections.remove(websocket)
-        logger.info("websocket_disconnected", total=len(self.active_connections))
+                removed = True
+        if removed:
+            logger.info("websocket_disconnected", total=len(self.active_connections))
 
     async def broadcast(self, message: dict[str, Any]) -> None:
         """Broadcast a message to all connected clients.
@@ -75,12 +78,17 @@ class ConnectionManager:
         self,
         websocket: WebSocket,
         message: dict[str, Any],
-    ) -> None:
-        """Send a message to a specific client."""
+    ) -> bool:
+        """Send a message to a specific client.
+
+        Returns True if sent successfully, False if failed.
+        """
         try:
             await websocket.send_json(message)
+            return True
         except Exception:
             await self.disconnect(websocket)
+            return False
 
     @property
     def connection_count(self) -> int:
@@ -150,7 +158,7 @@ async def websocket_bark_endpoint(websocket: WebSocket) -> None:
 
     # Send initial status
     status = detector.get_status()
-    await manager.send_personal(websocket, {
+    success = await manager.send_personal(websocket, {
         "type": "status",
         "data": {
             "running": status["running"],
@@ -159,6 +167,8 @@ async def websocket_bark_endpoint(websocket: WebSocket) -> None:
             "microphone": status["microphone"],
         },
     })
+    if not success:
+        return  # Client disconnected immediately
 
     try:
         while True:
@@ -172,13 +182,15 @@ async def websocket_bark_endpoint(websocket: WebSocket) -> None:
                 try:
                     message = json.loads(data)
                     if message.get("type") == "ping":
-                        await manager.send_personal(websocket, {"type": "pong"})
+                        if not await manager.send_personal(websocket, {"type": "pong"}):
+                            break
                 except json.JSONDecodeError:
                     pass
 
             except asyncio.TimeoutError:
                 # Send ping to keep connection alive
-                await manager.send_personal(websocket, {"type": "ping"})
+                if not await manager.send_personal(websocket, {"type": "ping"}):
+                    break
 
     except WebSocketDisconnect:
         await manager.disconnect(websocket)
@@ -218,13 +230,15 @@ async def websocket_audio_endpoint(websocket: WebSocket) -> None:
                     # Calculate peak
                     peak = min(1.0, np.abs(audio_array).max() / 32768.0)
 
-                    await manager.send_personal(websocket, {
+                    success = await manager.send_personal(websocket, {
                         "type": "audio_level",
                         "data": {
                             "level": round(level, 3),
                             "peak": round(peak, 3),
                         },
                     })
+                    if not success:
+                        break  # Client disconnected
 
             await asyncio.sleep(0.1)  # 10Hz update rate
 
