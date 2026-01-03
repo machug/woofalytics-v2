@@ -955,3 +955,195 @@ body::before {
         flex-wrap: wrap;
     }
 }
+
+/* =========================================
+   NASA Mission Control Telemetry Strip
+   ========================================= */
+
+.telemetry-strip {
+    position: fixed;
+    top: 0;
+    left: 0;
+    right: 0;
+    z-index: 1000;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: var(--space-sm) var(--space-lg);
+    background: rgba(13, 17, 23, 0.95);
+    border-bottom: 1px solid rgba(20, 184, 166, 0.3);
+    font-family: 'JetBrains Mono', 'Fira Code', 'SF Mono', Consolas, monospace;
+    box-shadow: 0 2px 20px rgba(0, 0, 0, 0.5), inset 0 -1px 0 rgba(20, 184, 166, 0.2);
+}
+
+@supports (backdrop-filter: blur(20px)) {
+    .telemetry-strip {
+        background: rgba(13, 17, 23, 0.85);
+        backdrop-filter: blur(20px) saturate(180%);
+        -webkit-backdrop-filter: blur(20px) saturate(180%);
+    }
+}
+
+/* Add space for the telemetry strip */
+body {
+    padding-top: 48px;
+}
+
+/* Mission Badge */
+.telemetry-mission {
+    display: flex;
+    align-items: center;
+    gap: var(--space-sm);
+}
+
+.mission-badge {
+    font-size: 0.7rem;
+    font-weight: 700;
+    letter-spacing: 0.15em;
+    color: var(--accent-amber);
+    padding: 2px 8px;
+    background: rgba(245, 158, 11, 0.15);
+    border: 1px solid rgba(245, 158, 11, 0.4);
+    border-radius: 2px;
+}
+
+.mission-callsign {
+    font-size: 0.65rem;
+    font-weight: 500;
+    letter-spacing: 0.1em;
+    color: var(--text-muted);
+    text-transform: uppercase;
+}
+
+/* Mission Clock */
+.telemetry-clock {
+    display: flex;
+    align-items: baseline;
+    gap: 4px;
+}
+
+.clock-label {
+    font-size: 0.7rem;
+    font-weight: 600;
+    color: var(--accent-teal);
+    letter-spacing: 0.05em;
+}
+
+.clock-value {
+    font-size: 1.1rem;
+    font-weight: 700;
+    color: var(--text-primary);
+    letter-spacing: 0.05em;
+    font-variant-numeric: tabular-nums;
+    text-shadow: 0 0 10px rgba(20, 184, 166, 0.5);
+}
+
+/* Status LEDs */
+.telemetry-status {
+    display: flex;
+    align-items: center;
+    gap: var(--space-md);
+}
+
+.status-led {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+}
+
+.led {
+    width: 8px;
+    height: 8px;
+    border-radius: 50%;
+    background: var(--text-muted);
+    box-shadow: inset 0 1px 2px rgba(0, 0, 0, 0.5);
+    transition: all var(--transition-fast);
+}
+
+.led-label {
+    font-size: 0.6rem;
+    font-weight: 600;
+    letter-spacing: 0.1em;
+    color: var(--text-muted);
+    text-transform: uppercase;
+}
+
+/* LED States */
+.status-led.active .led {
+    background: var(--accent-teal);
+    box-shadow: 0 0 8px var(--accent-teal), 0 0 16px rgba(20, 184, 166, 0.4);
+}
+
+.status-led.active .led-label {
+    color: var(--accent-teal);
+}
+
+.status-led.warning .led {
+    background: var(--accent-amber);
+    box-shadow: 0 0 8px var(--accent-amber), 0 0 16px rgba(245, 158, 11, 0.4);
+    animation: ledBlink 0.5s ease-in-out infinite;
+}
+
+.status-led.warning .led-label {
+    color: var(--accent-amber);
+}
+
+.status-led.alert .led {
+    background: var(--accent-coral);
+    box-shadow: 0 0 8px var(--accent-coral), 0 0 16px rgba(248, 81, 73, 0.5);
+    animation: ledBlink 0.3s ease-in-out infinite;
+}
+
+.status-led.alert .led-label {
+    color: var(--accent-coral);
+}
+
+@keyframes ledBlink {
+    0%, 100% { opacity: 1; }
+    50% { opacity: 0.4; }
+}
+
+/* Coordinates Display */
+.telemetry-coordinates {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+}
+
+.coord-label {
+    font-size: 0.55rem;
+    font-weight: 600;
+    letter-spacing: 0.1em;
+    color: var(--text-muted);
+}
+
+.coord-value {
+    font-size: 0.75rem;
+    font-weight: 500;
+    color: var(--text-secondary);
+    font-variant-numeric: tabular-nums;
+    letter-spacing: 0.02em;
+}
+
+/* Responsive telemetry strip */
+@media (max-width: 768px) {
+    .telemetry-strip {
+        padding: var(--space-xs) var(--space-md);
+        gap: var(--space-sm);
+    }
+
+    .mission-callsign,
+    .telemetry-coordinates {
+        display: none;
+    }
+
+    .clock-value {
+        font-size: 0.9rem;
+    }
+}
+
+@media (max-width: 480px) {
+    .telemetry-mission {
+        display: none;
+    }
+}

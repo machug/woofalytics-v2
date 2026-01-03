@@ -1,5 +1,6 @@
 /**
  * Woofalytics - Real-time Bark Detection Dashboard
+ * NASA Mission Control Edition
  */
 
 class WoofalyticsApp {
@@ -15,6 +16,11 @@ class WoofalyticsApp {
         this.gaugeRadius = 54;
         this.gaugeCircumference = 2 * Math.PI * this.gaugeRadius;
 
+        // Mission Control state
+        this.missionStartTime = Date.now();
+        this.isBarkActive = false;
+        this.barkTimeout = null;
+
         this.init();
     }
 
@@ -23,9 +29,68 @@ class WoofalyticsApp {
         this.connectAudioWebSocket();
         this.loadStatus();
         this.loadEvidence();
+        this.initMissionClock();
+        this.initGeolocation();
 
         // Refresh status every 30 seconds
         setInterval(() => this.loadStatus(), 30000);
+    }
+
+    // =========================================
+    // NASA Mission Control Telemetry
+    // =========================================
+
+    initMissionClock() {
+        // Update mission clock every 10ms for centisecond precision
+        setInterval(() => this.updateMissionClock(), 10);
+    }
+
+    updateMissionClock() {
+        const elapsed = Date.now() - this.missionStartTime;
+        const hours = Math.floor(elapsed / 3600000);
+        const minutes = Math.floor((elapsed % 3600000) / 60000);
+        const seconds = Math.floor((elapsed % 60000) / 1000);
+        const centiseconds = Math.floor((elapsed % 1000) / 10);
+
+        const clockValue = document.getElementById('mission-clock');
+        if (clockValue) {
+            clockValue.textContent =
+                `${hours.toString().padStart(2, '0')}:` +
+                `${minutes.toString().padStart(2, '0')}:` +
+                `${seconds.toString().padStart(2, '0')}.` +
+                `${centiseconds.toString().padStart(2, '0')}`;
+        }
+    }
+
+    initGeolocation() {
+        // Try to get geolocation for the coordinates display
+        if ('geolocation' in navigator) {
+            navigator.geolocation.getCurrentPosition(
+                (position) => {
+                    const lat = position.coords.latitude;
+                    const lon = position.coords.longitude;
+                    const latEl = document.getElementById('coord-lat');
+                    const lonEl = document.getElementById('coord-lon');
+                    if (latEl && lonEl) {
+                        latEl.textContent = (lat >= 0 ? '+' : '') + lat.toFixed(4);
+                        lonEl.textContent = (lon >= 0 ? '+' : '') + lon.toFixed(4);
+                    }
+                },
+                () => {
+                    // Geolocation denied or unavailable - leave defaults
+                }
+            );
+        }
+    }
+
+    updateLedStatus(ledId, state) {
+        const led = document.getElementById(ledId);
+        if (led) {
+            led.classList.remove('active', 'warning', 'alert');
+            if (state) {
+                led.classList.add(state);
+            }
+        }
     }
 
     // WebSocket Connection
@@ -38,6 +103,7 @@ class WoofalyticsApp {
         this.ws.onopen = () => {
             console.log('WebSocket connected');
             this.updateStatus('connected', 'Connected');
+            this.updateLedStatus('led-ws', 'active');
             this.reconnectAttempts = 0;
         };
 
@@ -49,12 +115,14 @@ class WoofalyticsApp {
         this.ws.onclose = () => {
             console.log('WebSocket disconnected');
             this.updateStatus('disconnected', 'Disconnected');
+            this.updateLedStatus('led-ws', 'warning');
             this.scheduleReconnect();
         };
 
         this.ws.onerror = (error) => {
             console.error('WebSocket error:', error);
             this.updateStatus('error', 'Error');
+            this.updateLedStatus('led-ws', 'alert');
         };
     }
 
@@ -68,6 +136,10 @@ class WoofalyticsApp {
             const data = JSON.parse(event.data);
             if (data.type === 'audio_level') {
                 this.updateAudioLevel(data.data.level, data.data.peak);
+                // Update MIC LED based on audio level
+                if (data.data.level > 0.01) {
+                    this.updateLedStatus('led-mic', 'active');
+                }
             }
         };
 
@@ -138,6 +210,22 @@ class WoofalyticsApp {
                     </svg>
                 `;
                 barkText.textContent = 'BARK DETECTED!';
+
+                // Update BARK LED to alert state
+                this.updateLedStatus('led-bark', 'alert');
+                this.isBarkActive = true;
+
+                // Clear any existing timeout
+                if (this.barkTimeout) {
+                    clearTimeout(this.barkTimeout);
+                }
+
+                // Reset bark LED after 2 seconds of no barking
+                this.barkTimeout = setTimeout(() => {
+                    if (!this.isBarkActive) {
+                        this.updateLedStatus('led-bark', null);
+                    }
+                }, 2000);
             } else {
                 barkPanel.classList.remove('barking');
                 barkIcon.innerHTML = `
@@ -148,6 +236,7 @@ class WoofalyticsApp {
                     </svg>
                 `;
                 barkText.textContent = 'Monitoring';
+                this.isBarkActive = false;
             }
         }
 

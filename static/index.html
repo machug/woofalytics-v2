@@ -11,6 +11,38 @@
     <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🐕</text></svg>">
 </head>
 <body>
+    <!-- NASA Mission Control Telemetry Strip -->
+    <div class="telemetry-strip" id="telemetry-strip">
+        <div class="telemetry-mission">
+            <span class="mission-badge">WOOFALYTICS</span>
+            <span class="mission-callsign">MISSION CONTROL</span>
+        </div>
+        <div class="telemetry-clock">
+            <span class="clock-label">T+</span>
+            <span class="clock-value" id="mission-clock">00:00:00.00</span>
+        </div>
+        <div class="telemetry-status">
+            <div class="status-led" id="led-ws" data-label="WS">
+                <span class="led"></span>
+                <span class="led-label">WS</span>
+            </div>
+            <div class="status-led" id="led-mic" data-label="MIC">
+                <span class="led"></span>
+                <span class="led-label">MIC</span>
+            </div>
+            <div class="status-led" id="led-bark" data-label="BARK">
+                <span class="led"></span>
+                <span class="led-label">BARK</span>
+            </div>
+        </div>
+        <div class="telemetry-coordinates">
+            <span class="coord-label">LAT</span>
+            <span class="coord-value" id="coord-lat">+00.0000</span>
+            <span class="coord-label">LON</span>
+            <span class="coord-value" id="coord-lon">-000.0000</span>
+        </div>
+    </div>
+
     <div class="app">
         <header class="header">
             <div class="brand">
