@@ -526,6 +526,34 @@
                 <div class="result-message" id="fingerprintsResult"></div>
             </div>
         </div>
+
+        <!-- Data Sync Section -->
+        <div class="maintenance-section">
+            <div class="section-header">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <polyline points="23 4 23 10 17 10"/>
+                    <polyline points="1 20 1 14 7 14"/>
+                    <path d="M3.51 9a9 9 0 0114.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0020.49 15"/>
+                </svg>
+                <h2>Data Sync</h2>
+            </div>
+            <div class="section-body">
+                <p class="section-description">
+                    Synchronize cached statistics with actual database data. Use this if bark counts
+                    appear incorrect after purging fingerprints.
+                </p>
+                <div class="form-row">
+                    <button class="btn btn-secondary" onclick="maintenance.recalculateBarkCounts()">
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                            <polyline points="23 4 23 10 17 10"/>
+                            <path d="M20.49 15a9 9 0 11-2.12-9.36L23 10"/>
+                        </svg>
+                        Recalculate Bark Counts
+                    </button>
+                </div>
+                <div class="result-message" id="syncResult"></div>
+            </div>
+        </div>
         </div>
 
         <!-- Footer -->
@@ -735,6 +763,33 @@
                     btn.disabled = false;
                     btn.innerHTML = 'Delete Permanently';
                     this.closeModal();
+                }
+            },
+
+            async recalculateBarkCounts() {
+                const btn = event.target.closest('button');
+                const originalHtml = btn.innerHTML;
+                btn.disabled = true;
+                btn.innerHTML = '<span class="spinner"></span> Recalculating...';
+
+                try {
+                    const response = await fetch('/api/maintenance/recalculate-bark-counts', {
+                        method: 'POST'
+                    });
+
+                    if (response.ok) {
+                        const result = await response.json();
+                        this.showResult('syncResult', result.message, 'success');
+                        await this.loadStats();
+                    } else {
+                        const error = await response.json();
+                        this.showResult('syncResult', error.detail || 'Failed to recalculate', 'error');
+                    }
+                } catch (error) {
+                    this.showResult('syncResult', 'Network error', 'error');
+                } finally {
+                    btn.disabled = false;
+                    btn.innerHTML = originalHtml;
                 }
             },
 

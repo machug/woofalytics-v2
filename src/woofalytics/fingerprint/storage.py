@@ -1087,6 +1087,56 @@ class FingerprintStore:
 
         return count
 
+    def recalculate_dog_bark_counts(self) -> int:
+        """Recalculate all dog bark counts from actual fingerprint data.
+
+        This fixes any discrepancies between cached total_barks values
+        and actual tagged fingerprint counts (e.g., after purging).
+
+        Returns:
+            Number of dogs updated.
+        """
+        with self._get_connection() as conn:
+            cursor = conn.cursor()
+
+            # Get actual counts from fingerprints
+            cursor.execute("""
+                SELECT dog_id, COUNT(*) as actual_count
+                FROM bark_fingerprints
+                WHERE dog_id IS NOT NULL
+                GROUP BY dog_id
+            """)
+            actual_counts = {row["dog_id"]: row["actual_count"] for row in cursor.fetchall()}
+
+            # Get all dogs
+            cursor.execute("SELECT id, total_barks FROM dog_profiles")
+            dogs = cursor.fetchall()
+
+            updated = 0
+            for dog in dogs:
+                dog_id = dog["id"]
+                current = dog["total_barks"]
+                actual = actual_counts.get(dog_id, 0)
+
+                if current != actual:
+                    cursor.execute(
+                        "UPDATE dog_profiles SET total_barks = ?, updated_at = ? WHERE id = ?",
+                        (actual, datetime.now().isoformat(), dog_id),
+                    )
+                    updated += 1
+                    logger.info(
+                        "dog_bark_count_corrected",
+                        dog_id=dog_id,
+                        old_count=current,
+                        new_count=actual,
+                    )
+
+            if updated > 0:
+                conn.commit()
+                logger.info("dog_bark_counts_recalculated", dogs_updated=updated)
+
+        return updated
+
     def purge_all_fingerprints(self) -> int:
         """Delete ALL fingerprints. Use with caution.
 

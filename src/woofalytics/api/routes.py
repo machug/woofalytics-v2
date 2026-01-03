@@ -543,3 +543,25 @@ async def purge_evidence(
         deleted_count=deleted_count,
         resource_type="evidence",
     )
+
+
+@router.post(
+    "/maintenance/recalculate-bark-counts",
+    tags=["maintenance"],
+)
+async def recalculate_bark_counts(
+    store: Annotated[FingerprintStore, Depends(get_fingerprint_store)],
+) -> dict:
+    """Recalculate dog bark counts from actual fingerprint data.
+
+    This fixes any discrepancies between cached bark counts and actual
+    tagged fingerprint counts (e.g., after purging fingerprints).
+    """
+    updated = store.recalculate_dog_bark_counts()
+
+    logger.info("bark_counts_recalculated_via_api", dogs_updated=updated)
+
+    return {
+        "updated_count": updated,
+        "message": f"Recalculated bark counts for {updated} dog(s)",
+    }
