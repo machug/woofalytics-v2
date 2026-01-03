@@ -50,3 +50,4 @@ Thumbs.db
 .ruff_cache/
 # Playwright MCP
 .playwright-mcp/
+.worktrees
