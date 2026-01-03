@@ -134,18 +134,38 @@ class FingerprintStore:
                 )
             """)
 
-            # Schema version table
-            cursor.execute("""
-                CREATE TABLE IF NOT EXISTS schema_version (
-                    version INTEGER PRIMARY KEY
-                )
-            """)
+            # Schema version table - handle legacy format migration
+            # Old format: version INTEGER PRIMARY KEY (version is the PK)
+            # New format: id INTEGER PRIMARY KEY, version INTEGER (single row with id=1)
+            cursor.execute("SELECT name FROM sqlite_master WHERE type='table' AND name='schema_version'")
+            if cursor.fetchone():
+                # Check if we have the old schema format (version as primary key)
+                cursor.execute("PRAGMA table_info(schema_version)")
+                columns = {row[1]: row for row in cursor.fetchall()}
+                if "id" not in columns:
+                    # Old format - get current version and recreate table
+                    cursor.execute("SELECT MAX(version) FROM schema_version")
+                    old_version = cursor.fetchone()[0] or 1
+                    cursor.execute("DROP TABLE schema_version")
+                    cursor.execute("""
+                        CREATE TABLE schema_version (
+                            id INTEGER PRIMARY KEY DEFAULT 1,
+                            version INTEGER NOT NULL DEFAULT 1
+                        )
+                    """)
+                    cursor.execute("INSERT INTO schema_version (id, version) VALUES (1, ?)", (old_version,))
+            else:
+                # Fresh database - create new format
+                cursor.execute("""
+                    CREATE TABLE schema_version (
+                        id INTEGER PRIMARY KEY DEFAULT 1,
+                        version INTEGER NOT NULL DEFAULT 1
+                    )
+                """)
+                cursor.execute("INSERT INTO schema_version (id, version) VALUES (1, 1)")
 
-            # Insert schema version if not exists
-            cursor.execute("INSERT OR IGNORE INTO schema_version (version) VALUES (?)", (SCHEMA_VERSION,))
-
-            # Run migrations for existing databases
-            cursor.execute("SELECT version FROM schema_version")
+            # Get current schema version
+            cursor.execute("SELECT version FROM schema_version WHERE id = 1")
             current_version = cursor.fetchone()[0]
 
             if current_version < 2:
@@ -162,7 +182,7 @@ class FingerprintStore:
                     cursor.execute("ALTER TABLE dog_profiles ADD COLUMN min_samples_for_auto_tag INTEGER NOT NULL DEFAULT 5")
                 except sqlite3.OperationalError:
                     pass
-                cursor.execute("UPDATE schema_version SET version = 2")
+                cursor.execute("UPDATE schema_version SET version = 2 WHERE id = 1")
                 logger.info("schema_migrated", from_version=current_version, to_version=2)
 
             # Indexes for common queries
