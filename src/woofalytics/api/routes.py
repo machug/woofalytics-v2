@@ -14,7 +14,7 @@ from pathlib import Path
 from typing import Annotated
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Request
-from fastapi.responses import FileResponse
+from fastapi.responses import FileResponse, Response
 
 from woofalytics.api.schemas import (
     BarkEventSchema,
@@ -30,6 +30,7 @@ from woofalytics.config import Settings
 from woofalytics.detection.model import BarkDetector, BarkEvent
 from woofalytics.detection.doa import angle_to_direction
 from woofalytics.evidence.storage import EvidenceStorage
+from woofalytics.observability.metrics import generate_latest, get_metrics
 
 router = APIRouter(tags=["api"])
 
@@ -353,3 +354,35 @@ async def get_current_direction(
             "direction": angle_to_direction(event.doa_mem) if event.doa_mem else None,
         },
     }
+
+
+@router.get("/metrics", tags=["observability"])
+async def prometheus_metrics(
+    detector: Annotated[BarkDetector, Depends(get_detector)],
+) -> Response:
+    """Prometheus metrics endpoint.
+
+    Returns metrics in Prometheus text exposition format for scraping.
+    Includes counters, histograms, and gauges for:
+    - bark_detections_total: Total bark detections
+    - inference_total: Total inference runs (by model type)
+    - inference_latency_seconds: Inference latency histogram
+    - vad_skipped_total: VAD-skipped inferences
+    - detector_running: Detector running status
+    - uptime_seconds: Detector uptime
+    - total_barks: Current total barks gauge
+    """
+    # Update gauges with current detector state
+    metrics = get_metrics()
+    if metrics.is_initialized:
+        metrics.set_running(detector.is_running)
+        metrics.set_uptime(detector.uptime_seconds)
+        metrics.set_total_barks(detector.total_barks_detected)
+
+    # Generate Prometheus text format
+    content = generate_latest()
+
+    return Response(
+        content=content,
+        media_type="text/plain; version=0.0.4; charset=utf-8",
+    )
