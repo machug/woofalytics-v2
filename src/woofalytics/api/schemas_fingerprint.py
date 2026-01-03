@@ -156,3 +156,39 @@ class ConfirmDogRequestSchema(BaseModel):
         le=100,
         description="Override minimum samples required before auto-tagging (default: 5)",
     )
+
+
+class FingerprintListSchema(BaseModel):
+    """Paginated list of fingerprints."""
+
+    items: list[BarkFingerprintSchema] = Field(description="List of fingerprints")
+    total: int = Field(description="Total number of fingerprints matching the filter")
+    limit: int = Field(description="Maximum number of items returned")
+    offset: int = Field(description="Offset from the start of the results")
+
+
+class DogAcousticStatsSchema(BaseModel):
+    """Aggregate acoustic statistics for a dog."""
+
+    dog_id: str = Field(description="Unique identifier for the dog")
+    dog_name: str = Field(description="Name of the dog")
+    avg_pitch_hz: float | None = Field(default=None, description="Average pitch in Hz")
+    min_pitch_hz: float | None = Field(default=None, description="Minimum pitch in Hz")
+    max_pitch_hz: float | None = Field(default=None, description="Maximum pitch in Hz")
+    avg_duration_ms: float | None = Field(default=None, description="Average duration in ms")
+    min_duration_ms: float | None = Field(default=None, description="Minimum duration in ms")
+    max_duration_ms: float | None = Field(default=None, description="Maximum duration in ms")
+    avg_spectral_centroid_hz: float | None = Field(
+        default=None, description="Average spectral centroid in Hz"
+    )
+    total_barks: int = Field(default=0, description="Total number of barks")
+    first_seen: datetime | None = Field(default=None, description="First bark timestamp")
+    last_seen: datetime | None = Field(default=None, description="Last bark timestamp")
+
+
+class FingerprintAggregatesSchema(BaseModel):
+    """Aggregate acoustic statistics for all dogs."""
+
+    dogs: list[DogAcousticStatsSchema] = Field(
+        description="Acoustic statistics per dog"
+    )

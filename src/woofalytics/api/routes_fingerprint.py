@@ -8,6 +8,7 @@ This module provides endpoints for:
 
 from __future__ import annotations
 
+from datetime import datetime
 from pathlib import Path
 from typing import Annotated
 
@@ -20,10 +21,13 @@ from woofalytics.api.schemas_fingerprint import (
     BulkTagResultSchema,
     ConfirmDogRequestSchema,
     CorrectBarkRequestSchema,
+    DogAcousticStatsSchema,
     DogBarksListSchema,
     DogProfileCreateSchema,
     DogProfileSchema,
     DogProfileUpdateSchema,
+    FingerprintAggregatesSchema,
+    FingerprintListSchema,
     FingerprintStatsSchema,
     TagBarkRequestSchema,
     UntaggedBarksListSchema,
@@ -498,6 +502,108 @@ async def untag_bark(
         old_dog_id=old_dog_id,
     )
     return _fingerprint_to_schema(updated)
+
+
+# --- Fingerprint Explorer Endpoints ---
+
+
+@router.get(
+    "/fingerprints",
+    response_model=FingerprintListSchema,
+    summary="List fingerprints with filtering",
+    description="Returns a paginated list of fingerprints with optional filtering by dog, "
+    "tagged status, confidence, and date range.",
+)
+async def list_fingerprints(
+    store: Annotated[FingerprintStore, Depends(get_fingerprint_store)],
+    limit: Annotated[int, Query(ge=1, le=500)] = 100,
+    offset: Annotated[int, Query(ge=0)] = 0,
+    dog_id: Annotated[str | None, Query(description="Filter by dog ID")] = None,
+    tagged: Annotated[bool | None, Query(description="Filter by tagged status")] = None,
+    min_confidence: Annotated[
+        float | None, Query(ge=0.0, le=1.0, description="Minimum match confidence")
+    ] = None,
+    start_date: Annotated[
+        datetime | None, Query(description="Filter by timestamp >= start_date")
+    ] = None,
+    end_date: Annotated[
+        datetime | None, Query(description="Filter by timestamp <= end_date")
+    ] = None,
+) -> FingerprintListSchema:
+    """List fingerprints with filtering and pagination."""
+    fingerprints, total = store.list_fingerprints(
+        limit=limit,
+        offset=offset,
+        dog_id=dog_id,
+        tagged=tagged,
+        min_confidence=min_confidence,
+        start_date=start_date,
+        end_date=end_date,
+    )
+
+    # Build a map of dog_id -> dog_name for tagged fingerprints
+    dog_names: dict[str, str] = {}
+    for fp in fingerprints:
+        if fp.dog_id and fp.dog_id not in dog_names:
+            dog = store.get_dog(fp.dog_id)
+            if dog:
+                dog_names[fp.dog_id] = dog.name
+
+    items = [
+        _fingerprint_to_schema(fp, dog_names.get(fp.dog_id) if fp.dog_id else None)
+        for fp in fingerprints
+    ]
+
+    logger.debug(
+        "fingerprints_listed",
+        count=len(items),
+        total=total,
+        limit=limit,
+        offset=offset,
+    )
+
+    return FingerprintListSchema(
+        items=items,
+        total=total,
+        limit=limit,
+        offset=offset,
+    )
+
+
+@router.get(
+    "/fingerprints/aggregates",
+    response_model=FingerprintAggregatesSchema,
+    summary="Get per-dog acoustic statistics",
+    description="Returns aggregate acoustic statistics (pitch, duration, spectral centroid) "
+    "for each dog in the database.",
+)
+async def get_fingerprint_aggregates(
+    store: Annotated[FingerprintStore, Depends(get_fingerprint_store)],
+) -> FingerprintAggregatesSchema:
+    """Get aggregate acoustic statistics per dog."""
+    aggregates = store.get_dog_acoustic_aggregates()
+
+    dogs = [
+        DogAcousticStatsSchema(
+            dog_id=agg["dog_id"],
+            dog_name=agg["dog_name"],
+            avg_pitch_hz=agg["avg_pitch_hz"],
+            min_pitch_hz=agg["min_pitch_hz"],
+            max_pitch_hz=agg["max_pitch_hz"],
+            avg_duration_ms=agg["avg_duration_ms"],
+            min_duration_ms=agg["min_duration_ms"],
+            max_duration_ms=agg["max_duration_ms"],
+            avg_spectral_centroid_hz=agg["avg_spectral_centroid_hz"],
+            total_barks=agg["total_barks"],
+            first_seen=agg["first_seen"],
+            last_seen=agg["last_seen"],
+        )
+        for agg in aggregates
+    ]
+
+    logger.debug("fingerprint_aggregates_retrieved", dog_count=len(dogs))
+
+    return FingerprintAggregatesSchema(dogs=dogs)
 
 
 # --- Stats Endpoints ---

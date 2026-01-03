@@ -843,6 +843,148 @@ class FingerprintStore:
         logger.info("dogs_merged", source_id=source_id, target_id=target_id)
         return True
 
+    # --- Fingerprint Query Operations ---
+
+    def list_fingerprints(
+        self,
+        limit: int = 100,
+        offset: int = 0,
+        dog_id: str | None = None,
+        tagged: bool | None = None,
+        min_confidence: float | None = None,
+        start_date: datetime | None = None,
+        end_date: datetime | None = None,
+    ) -> tuple[list[BarkFingerprint], int]:
+        """List fingerprints with filtering and pagination.
+
+        Args:
+            limit: Maximum number of fingerprints to return.
+            offset: Number of fingerprints to skip.
+            dog_id: Filter by specific dog.
+            tagged: If True, only tagged; if False, only untagged; if None, all.
+            min_confidence: Minimum match confidence (0-1).
+            start_date: Filter by timestamp >= start_date.
+            end_date: Filter by timestamp <= end_date.
+
+        Returns:
+            Tuple of (list of fingerprints, total count matching filter).
+        """
+        conditions = []
+        params: list = []
+
+        if dog_id is not None:
+            conditions.append("dog_id = ?")
+            params.append(dog_id)
+
+        if tagged is True:
+            conditions.append("dog_id IS NOT NULL")
+        elif tagged is False:
+            conditions.append("dog_id IS NULL")
+
+        if min_confidence is not None:
+            conditions.append("match_confidence >= ?")
+            params.append(min_confidence)
+
+        if start_date is not None:
+            conditions.append("timestamp >= ?")
+            params.append(start_date.isoformat())
+
+        if end_date is not None:
+            conditions.append("timestamp <= ?")
+            params.append(end_date.isoformat())
+
+        where_clause = " AND ".join(conditions) if conditions else "1=1"
+
+        fingerprints = []
+        with self._get_connection() as conn:
+            cursor = conn.cursor()
+
+            # Get total count
+            cursor.execute(
+                f"SELECT COUNT(*) FROM bark_fingerprints WHERE {where_clause}",
+                params,
+            )
+            total = cursor.fetchone()[0]
+
+            # Get fingerprints with pagination
+            cursor.execute(
+                f"""
+                SELECT * FROM bark_fingerprints
+                WHERE {where_clause}
+                ORDER BY timestamp DESC
+                LIMIT ? OFFSET ?
+                """,
+                params + [limit, offset],
+            )
+
+            for row in cursor.fetchall():
+                fingerprints.append(
+                    BarkFingerprint(
+                        id=row["id"],
+                        timestamp=datetime.fromisoformat(row["timestamp"]),
+                        embedding=_deserialize_embedding(row["embedding"]),
+                        dog_id=row["dog_id"],
+                        match_confidence=row["match_confidence"],
+                        cluster_id=row["cluster_id"],
+                        evidence_filename=row["evidence_filename"],
+                        detection_probability=row["detection_probability"],
+                        doa_degrees=row["doa_degrees"],
+                        duration_ms=row["duration_ms"],
+                        pitch_hz=row["pitch_hz"],
+                        spectral_centroid_hz=row["spectral_centroid_hz"],
+                        mfcc_mean=_deserialize_embedding(row["mfcc_mean"], (13,)) if row["mfcc_mean"] else None,
+                    )
+                )
+
+        return fingerprints, total
+
+    def get_dog_acoustic_aggregates(self) -> list[dict]:
+        """Get aggregate acoustic statistics per dog.
+
+        Returns:
+            List of dictionaries with per-dog acoustic statistics.
+        """
+        aggregates = []
+        with self._get_connection() as conn:
+            cursor = conn.cursor()
+            cursor.execute("""
+                SELECT
+                    d.id as dog_id,
+                    d.name as dog_name,
+                    AVG(f.pitch_hz) as avg_pitch_hz,
+                    MIN(f.pitch_hz) as min_pitch_hz,
+                    MAX(f.pitch_hz) as max_pitch_hz,
+                    AVG(f.duration_ms) as avg_duration_ms,
+                    MIN(f.duration_ms) as min_duration_ms,
+                    MAX(f.duration_ms) as max_duration_ms,
+                    AVG(f.spectral_centroid_hz) as avg_spectral_centroid_hz,
+                    COUNT(f.id) as total_barks,
+                    MIN(f.timestamp) as first_seen,
+                    MAX(f.timestamp) as last_seen
+                FROM dog_profiles d
+                LEFT JOIN bark_fingerprints f ON d.id = f.dog_id
+                GROUP BY d.id, d.name
+                ORDER BY d.name
+            """)
+
+            for row in cursor.fetchall():
+                aggregates.append({
+                    "dog_id": row["dog_id"],
+                    "dog_name": row["dog_name"],
+                    "avg_pitch_hz": row["avg_pitch_hz"],
+                    "min_pitch_hz": row["min_pitch_hz"],
+                    "max_pitch_hz": row["max_pitch_hz"],
+                    "avg_duration_ms": row["avg_duration_ms"],
+                    "min_duration_ms": row["min_duration_ms"],
+                    "max_duration_ms": row["max_duration_ms"],
+                    "avg_spectral_centroid_hz": row["avg_spectral_centroid_hz"],
+                    "total_barks": row["total_barks"],
+                    "first_seen": datetime.fromisoformat(row["first_seen"]) if row["first_seen"] else None,
+                    "last_seen": datetime.fromisoformat(row["last_seen"]) if row["last_seen"] else None,
+                })
+
+        return aggregates
+
     # --- Stats ---
 
     def get_stats(self) -> dict[str, int]:
