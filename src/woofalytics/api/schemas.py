@@ -106,3 +106,39 @@ class DirectionSchema(BaseModel):
     angle_degrees: int | None
     direction: str  # "left", "front", "right", etc.
     method: str  # "bartlett", "capon", "mem"
+
+
+# --- Maintenance Schemas ---
+
+
+class PurgeFingerprintsRequestSchema(BaseModel):
+    """Request to purge fingerprints."""
+
+    before: datetime | None = Field(
+        default=None,
+        description="Delete fingerprints before this timestamp.",
+    )
+    untagged_only: bool = Field(
+        default=False,
+        description="Only delete untagged fingerprints.",
+    )
+
+
+class PurgeEvidenceRequestSchema(BaseModel):
+    """Request to purge evidence files."""
+
+    before: datetime | None = Field(
+        default=None,
+        description="Delete evidence files before this timestamp.",
+    )
+    after: datetime | None = Field(
+        default=None,
+        description="Delete evidence files after this timestamp.",
+    )
+
+
+class PurgeResultSchema(BaseModel):
+    """Result of a purge operation."""
+
+    deleted_count: int
+    resource_type: str  # "fingerprints" or "evidence"

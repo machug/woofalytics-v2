@@ -26,13 +26,21 @@ from woofalytics.api.schemas import (
     EvidenceListSchema,
     EvidenceStatsSchema,
     HealthSchema,
+    PurgeEvidenceRequestSchema,
+    PurgeFingerprintsRequestSchema,
+    PurgeResultSchema,
     RecentEventsSchema,
 )
 from woofalytics.config import Settings
 from woofalytics.detection.model import BarkDetector, BarkEvent
 from woofalytics.detection.doa import angle_to_direction
 from woofalytics.evidence.storage import EvidenceStorage
+from woofalytics.fingerprint.storage import FingerprintStore
 from woofalytics.observability.metrics import generate_latest, get_metrics
+
+import structlog
+
+logger = structlog.get_logger(__name__)
 
 router = APIRouter(tags=["api"])
 
@@ -51,6 +59,19 @@ def get_detector(request: Request) -> BarkDetector:
 
 def get_evidence(request: Request) -> EvidenceStorage:
     return request.app.state.evidence
+
+
+def get_fingerprint_store(request: Request) -> FingerprintStore:
+    """Get fingerprint store from app state.
+
+    The store is lazily initialized on first access.
+    """
+    if not hasattr(request.app.state, "fingerprint_store"):
+        settings = request.app.state.settings
+        db_path = Path(settings.evidence.directory) / "fingerprints.db"
+        request.app.state.fingerprint_store = FingerprintStore(db_path)
+        logger.info("fingerprint_store_initialized", db_path=str(db_path))
+    return request.app.state.fingerprint_store
 
 
 def bark_event_to_schema(event: BarkEvent) -> BarkEventSchema:
@@ -426,4 +447,99 @@ async def prometheus_metrics(
     return Response(
         content=content,
         media_type="text/plain; version=0.0.4; charset=utf-8",
+    )
+
+
+# --- Maintenance Endpoints ---
+
+
+@router.delete(
+    "/fingerprints/{fingerprint_id}",
+    status_code=204,
+    tags=["maintenance"],
+    summary="Delete a fingerprint",
+    description="Deletes a single fingerprint by ID.",
+)
+async def delete_fingerprint(
+    fingerprint_id: str,
+    store: Annotated[FingerprintStore, Depends(get_fingerprint_store)],
+) -> None:
+    """Delete a single fingerprint."""
+    deleted = store.delete_fingerprint(fingerprint_id)
+    if not deleted:
+        raise HTTPException(status_code=404, detail="Fingerprint not found")
+    logger.info("fingerprint_deleted_via_api", fingerprint_id=fingerprint_id)
+
+
+@router.post(
+    "/maintenance/purge-fingerprints",
+    response_model=PurgeResultSchema,
+    tags=["maintenance"],
+    summary="Purge fingerprints",
+    description="Bulk delete fingerprints based on criteria. Requires at least one filter "
+    "(before date and/or untagged_only) to prevent accidental full purge.",
+)
+async def purge_fingerprints(
+    data: PurgeFingerprintsRequestSchema,
+    store: Annotated[FingerprintStore, Depends(get_fingerprint_store)],
+) -> PurgeResultSchema:
+    """Purge fingerprints matching criteria."""
+    if data.before is None and not data.untagged_only:
+        raise HTTPException(
+            status_code=400,
+            detail="At least one filter required (before date or untagged_only=true)",
+        )
+
+    deleted_count = store.purge_fingerprints(
+        before=data.before,
+        untagged_only=data.untagged_only,
+    )
+
+    logger.info(
+        "fingerprints_purged_via_api",
+        deleted_count=deleted_count,
+        before=data.before.isoformat() if data.before else None,
+        untagged_only=data.untagged_only,
+    )
+
+    return PurgeResultSchema(
+        deleted_count=deleted_count,
+        resource_type="fingerprints",
+    )
+
+
+@router.post(
+    "/maintenance/purge-evidence",
+    response_model=PurgeResultSchema,
+    tags=["maintenance"],
+    summary="Purge evidence files",
+    description="Bulk delete evidence files based on date criteria. Requires at least "
+    "one filter (before and/or after) to prevent accidental full purge.",
+)
+async def purge_evidence(
+    data: PurgeEvidenceRequestSchema,
+    evidence: Annotated[EvidenceStorage, Depends(get_evidence)],
+) -> PurgeResultSchema:
+    """Purge evidence files matching criteria."""
+    if data.before is None and data.after is None:
+        raise HTTPException(
+            status_code=400,
+            detail="At least one filter required (before and/or after date)",
+        )
+
+    deleted_count = await evidence.purge_evidence(
+        before=data.before,
+        after=data.after,
+    )
+
+    logger.info(
+        "evidence_purged_via_api",
+        deleted_count=deleted_count,
+        before=data.before.isoformat() if data.before else None,
+        after=data.after.isoformat() if data.after else None,
+    )
+
+    return PurgeResultSchema(
+        deleted_count=deleted_count,
+        resource_type="evidence",
     )

@@ -1014,3 +1014,93 @@ class FingerprintStore:
                 "untagged": untagged_count,
                 "clusters": cluster_count,
             }
+
+    # --- Maintenance Operations ---
+
+    def delete_fingerprint(self, fingerprint_id: str) -> bool:
+        """Delete a single fingerprint.
+
+        Args:
+            fingerprint_id: The fingerprint's unique ID.
+
+        Returns:
+            True if deleted, False if not found.
+        """
+        with self._get_connection() as conn:
+            cursor = conn.cursor()
+            cursor.execute("DELETE FROM bark_fingerprints WHERE id = ?", (fingerprint_id,))
+            deleted = cursor.rowcount > 0
+            conn.commit()
+
+        if deleted:
+            logger.info("fingerprint_deleted", fingerprint_id=fingerprint_id)
+
+        return deleted
+
+    def purge_fingerprints(
+        self,
+        before: datetime | None = None,
+        untagged_only: bool = False,
+    ) -> int:
+        """Purge fingerprints matching criteria.
+
+        Args:
+            before: Delete fingerprints older than this timestamp.
+            untagged_only: If True, only delete untagged fingerprints.
+
+        Returns:
+            Number of fingerprints deleted.
+        """
+        conditions = []
+        params: list = []
+
+        if before is not None:
+            conditions.append("timestamp < ?")
+            params.append(before.isoformat())
+
+        if untagged_only:
+            conditions.append("dog_id IS NULL")
+
+        if not conditions:
+            # Safety: require at least one condition
+            logger.warning("purge_fingerprints_no_conditions")
+            return 0
+
+        where_clause = " AND ".join(conditions)
+
+        with self._get_connection() as conn:
+            cursor = conn.cursor()
+
+            # Count first
+            cursor.execute(f"SELECT COUNT(*) FROM bark_fingerprints WHERE {where_clause}", params)
+            count = cursor.fetchone()[0]
+
+            if count > 0:
+                cursor.execute(f"DELETE FROM bark_fingerprints WHERE {where_clause}", params)
+                conn.commit()
+                logger.info(
+                    "fingerprints_purged",
+                    count=count,
+                    before=before.isoformat() if before else None,
+                    untagged_only=untagged_only,
+                )
+
+        return count
+
+    def purge_all_fingerprints(self) -> int:
+        """Delete ALL fingerprints. Use with caution.
+
+        Returns:
+            Number of fingerprints deleted.
+        """
+        with self._get_connection() as conn:
+            cursor = conn.cursor()
+            cursor.execute("SELECT COUNT(*) FROM bark_fingerprints")
+            count = cursor.fetchone()[0]
+
+            if count > 0:
+                cursor.execute("DELETE FROM bark_fingerprints")
+                conn.commit()
+                logger.warning("all_fingerprints_purged", count=count)
+
+        return count

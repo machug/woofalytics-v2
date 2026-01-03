@@ -358,3 +358,92 @@ class EvidenceStorage:
 
         logger.info("evidence_cleanup_complete", removed=removed)
         return removed
+
+    async def purge_evidence(
+        self,
+        before: datetime | None = None,
+        after: datetime | None = None,
+    ) -> int:
+        """Purge evidence files matching criteria.
+
+        Args:
+            before: Delete recordings before this timestamp.
+            after: Delete recordings after this timestamp.
+
+        Returns:
+            Number of files removed.
+        """
+        removed = 0
+
+        async with self._lock:
+            entries_to_keep = []
+
+            for entry in self._index.entries:
+                entry_ts = entry.timestamp_local.replace(tzinfo=None)
+                should_delete = False
+
+                if before is not None and after is not None:
+                    # Delete within range
+                    should_delete = after.replace(tzinfo=None) <= entry_ts < before.replace(tzinfo=None)
+                elif before is not None:
+                    should_delete = entry_ts < before.replace(tzinfo=None)
+                elif after is not None:
+                    should_delete = entry_ts >= after.replace(tzinfo=None)
+
+                if should_delete:
+                    wav_path = self.config.directory / entry.filename
+                    json_path = self.config.directory / entry.filename.replace(".wav", ".json")
+                    # Also remove cached opus file if it exists
+                    opus_path = self.config.directory / ".cache" / entry.filename.replace(".wav", ".opus")
+
+                    try:
+                        if wav_path.exists():
+                            await aiofiles.os.remove(wav_path)
+                        if json_path.exists():
+                            await aiofiles.os.remove(json_path)
+                        if opus_path.exists():
+                            await aiofiles.os.remove(opus_path)
+                        removed += 1
+                        logger.info("evidence_purged", filename=entry.filename)
+                    except Exception as e:
+                        logger.warning("evidence_purge_error", filename=entry.filename, error=str(e))
+                        entries_to_keep.append(entry)
+                else:
+                    entries_to_keep.append(entry)
+
+            self._index.entries = entries_to_keep
+            await self._save_index()
+
+        logger.info("evidence_purge_complete", removed=removed)
+        return removed
+
+    async def purge_all_evidence(self) -> int:
+        """Delete ALL evidence files. Use with caution.
+
+        Returns:
+            Number of files removed.
+        """
+        removed = 0
+
+        async with self._lock:
+            for entry in self._index.entries:
+                wav_path = self.config.directory / entry.filename
+                json_path = self.config.directory / entry.filename.replace(".wav", ".json")
+                opus_path = self.config.directory / ".cache" / entry.filename.replace(".wav", ".opus")
+
+                try:
+                    if wav_path.exists():
+                        await aiofiles.os.remove(wav_path)
+                    if json_path.exists():
+                        await aiofiles.os.remove(json_path)
+                    if opus_path.exists():
+                        await aiofiles.os.remove(opus_path)
+                    removed += 1
+                except Exception as e:
+                    logger.warning("evidence_purge_error", filename=entry.filename, error=str(e))
+
+            self._index.entries = []
+            await self._save_index()
+
+        logger.warning("all_evidence_purged", removed=removed)
+        return removed
