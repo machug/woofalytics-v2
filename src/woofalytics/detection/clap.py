@@ -244,6 +244,16 @@ class CLAPDetector:
         # Ensure float32, 1D, and contiguous
         audio = np.ascontiguousarray(audio.flatten(), dtype=np.float32)
 
+        # CLAP requires 48000 Hz - resample if needed
+        target_sr = 48000
+        if sample_rate != target_sr:
+            import torchaudio.functional as F
+            import torch as torch_resample
+            audio_tensor = torch_resample.from_numpy(audio).unsqueeze(0)
+            audio_resampled = F.resample(audio_tensor, sample_rate, target_sr)
+            audio = audio_resampled.squeeze(0).numpy()
+            sample_rate = target_sr
+
         # Process audio to get audio embeddings
         audio_inputs = self._processor(
             audios=audio,
@@ -322,6 +332,28 @@ class CLAPDetector:
             and not percussive_detected
             and margin_met
         )
+
+        # Reset rolling window on strong non-bark detection
+        # This prevents carryover from previous barks when user is clearly typing or speaking
+        # Threshold is lower than veto threshold to ensure window gets reset on clear non-bark sounds
+        strong_non_bark_threshold = 0.35
+        should_reset_window = (
+            max_percussive_score >= strong_non_bark_threshold
+            or max_speech_score >= strong_non_bark_threshold
+        )
+        if should_reset_window and any(self._detection_window):
+            reset_reason = (
+                "percussive" if max_percussive_score >= strong_non_bark_threshold
+                else "speech"
+            )
+            logger.debug(
+                "rolling_window_reset_by_non_bark",
+                reason=reset_reason,
+                percussive_score=f"{max_percussive_score:.3f}",
+                speech_score=f"{max_speech_score:.3f}",
+                previous_window=list(self._detection_window),
+            )
+            self._detection_window.clear()
 
         # Add to rolling window and check for confirmation
         self._detection_window.append(raw_detection)
