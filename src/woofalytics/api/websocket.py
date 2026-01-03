@@ -86,7 +86,8 @@ class ConnectionManager:
         try:
             await websocket.send_json(message)
             return True
-        except Exception:
+        except Exception as e:
+            logger.debug("send_personal_failed", error=str(e), error_type=type(e).__name__)
             await self.disconnect(websocket)
             return False
 
@@ -206,10 +207,13 @@ async def websocket_audio_endpoint(websocket: WebSocket) -> None:
     Sends audio level updates at ~10Hz for VU meter visualization.
     Format: {"type": "audio_level", "data": {"level": 0.75, "peak": 0.92}}
     """
+    import numpy as np
+
     manager = websocket.app.state.ws_manager
     await manager.connect(websocket)
 
     detector = websocket.app.state.detector
+    logger.debug("audio_ws_started", has_audio_capture=bool(detector.audio_capture))
 
     # Send initial message to confirm connection
     success = await manager.send_personal(websocket, {
@@ -217,41 +221,50 @@ async def websocket_audio_endpoint(websocket: WebSocket) -> None:
         "data": {"level": 0.0, "peak": 0.0},
     })
     if not success:
+        logger.warning("audio_ws_initial_send_failed")
         return  # Client disconnected immediately
 
+    logger.debug("audio_ws_initial_sent")
+
     try:
+        loop_count = 0
         while True:
+            loop_count += 1
+            level = 0.0
+            peak = 0.0
+
             # Calculate current audio level from recent frames
             if detector.audio_capture:
                 frames = detector.audio_capture.get_recent_frames(count=2)
                 if frames:
-                    import numpy as np
-
                     # Combine frame data
                     audio_data = b"".join(f.data for f in frames)
                     audio_array = np.frombuffer(audio_data, dtype=np.int16)
 
                     # Calculate RMS level
                     rms = np.sqrt(np.mean(audio_array.astype(np.float32) ** 2))
-                    level = min(1.0, rms / 32768.0 * 10)  # Normalize to 0-1
+                    level = min(1.0, float(rms) / 32768.0 * 10)  # Normalize to 0-1
 
                     # Calculate peak
-                    peak = min(1.0, np.abs(audio_array).max() / 32768.0)
+                    peak = min(1.0, float(np.abs(audio_array).max()) / 32768.0)
 
-                    success = await manager.send_personal(websocket, {
-                        "type": "audio_level",
-                        "data": {
-                            "level": round(level, 3),
-                            "peak": round(peak, 3),
-                        },
-                    })
-                    if not success:
-                        break  # Client disconnected
+            # Always send audio level update to keep connection alive
+            success = await manager.send_personal(websocket, {
+                "type": "audio_level",
+                "data": {
+                    "level": round(float(level), 3),
+                    "peak": round(float(peak), 3),
+                },
+            })
+            if not success:
+                logger.warning("audio_ws_send_failed", loop=loop_count)
+                break  # Client disconnected
 
             await asyncio.sleep(0.1)  # 10Hz update rate
 
     except WebSocketDisconnect:
+        logger.debug("audio_ws_client_disconnect")
         await manager.disconnect(websocket)
     except Exception as e:
-        logger.warning("websocket_audio_error", error=str(e))
+        logger.warning("websocket_audio_error", error=str(e), error_type=type(e).__name__)
         await manager.disconnect(websocket)
