@@ -550,6 +550,78 @@ class CLAPDetector:
             "all_scores": dict(sorted_labels),
         }
 
+    def get_audio_embedding(
+        self,
+        audio: np.ndarray,
+        sample_rate: int = 48000,
+    ) -> np.ndarray:
+        """Extract the 512-dimensional CLAP audio embedding.
+
+        This method extracts the normalized audio embedding vector that can be
+        used for fingerprinting and similarity matching. The embedding is
+        L2 normalized for cosine similarity comparisons.
+
+        Args:
+            audio: Audio array of shape (samples,) or (channels, samples).
+                   Should be float32 in range [-1, 1] or int16.
+            sample_rate: Sample rate of the audio.
+
+        Returns:
+            Normalized 512-dimensional embedding vector as numpy array.
+
+        Raises:
+            RuntimeError: If the model is not loaded.
+        """
+        import torch
+
+        if not self.is_loaded:
+            self.load()
+
+        # Convert to mono if stereo
+        if audio.ndim == 2:
+            audio = audio.mean(axis=0)
+
+        # Convert int16 to float32 if needed
+        if audio.dtype == np.int16:
+            audio = audio.astype(np.float32) / 32768.0
+
+        # Ensure float32, 1D, and contiguous
+        audio = np.ascontiguousarray(audio.flatten(), dtype=np.float32)
+
+        # CLAP requires 48000 Hz - resample if needed
+        target_sr = 48000
+        if sample_rate != target_sr:
+            import torchaudio.functional as F
+            import torch as torch_resample
+            audio_tensor = torch_resample.from_numpy(audio).unsqueeze(0)
+            audio_resampled = F.resample(audio_tensor, sample_rate, target_sr)
+            audio = audio_resampled.squeeze(0).numpy()
+            sample_rate = target_sr
+
+        # Process audio to get audio embeddings
+        audio_inputs = self._processor(
+            audios=audio,
+            sampling_rate=sample_rate,
+            return_tensors="pt",
+        )
+        audio_inputs = {k: v.to(self._device) for k, v in audio_inputs.items()}
+
+        # Compute audio embeddings
+        with torch.no_grad():
+            audio_features = self._model.get_audio_features(**audio_inputs)
+            # L2 normalize for cosine similarity
+            audio_features = audio_features / audio_features.norm(p=2, dim=-1, keepdim=True)
+            # Convert to numpy
+            embedding = audio_features.squeeze(0).cpu().numpy()
+
+        logger.debug(
+            "audio_embedding_extracted",
+            embedding_shape=embedding.shape,
+            embedding_norm=float(np.linalg.norm(embedding)),
+        )
+
+        return embedding
+
 
 def create_clap_detector(
     threshold: float = 0.6,

@@ -11,6 +11,8 @@ from woofalytics.fingerprint.models import (
     ClusterInfo,
 )
 from woofalytics.fingerprint.storage import FingerprintStore
+from woofalytics.fingerprint.extractor import FingerprintExtractor, create_extractor
+from woofalytics.fingerprint.matcher import FingerprintMatcher, create_matcher
 
 __all__ = [
     "DogProfile",
@@ -18,4 +20,8 @@ __all__ = [
     "FingerprintMatch",
     "ClusterInfo",
     "FingerprintStore",
+    "FingerprintExtractor",
+    "create_extractor",
+    "FingerprintMatcher",
+    "create_matcher",
 ]
