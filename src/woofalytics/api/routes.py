@@ -5,6 +5,7 @@ This module provides endpoints for:
 - Bark detection status and history
 - Evidence file listing and retrieval
 - Configuration viewing
+- Dog profile management and bark tagging (via fingerprint router)
 """
 
 from __future__ import annotations
@@ -16,6 +17,7 @@ from typing import Annotated
 from fastapi import APIRouter, Depends, HTTPException, Query, Request
 from fastapi.responses import FileResponse, Response
 
+from woofalytics.api.routes_fingerprint import router as fingerprint_router
 from woofalytics.api.schemas import (
     BarkEventSchema,
     ConfigurationSchema,
@@ -33,6 +35,9 @@ from woofalytics.evidence.storage import EvidenceStorage
 from woofalytics.observability.metrics import generate_latest, get_metrics
 
 router = APIRouter(tags=["api"])
+
+# Include fingerprint routes for dog profile and bark tagging management
+router.include_router(fingerprint_router)
 
 
 # Dependency injection
