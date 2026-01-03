@@ -87,6 +87,18 @@ class ModelConfig(BaseModel):
         description="Device for CLAP inference ('cpu' or 'cuda').",
     )
 
+    # VAD gate for fast rejection
+    vad_enabled: bool = Field(
+        default=True,
+        description="Enable VAD gate to skip CLAP inference on silence.",
+    )
+    vad_threshold_db: float = Field(
+        default=-40.0,
+        ge=-80.0,
+        le=0.0,
+        description="VAD energy threshold in dBFS. Audio below this is skipped.",
+    )
+
     # Legacy MLP model settings (used when use_clap=False)
     path: Path = Field(
         default=Path("./models/traced_model.pt"),

@@ -24,6 +24,7 @@ from woofalytics.config import Settings
 from woofalytics.detection.clap import CLAPConfig, CLAPDetector
 from woofalytics.detection.doa import DirectionEstimator
 from woofalytics.detection.features import FeatureExtractor, create_default_extractor
+from woofalytics.detection.vad import VADConfig, VADGate
 
 logger = structlog.get_logger(__name__)
 
@@ -68,6 +69,7 @@ class BarkDetector:
     # Private state
     _model: torch.jit.ScriptModule | None = field(default=None, init=False)
     _clap_detector: CLAPDetector | None = field(default=None, init=False)
+    _vad_gate: VADGate | None = field(default=None, init=False)
     _feature_extractor: FeatureExtractor | None = field(default=None, init=False)
     _doa_estimator: DirectionEstimator | None = field(default=None, init=False)
     _audio_capture: AsyncAudioCapture | None = field(default=None, init=False)
@@ -81,6 +83,7 @@ class BarkDetector:
     _start_time: float = field(default=0.0, init=False)
     _total_barks: int = field(default=0, init=False)
     _inference_count: int = field(default=0, init=False)
+    _vad_skipped_count: int = field(default=0, init=False)
 
     def __post_init__(self) -> None:
         if self.settings.model.use_clap:
@@ -104,6 +107,17 @@ class BarkDetector:
             threshold=config.threshold,
             device=config.device,
         )
+
+        # Initialize VAD gate for fast rejection of silent frames
+        if self.settings.model.vad_enabled:
+            vad_config = VADConfig(
+                energy_threshold_db=self.settings.model.vad_threshold_db,
+            )
+            self._vad_gate = VADGate(vad_config)
+            logger.info(
+                "vad_gate_enabled",
+                threshold_db=self.settings.model.vad_threshold_db,
+            )
 
         # Still set up DOA estimator for direction detection
         if self.settings.doa.enabled:
@@ -236,6 +250,18 @@ class BarkDetector:
         # Reshape to (channels, samples)
         channels = self.settings.audio.channels
         audio_array = audio_array.reshape((channels, -1), order="F")
+
+        # VAD gate: skip CLAP inference on silent audio
+        if self._vad_gate and not self._vad_gate.is_active(audio_array):
+            self._vad_skipped_count += 1
+            # Log VAD skip rate periodically
+            if self._vad_skipped_count % 50 == 0:
+                logger.debug(
+                    "vad_skipping_silent_frames",
+                    skipped=self._vad_skipped_count,
+                    vad_stats=self._vad_gate.stats,
+                )
+            return
 
         # Extract DOA if enabled
         doa_bartlett, doa_capon, doa_mem = None, None, None
@@ -417,7 +443,7 @@ class BarkDetector:
 
     def get_status(self) -> dict:
         """Get detector status as dictionary."""
-        return {
+        status = {
             "running": self._running,
             "uptime_seconds": self.uptime_seconds,
             "total_barks": self._total_barks,
@@ -428,3 +454,9 @@ class BarkDetector:
                 else None
             ),
         }
+
+        # Include VAD stats if enabled
+        if self._vad_gate:
+            status["vad_stats"] = self._vad_gate.stats
+
+        return status
