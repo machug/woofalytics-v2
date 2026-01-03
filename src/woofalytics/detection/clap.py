@@ -7,6 +7,7 @@ and human speech without any fine-tuning.
 
 from __future__ import annotations
 
+from collections import deque
 from dataclasses import dataclass, field
 from typing import Any
 
@@ -67,6 +68,10 @@ class CLAPConfig:
     # Bark score must beat best non-bark label by this margin
     confidence_margin: float = 0.15
 
+    # Rolling window confirmation: require N positives out of last M detections
+    rolling_window_size: int = 3
+    rolling_window_min_positives: int = 2
+
     # Device for inference
     device: str = "cpu"
 
@@ -90,6 +95,10 @@ class CLAPDetector:
         self._positive_indices: set[int] = set()
         self._speech_indices: set[int] = set()
         self._percussive_indices: set[int] = set()
+        # Rolling window to track recent detection results for confirmation
+        self._detection_window: deque[bool] = deque(
+            maxlen=self.config.rolling_window_size
+        )
 
     def load(self) -> None:
         """Load the CLAP model.
@@ -230,12 +239,18 @@ class CLAPDetector:
         margin_met = (max_positive_score - best_non_bark_score) >= self.config.confidence_margin
 
         # Apply detection logic with speech, percussive veto, and margin check
-        is_barking = (
+        # This is the "raw" detection before rolling window confirmation
+        raw_detection = (
             bark_prob >= self.config.threshold
             and not speech_detected
             and not percussive_detected
             and margin_met
         )
+
+        # Add to rolling window and check for confirmation
+        self._detection_window.append(raw_detection)
+        positive_count = sum(self._detection_window)
+        is_barking = positive_count >= self.config.rolling_window_min_positives
 
         # Log when speech veto is applied
         if bark_prob >= self.config.threshold and speech_detected:
@@ -281,7 +296,27 @@ class CLAPDetector:
                 required_margin=self.config.confidence_margin,
             )
 
+        # Log rolling window state when raw detection differs from final
+        if raw_detection != is_barking:
+            logger.debug(
+                "rolling_window_state",
+                raw_detection=raw_detection,
+                is_barking=is_barking,
+                window=list(self._detection_window),
+                positive_count=positive_count,
+                required=self.config.rolling_window_min_positives,
+            )
+
         return bark_prob, is_barking, label_scores
+
+    def reset_detection_window(self) -> None:
+        """Reset the rolling detection window.
+
+        Call this when starting a new audio stream or after a long pause
+        to avoid stale detection history affecting new detections.
+        """
+        self._detection_window.clear()
+        logger.debug("detection_window_reset")
 
     def detect_with_details(
         self,
