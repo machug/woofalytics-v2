@@ -590,6 +590,117 @@
             color: var(--text-primary);
         }
 
+        /* Evidence Browser */
+        .evidence-section {
+            background: var(--bg-surface);
+            border: 1px solid var(--border-default);
+            border-radius: var(--radius-lg);
+            overflow: hidden;
+        }
+
+        .evidence-header {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            padding: var(--space-md) var(--space-lg);
+            border-bottom: 1px solid var(--border-muted);
+        }
+
+        .evidence-title {
+            display: flex;
+            align-items: center;
+            gap: var(--space-sm);
+            font-size: 1rem;
+            font-weight: 600;
+            color: var(--text-primary);
+            margin: 0;
+        }
+
+        .evidence-list {
+            display: flex;
+            flex-direction: column;
+            max-height: 300px;
+            overflow-y: auto;
+        }
+
+        .evidence-item {
+            display: flex;
+            align-items: center;
+            gap: var(--space-md);
+            padding: var(--space-sm) var(--space-lg);
+            border-bottom: 1px solid var(--border-muted);
+            transition: background var(--transition-fast);
+        }
+
+        .evidence-item:last-child {
+            border-bottom: none;
+        }
+
+        .evidence-item:hover {
+            background: var(--bg-overlay);
+        }
+
+        .evidence-play-btn {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            width: 36px;
+            height: 36px;
+            background: var(--accent-amber-dim);
+            border: 1px solid var(--accent-amber);
+            border-radius: 50%;
+            color: var(--accent-amber);
+            cursor: pointer;
+            transition: all var(--transition-fast);
+            flex-shrink: 0;
+        }
+
+        .evidence-play-btn:hover {
+            background: var(--accent-amber);
+            color: var(--bg-surface);
+            transform: scale(1.1);
+        }
+
+        .evidence-play-btn.playing {
+            animation: pulse-amber 1s ease-in-out infinite;
+        }
+
+        @keyframes pulse-amber {
+            0%, 100% { box-shadow: 0 0 0 0 rgba(245, 158, 11, 0.4); }
+            50% { box-shadow: 0 0 0 8px rgba(245, 158, 11, 0); }
+        }
+
+        .evidence-info {
+            flex: 1;
+            min-width: 0;
+        }
+
+        .evidence-time {
+            font-family: 'JetBrains Mono', monospace;
+            font-size: 0.85rem;
+            color: var(--text-primary);
+        }
+
+        .evidence-meta {
+            display: flex;
+            gap: var(--space-md);
+            font-size: 0.75rem;
+            color: var(--text-muted);
+            margin-top: 2px;
+        }
+
+        .evidence-meta-item {
+            display: flex;
+            align-items: center;
+            gap: 4px;
+        }
+
+        .evidence-empty {
+            padding: var(--space-xl);
+            text-align: center;
+            color: var(--text-muted);
+        }
+
         /* Responsive */
         @media (max-width: 768px) {
             .stats-row {
@@ -778,6 +889,22 @@
                 </div>
             </section>
 
+            <!-- Evidence Browser -->
+            <section class="evidence-section">
+                <div class="evidence-header">
+                    <h2 class="evidence-title">
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="20" height="20">
+                            <polygon points="5 3 19 12 5 21 5 3"/>
+                        </svg>
+                        Recent Recordings
+                    </h2>
+                    <span class="text-muted" id="evidence-count">Loading...</span>
+                </div>
+                <div class="evidence-list" id="evidence-list">
+                    <div class="evidence-empty">Loading recordings...</div>
+                </div>
+            </section>
+
             <!-- Charts Section -->
             <div class="charts-grid">
                 <div class="chart-panel">
@@ -846,6 +973,7 @@
             await this.loadStats();
             await this.loadFingerprints();
             await this.loadAggregates();
+            await this.loadEvidence();
             this.loadTimeline();
             this.setupEventListeners();
 
@@ -853,6 +981,7 @@
             setInterval(() => {
                 this.loadStats();
                 this.loadFingerprints();
+                this.loadEvidence();
                 this.loadTimeline();
             }, 60000);
         }
@@ -1152,6 +1281,105 @@
             }
         }
 
+        async loadEvidence() {
+            const listEl = document.getElementById('evidence-list');
+            const countEl = document.getElementById('evidence-count');
+
+            try {
+                const response = await fetch('/api/evidence?count=20');
+                if (!response.ok) {
+                    listEl.innerHTML = '<div class="evidence-empty">Failed to load recordings</div>';
+                    return;
+                }
+                const data = await response.json();
+                const evidence = data.evidence || [];
+
+                countEl.textContent = `${evidence.length} recordings`;
+
+                if (evidence.length === 0) {
+                    listEl.innerHTML = '<div class="evidence-empty">No recordings yet. Barks will be recorded automatically.</div>';
+                    return;
+                }
+
+                listEl.innerHTML = evidence.map(ev => {
+                    const time = new Date(ev.timestamp_local || ev.timestamp_utc);
+                    const duration = ev.duration_seconds ? `${ev.duration_seconds.toFixed(1)}s` : '--';
+                    const barks = ev.bark_count_in_clip || 0;
+                    const prob = ev.peak_probability ? `${Math.round(ev.peak_probability * 100)}%` : '--';
+                    const doa = ev.doa_degrees !== null ? `${ev.doa_degrees}°` : '--';
+
+                    return `
+                        <div class="evidence-item">
+                            <button class="evidence-play-btn" onclick="explorer.playEvidence('${ev.filename}', this)" title="Play recording">
+                                <svg viewBox="0 0 24 24" fill="currentColor" width="16" height="16">
+                                    <polygon points="5 3 19 12 5 21 5 3"/>
+                                </svg>
+                            </button>
+                            <div class="evidence-info">
+                                <div class="evidence-time">${this.formatTime(time)}</div>
+                                <div class="evidence-meta">
+                                    <span class="evidence-meta-item">
+                                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="12" height="12">
+                                            <circle cx="12" cy="12" r="10"/>
+                                            <polyline points="12 6 12 12 16 14"/>
+                                        </svg>
+                                        ${duration}
+                                    </span>
+                                    <span class="evidence-meta-item">
+                                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="12" height="12">
+                                            <path d="M12 1a3 3 0 0 0-3 3v8a3 3 0 0 0 6 0V4a3 3 0 0 0-3-3z"/>
+                                            <path d="M19 10v2a7 7 0 0 1-14 0v-2"/>
+                                        </svg>
+                                        ${barks} bark${barks !== 1 ? 's' : ''}
+                                    </span>
+                                    <span class="evidence-meta-item">
+                                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="12" height="12">
+                                            <path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/>
+                                            <polyline points="22 4 12 14.01 9 11.01"/>
+                                        </svg>
+                                        ${prob}
+                                    </span>
+                                    <span class="evidence-meta-item">
+                                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="12" height="12">
+                                            <circle cx="12" cy="12" r="10"/>
+                                            <line x1="12" y1="2" x2="12" y2="12"/>
+                                        </svg>
+                                        ${doa}
+                                    </span>
+                                </div>
+                            </div>
+                        </div>
+                    `;
+                }).join('');
+            } catch (error) {
+                console.error('Error loading evidence:', error);
+                listEl.innerHTML = '<div class="evidence-empty">Error loading recordings</div>';
+            }
+        }
+
+        playEvidence(filename, btnEl) {
+            // Remove playing state from all buttons
+            document.querySelectorAll('.evidence-play-btn.playing').forEach(b => b.classList.remove('playing'));
+
+            const player = document.getElementById('audio-player');
+            const audio = document.getElementById('audio-element');
+
+            // Use Opus format for compressed web playback
+            audio.src = `/api/evidence/${filename}?format=opus`;
+            player.classList.add('active');
+            btnEl.classList.add('playing');
+
+            audio.play().catch(e => {
+                // Fallback to WAV if Opus fails
+                audio.src = `/api/evidence/${filename}`;
+                audio.play();
+            });
+
+            // Remove playing state when audio ends
+            audio.onended = () => btnEl.classList.remove('playing');
+            audio.onpause = () => btnEl.classList.remove('playing');
+        }
+
         renderCharts(data) {
             const byDog = data.by_dog || [];
 
@@ -1301,9 +1529,14 @@
         playAudio(filename) {
             const player = document.getElementById('audio-player');
             const audio = document.getElementById('audio-element');
-            audio.src = `/api/evidence/${filename}`;
+            // Use Opus format for compressed web playback (50x smaller than WAV)
+            audio.src = `/api/evidence/${filename}?format=opus`;
             player.classList.add('active');
-            audio.play();
+            audio.play().catch(e => {
+                // Fallback to WAV if Opus fails
+                audio.src = `/api/evidence/${filename}`;
+                audio.play();
+            });
         }
 
         formatTime(date) {

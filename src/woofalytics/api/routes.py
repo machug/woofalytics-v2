@@ -201,14 +201,19 @@ async def get_evidence_stats(
 async def download_evidence(
     filename: str,
     settings: Annotated[Settings, Depends(get_settings)],
+    format: Annotated[str | None, Query(description="Audio format: 'opus' for compressed")] = None,
 ) -> FileResponse:
     """Download an evidence file (WAV or JSON metadata).
 
     Args:
         filename: Name of the file to download.
+        format: Optional format conversion. Use 'opus' for compressed web playback.
 
-    Returns the file for download.
+    Returns the file for download or streaming.
     """
+    import asyncio
+    import subprocess
+
     # Security: reject any path components in filename FIRST
     if "/" in filename or "\\" in filename or ".." in filename:
         raise HTTPException(status_code=400, detail="Invalid filename")
@@ -228,6 +233,37 @@ async def download_evidence(
     # Now safe to check existence
     if not file_path.exists():
         raise HTTPException(status_code=404, detail="Evidence file not found")
+
+    # Handle Opus transcoding for web playback
+    if format == "opus" and filename.endswith(".wav"):
+        cache_dir = evidence_dir / ".cache"
+        cache_dir.mkdir(exist_ok=True)
+        opus_filename = filename.replace(".wav", ".opus")
+        opus_path = cache_dir / opus_filename
+
+        # Transcode if not cached
+        if not opus_path.exists():
+            try:
+                # FFmpeg: convert to Opus at 64kbps (excellent quality for voice/barks)
+                proc = await asyncio.create_subprocess_exec(
+                    "ffmpeg", "-y", "-i", str(file_path),
+                    "-c:a", "libopus", "-b:a", "64k",
+                    "-vbr", "on", "-compression_level", "10",
+                    str(opus_path),
+                    stdout=subprocess.DEVNULL,
+                    stderr=subprocess.DEVNULL,
+                )
+                await proc.wait()
+                if proc.returncode != 0:
+                    raise HTTPException(status_code=500, detail="Audio transcoding failed")
+            except FileNotFoundError:
+                raise HTTPException(status_code=500, detail="FFmpeg not available")
+
+        return FileResponse(
+            path=opus_path,
+            filename=opus_filename,
+            media_type="audio/opus",
+        )
 
     media_type = "audio/wav" if filename.endswith(".wav") else "application/json"
 
