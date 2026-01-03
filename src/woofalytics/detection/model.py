@@ -40,6 +40,8 @@ class BarkEvent:
     doa_bartlett: int | None = None
     doa_capon: int | None = None
     doa_mem: int | None = None
+    audio: np.ndarray | None = None  # Raw audio for fingerprint extraction
+    sample_rate: int = 48000
 
     def to_dict(self) -> dict:
         """Convert to dictionary for JSON serialization."""
@@ -288,7 +290,7 @@ class BarkDetector:
             metrics.observe_latency(inference_latency, model_type="clap")
             metrics.inc_inference(model_type="clap")
 
-        # Create event
+        # Create event - include audio for fingerprint extraction when barking
         event = BarkEvent(
             timestamp=datetime.now(),
             probability=probability,
@@ -296,6 +298,8 @@ class BarkDetector:
             doa_bartlett=doa_bartlett,
             doa_capon=doa_capon,
             doa_mem=doa_mem,
+            audio=audio_array if is_barking else None,
+            sample_rate=self.settings.audio.sample_rate,
         )
 
         self._last_event = event

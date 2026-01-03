@@ -33,7 +33,7 @@ from woofalytics.fingerprint.storage import FingerprintStore
 
 logger = structlog.get_logger(__name__)
 
-router = APIRouter(prefix="/api", tags=["fingerprints"])
+router = APIRouter(tags=["fingerprints"])
 
 
 # Dependency injection

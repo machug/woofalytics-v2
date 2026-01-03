@@ -22,9 +22,11 @@ import structlog
 
 from woofalytics import __version__
 from woofalytics.config import Settings, load_settings, configure_logging
-from woofalytics.detection.model import BarkDetector
+from woofalytics.detection.model import BarkDetector, BarkEvent
 from woofalytics.evidence.storage import EvidenceStorage
 from woofalytics.api.websocket import broadcast_bark_event, ConnectionManager
+from woofalytics.fingerprint.storage import FingerprintStore
+from woofalytics.fingerprint.matcher import FingerprintMatcher
 
 logger = structlog.get_logger(__name__)
 
@@ -87,15 +89,47 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
     # Create WebSocket connection manager
     ws_manager = ConnectionManager()
 
+    # Initialize fingerprint system for dog identification
+    fingerprint_db_path = settings.evidence.directory / "fingerprints.db"
+    fingerprint_store = FingerprintStore(fingerprint_db_path)
+    fingerprint_matcher = FingerprintMatcher(
+        detector=detector._clap_detector,
+        store=fingerprint_store,
+        threshold=0.7,  # Similarity threshold for matching
+    )
+    logger.info("fingerprint_system_initialized", db_path=str(fingerprint_db_path))
+
+    # Fingerprint callback - process detected barks for dog identification
+    def on_bark_for_fingerprint(event: BarkEvent) -> None:
+        if event.is_barking and event.audio is not None:
+            try:
+                fingerprint, matches = fingerprint_matcher.process_bark(
+                    audio=event.audio,
+                    sample_rate=event.sample_rate,
+                    detection_prob=event.probability,
+                    doa=event.doa_bartlett,
+                )
+                if matches:
+                    logger.info(
+                        "bark_identified",
+                        dog_name=matches[0].dog_name,
+                        confidence=f"{matches[0].confidence:.3f}",
+                    )
+            except Exception as e:
+                logger.warning("fingerprint_processing_error", error=str(e))
+
     # Register callbacks
     detector.add_callback(lambda event: asyncio.create_task(evidence.on_bark_event(event)))
     detector.add_callback(lambda event: asyncio.create_task(broadcast_bark_event(event, ws_manager)))
+    detector.add_callback(on_bark_for_fingerprint)
 
     # Store in app.state for dependency injection
     app.state.settings = settings
     app.state.detector = detector
     app.state.evidence = evidence
     app.state.ws_manager = ws_manager
+    app.state.fingerprint_store = fingerprint_store
+    app.state.fingerprint_matcher = fingerprint_matcher
 
     # Start background task for evidence saving
     async def evidence_saver() -> None:
