@@ -49,11 +49,22 @@ class CLAPConfig:
         "This is a sound of tapping on a table",
     ])
 
+    # Bird/nature labels that should veto bark detection
+    # Birds are commonly misclassified as dog barks by CLAP
+    bird_labels: list[str] = field(default_factory=lambda: [
+        "bird chirping",
+        "birds singing outside",
+        "crow cawing loudly",
+        "bird call sounds",
+    ])
+
     # Other non-bark sounds
     other_labels: list[str] = field(default_factory=lambda: [
         "silence",
         "background noise",
         "music",
+        "wind blowing",
+        "traffic noise",
     ])
 
     # Threshold for bark detection (probability that it's a bark vs not)
@@ -65,12 +76,19 @@ class CLAPConfig:
     # If any percussive label exceeds this, veto the bark detection
     percussive_veto_threshold: float = 0.20
 
+    # If any bird label exceeds this, veto the bark detection
+    bird_veto_threshold: float = 0.15
+
     # Bark score must beat best non-bark label by this margin
-    confidence_margin: float = 0.15
+    confidence_margin: float = 0.10
 
     # Rolling window confirmation: require N positives out of last M detections
     rolling_window_size: int = 3
     rolling_window_min_positives: int = 2
+
+    # Cooldown: minimum frames between bark detection events
+    # Prevents rapid-fire 10x detections from a single sound
+    detection_cooldown_frames: int = 5
 
     # Device for inference
     device: str = "cpu"
@@ -100,6 +118,9 @@ class CLAPDetector:
         self._positive_indices: set[int] = set()
         self._speech_indices: set[int] = set()
         self._percussive_indices: set[int] = set()
+        self._bird_indices: set[int] = set()
+        # Cooldown counter to prevent rapid-fire detections
+        self._cooldown_counter: int = 0
         # Rolling window to track recent detection results for confirmation
         self._detection_window: deque[bool] = deque(
             maxlen=self.config.rolling_window_size
@@ -136,11 +157,12 @@ class CLAPDetector:
         self._model.to(self._device)
         self._model.eval()
 
-        # Combine all labels: positive, speech (for veto), percussive (for veto), and other
+        # Combine all labels: positive, speech (for veto), percussive (for veto), bird (for veto), and other
         self._all_labels = (
             self.config.positive_labels +
             self.config.speech_labels +
             self.config.percussive_labels +
+            self.config.bird_labels +
             self.config.other_labels
         )
         self._positive_indices = set(range(len(self.config.positive_labels)))
@@ -155,6 +177,11 @@ class CLAPDetector:
         percussive_end = percussive_start + len(self.config.percussive_labels)
         self._percussive_indices = set(range(percussive_start, percussive_end))
 
+        # Track bird label indices for veto logic
+        bird_start = percussive_end
+        bird_end = bird_start + len(self.config.bird_labels)
+        self._bird_indices = set(range(bird_start, bird_end))
+
         # Pre-compute and cache text embeddings for all labels
         self._cache_text_embeddings()
 
@@ -163,9 +190,12 @@ class CLAPDetector:
             positive_labels=self.config.positive_labels,
             speech_labels=self.config.speech_labels,
             percussive_labels=self.config.percussive_labels,
+            bird_labels=self.config.bird_labels,
             other_labels=self.config.other_labels,
             speech_veto_threshold=self.config.speech_veto_threshold,
             percussive_veto_threshold=self.config.percussive_veto_threshold,
+            bird_veto_threshold=self.config.bird_veto_threshold,
+            detection_cooldown_frames=self.config.detection_cooldown_frames,
             text_embeddings_cached=True,
             num_cached_labels=len(self._all_labels),
         )
@@ -307,10 +337,19 @@ class CLAPDetector:
         )
         percussive_detected = max_percussive_score >= self.config.percussive_veto_threshold
 
+        # Check for bird veto - if any bird label is high, don't trigger bark
+        # Birds are commonly misclassified as dog barks
+        max_bird_score = max(
+            label_scores.get(label, 0.0)
+            for label in self.config.bird_labels
+        )
+        bird_detected = max_bird_score >= self.config.bird_veto_threshold
+
         # Check confidence margin - bark must beat best non-bark by margin
         non_bark_labels = (
             self.config.speech_labels +
             self.config.percussive_labels +
+            self.config.bird_labels +
             self.config.other_labels
         )
         best_non_bark_score = max(
@@ -324,33 +363,38 @@ class CLAPDetector:
         )
         margin_met = (max_positive_score - best_non_bark_score) >= self.config.confidence_margin
 
-        # Apply detection logic with speech, percussive veto, and margin check
+        # Apply detection logic with speech, percussive, bird veto, and margin check
         # This is the "raw" detection before rolling window confirmation
         raw_detection = (
             bark_prob >= self.config.threshold
             and not speech_detected
             and not percussive_detected
+            and not bird_detected
             and margin_met
         )
 
         # Reset rolling window on strong non-bark detection
-        # This prevents carryover from previous barks when user is clearly typing or speaking
+        # This prevents carryover from previous barks when user is clearly typing, speaking, or birds
         # Threshold is lower than veto threshold to ensure window gets reset on clear non-bark sounds
         strong_non_bark_threshold = 0.35
         should_reset_window = (
             max_percussive_score >= strong_non_bark_threshold
             or max_speech_score >= strong_non_bark_threshold
+            or max_bird_score >= strong_non_bark_threshold
         )
         if should_reset_window and any(self._detection_window):
-            reset_reason = (
-                "percussive" if max_percussive_score >= strong_non_bark_threshold
-                else "speech"
-            )
+            if max_percussive_score >= strong_non_bark_threshold:
+                reset_reason = "percussive"
+            elif max_speech_score >= strong_non_bark_threshold:
+                reset_reason = "speech"
+            else:
+                reset_reason = "bird"
             logger.debug(
                 "rolling_window_reset_by_non_bark",
                 reason=reset_reason,
                 percussive_score=f"{max_percussive_score:.3f}",
                 speech_score=f"{max_speech_score:.3f}",
+                bird_score=f"{max_bird_score:.3f}",
                 previous_window=list(self._detection_window),
             )
             self._detection_window.clear()
@@ -358,7 +402,40 @@ class CLAPDetector:
         # Add to rolling window and check for confirmation
         self._detection_window.append(raw_detection)
         positive_count = sum(self._detection_window)
-        is_barking = positive_count >= self.config.rolling_window_min_positives
+
+        # High confidence detections bypass rolling window (bark_prob > 0.8 and raw passed all checks)
+        # This ensures strong/brief barks aren't missed by rolling window smoothing
+        high_confidence_bypass = raw_detection and bark_prob >= 0.8
+        is_barking = (
+            positive_count >= self.config.rolling_window_min_positives
+            or high_confidence_bypass
+        )
+
+        # Apply cooldown to prevent rapid-fire detections from the SAME sound
+        # High confidence detections (new distinct barks) bypass cooldown
+        if is_barking:
+            if self._cooldown_counter > 0 and not high_confidence_bypass:
+                # Still in cooldown and not high confidence - suppress this one
+                logger.debug(
+                    "bark_suppressed_by_cooldown",
+                    cooldown_remaining=self._cooldown_counter,
+                    bark_prob=f"{bark_prob:.3f}",
+                )
+                is_barking = False
+            else:
+                # Either no cooldown or high confidence - this is a valid bark
+                # Reset/start cooldown
+                self._cooldown_counter = self.config.detection_cooldown_frames
+                if high_confidence_bypass:
+                    logger.debug(
+                        "high_confidence_bark_detected",
+                        bark_prob=f"{bark_prob:.3f}",
+                        bypassed_cooldown=self._cooldown_counter > 0,
+                    )
+        else:
+            # Decrement cooldown counter each frame when not barking
+            if self._cooldown_counter > 0:
+                self._cooldown_counter -= 1
 
         # Log when speech veto is applied
         if bark_prob >= self.config.threshold and speech_detected:
@@ -388,11 +465,31 @@ class CLAPDetector:
                 threshold=self.config.percussive_veto_threshold,
             )
 
+        # Log when bird veto is applied
+        if (
+            bark_prob >= self.config.threshold
+            and bird_detected
+            and not speech_detected
+            and not percussive_detected
+        ):
+            top_bird = max(
+                ((label, label_scores.get(label, 0.0)) for label in self.config.bird_labels),
+                key=lambda x: x[1],
+            )
+            logger.debug(
+                "bark_vetoed_by_bird",
+                bark_prob=f"{bark_prob:.3f}",
+                bird_label=top_bird[0],
+                bird_score=f"{top_bird[1]:.3f}",
+                threshold=self.config.bird_veto_threshold,
+            )
+
         # Log when margin check fails
         if (
             bark_prob >= self.config.threshold
             and not speech_detected
             and not percussive_detected
+            and not bird_detected
             and not margin_met
         ):
             logger.debug(
