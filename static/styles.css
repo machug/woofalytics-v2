@@ -64,6 +64,43 @@ body {
     line-height: 1.5;
     -webkit-font-smoothing: antialiased;
     -moz-osx-font-smoothing: grayscale;
+    position: relative;
+}
+
+/* NASA Mission Control - Animated Gradient Background */
+body::before {
+    content: '';
+    position: fixed;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    background:
+        radial-gradient(ellipse at 20% 20%, rgba(20, 184, 166, 0.08) 0%, transparent 50%),
+        radial-gradient(ellipse at 80% 80%, rgba(245, 158, 11, 0.06) 0%, transparent 50%),
+        radial-gradient(ellipse at 50% 50%, rgba(248, 81, 73, 0.04) 0%, transparent 60%);
+    animation: gradientShift 20s ease-in-out infinite;
+    pointer-events: none;
+    z-index: -1;
+}
+
+@keyframes gradientShift {
+    0%, 100% {
+        background-position: 0% 0%, 100% 100%, 50% 50%;
+        opacity: 1;
+    }
+    25% {
+        background-position: 100% 0%, 0% 100%, 50% 0%;
+        opacity: 0.8;
+    }
+    50% {
+        background-position: 100% 100%, 0% 0%, 0% 50%;
+        opacity: 1;
+    }
+    75% {
+        background-position: 0% 100%, 100% 0%, 100% 50%;
+        opacity: 0.9;
+    }
 }
 
 /* App Container */
@@ -110,11 +147,19 @@ body {
     align-items: center;
     gap: var(--space-sm);
     padding: var(--space-sm) var(--space-md);
-    background: var(--bg-surface);
+    background: rgba(22, 27, 34, 0.7);
     border: 1px solid var(--border-default);
     border-radius: var(--radius-full);
     font-size: 0.875rem;
     font-weight: 500;
+}
+
+@supports (backdrop-filter: blur(20px)) {
+    .status-badge {
+        background: rgba(22, 27, 34, 0.5);
+        backdrop-filter: blur(20px) saturate(180%);
+        -webkit-backdrop-filter: blur(20px) saturate(180%);
+    }
 }
 
 .status-dot {
@@ -148,13 +193,47 @@ body {
     flex: 1;
 }
 
-/* Panel Base */
+/* Panel Base - NASA Mission Control Glassmorphism */
 .panel {
-    background: var(--bg-surface);
+    background: rgba(22, 27, 34, 0.7);
     border: 1px solid var(--border-default);
     border-radius: var(--radius-lg);
     padding: var(--space-lg);
-    transition: border-color var(--transition-base), box-shadow var(--transition-base);
+    transition: border-color var(--transition-base), box-shadow var(--transition-base), transform var(--transition-base);
+    position: relative;
+    overflow: hidden;
+}
+
+/* Glassmorphism with progressive enhancement */
+@supports (backdrop-filter: blur(20px)) {
+    .panel {
+        background: rgba(22, 27, 34, 0.6);
+        backdrop-filter: blur(20px) saturate(180%);
+        -webkit-backdrop-filter: blur(20px) saturate(180%);
+    }
+}
+
+/* Panel glow effect on hover */
+.panel::before {
+    content: '';
+    position: absolute;
+    top: 0;
+    left: 0;
+    right: 0;
+    height: 1px;
+    background: linear-gradient(90deg, transparent, rgba(20, 184, 166, 0.4), transparent);
+    opacity: 0;
+    transition: opacity var(--transition-base);
+}
+
+.panel:hover::before {
+    opacity: 1;
+}
+
+.panel:hover {
+    transform: translateY(-2px);
+    border-color: rgba(20, 184, 166, 0.3);
+    box-shadow: 0 8px 32px rgba(0, 0, 0, 0.3), 0 0 0 1px rgba(20, 184, 166, 0.1);
 }
 
 .panel-title {
@@ -875,4 +954,264 @@ body {
     .panel-stats {
         flex-wrap: wrap;
     }
+}
+
+/* =========================================
+   NASA Mission Control Telemetry Strip
+   ========================================= */
+
+.telemetry-strip {
+    position: fixed;
+    top: 0;
+    left: 0;
+    right: 0;
+    z-index: 1000;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: var(--space-sm) var(--space-lg);
+    background: rgba(13, 17, 23, 0.95);
+    border-bottom: 1px solid rgba(20, 184, 166, 0.3);
+    font-family: 'JetBrains Mono', 'Fira Code', 'SF Mono', Consolas, monospace;
+    box-shadow: 0 2px 20px rgba(0, 0, 0, 0.5), inset 0 -1px 0 rgba(20, 184, 166, 0.2);
+}
+
+@supports (backdrop-filter: blur(20px)) {
+    .telemetry-strip {
+        background: rgba(13, 17, 23, 0.85);
+        backdrop-filter: blur(20px) saturate(180%);
+        -webkit-backdrop-filter: blur(20px) saturate(180%);
+    }
+}
+
+/* Add space for the telemetry strip */
+body {
+    padding-top: 48px;
+}
+
+/* Mission Badge */
+.telemetry-mission {
+    display: flex;
+    align-items: center;
+    gap: var(--space-sm);
+}
+
+.mission-badge {
+    font-size: 0.7rem;
+    font-weight: 700;
+    letter-spacing: 0.15em;
+    color: var(--accent-amber);
+    padding: 2px 8px;
+    background: rgba(245, 158, 11, 0.15);
+    border: 1px solid rgba(245, 158, 11, 0.4);
+    border-radius: 2px;
+}
+
+.mission-callsign {
+    font-size: 0.65rem;
+    font-weight: 500;
+    letter-spacing: 0.1em;
+    color: var(--text-muted);
+    text-transform: uppercase;
+}
+
+/* Mission Clock */
+.telemetry-clock {
+    display: flex;
+    align-items: baseline;
+    gap: 4px;
+}
+
+.clock-label {
+    font-size: 0.7rem;
+    font-weight: 600;
+    color: var(--accent-teal);
+    letter-spacing: 0.05em;
+}
+
+.clock-value {
+    font-size: 1.1rem;
+    font-weight: 700;
+    color: var(--text-primary);
+    letter-spacing: 0.05em;
+    font-variant-numeric: tabular-nums;
+    text-shadow: 0 0 10px rgba(20, 184, 166, 0.5);
+}
+
+/* Status LEDs */
+.telemetry-status {
+    display: flex;
+    align-items: center;
+    gap: var(--space-md);
+}
+
+.status-led {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+}
+
+.led {
+    width: 8px;
+    height: 8px;
+    border-radius: 50%;
+    background: var(--text-muted);
+    box-shadow: inset 0 1px 2px rgba(0, 0, 0, 0.5);
+    transition: all var(--transition-fast);
+}
+
+.led-label {
+    font-size: 0.6rem;
+    font-weight: 600;
+    letter-spacing: 0.1em;
+    color: var(--text-muted);
+    text-transform: uppercase;
+}
+
+/* LED States */
+.status-led.active .led {
+    background: var(--accent-teal);
+    box-shadow: 0 0 8px var(--accent-teal), 0 0 16px rgba(20, 184, 166, 0.4);
+}
+
+.status-led.active .led-label {
+    color: var(--accent-teal);
+}
+
+.status-led.warning .led {
+    background: var(--accent-amber);
+    box-shadow: 0 0 8px var(--accent-amber), 0 0 16px rgba(245, 158, 11, 0.4);
+    animation: ledBlink 0.5s ease-in-out infinite;
+}
+
+.status-led.warning .led-label {
+    color: var(--accent-amber);
+}
+
+.status-led.alert .led {
+    background: var(--accent-coral);
+    box-shadow: 0 0 8px var(--accent-coral), 0 0 16px rgba(248, 81, 73, 0.5);
+    animation: ledBlink 0.3s ease-in-out infinite;
+}
+
+.status-led.alert .led-label {
+    color: var(--accent-coral);
+}
+
+@keyframes ledBlink {
+    0%, 100% { opacity: 1; }
+    50% { opacity: 0.4; }
+}
+
+/* Coordinates Display */
+.telemetry-coordinates {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+}
+
+.coord-label {
+    font-size: 0.55rem;
+    font-weight: 600;
+    letter-spacing: 0.1em;
+    color: var(--text-muted);
+}
+
+.coord-value {
+    font-size: 0.75rem;
+    font-weight: 500;
+    color: var(--text-secondary);
+    font-variant-numeric: tabular-nums;
+    letter-spacing: 0.02em;
+}
+
+/* Responsive telemetry strip */
+@media (max-width: 768px) {
+    .telemetry-strip {
+        padding: var(--space-xs) var(--space-md);
+        gap: var(--space-sm);
+    }
+
+    .mission-callsign,
+    .telemetry-coordinates {
+        display: none;
+    }
+
+    .clock-value {
+        font-size: 0.9rem;
+    }
+}
+
+@media (max-width: 480px) {
+    .telemetry-mission {
+        display: none;
+    }
+}
+
+/* =========================================
+   Waveform Visualizer
+   ========================================= */
+
+.waveform-container {
+    position: relative;
+    margin-top: var(--space-md);
+    height: 80px;
+    background: var(--bg-overlay);
+    border-radius: var(--radius-sm);
+    overflow: hidden;
+    border: 1px solid var(--border-muted);
+}
+
+.waveform-canvas {
+    width: 100%;
+    height: 100%;
+    display: block;
+}
+
+.waveform-overlay {
+    position: absolute;
+    top: 4px;
+    left: 8px;
+    pointer-events: none;
+}
+
+.waveform-label {
+    font-size: 0.55rem;
+    font-weight: 600;
+    letter-spacing: 0.1em;
+    color: var(--text-muted);
+    text-transform: uppercase;
+    opacity: 0.6;
+}
+
+/* Scanline effect for retro CRT look */
+.waveform-container::after {
+    content: '';
+    position: absolute;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    background: repeating-linear-gradient(
+        0deg,
+        transparent,
+        transparent 2px,
+        rgba(0, 0, 0, 0.1) 2px,
+        rgba(0, 0, 0, 0.1) 4px
+    );
+    pointer-events: none;
+}
+
+/* =========================================
+   Particle Explosion System
+   ========================================= */
+
+.particle-canvas {
+    position: absolute;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    pointer-events: none;
+    z-index: 10;
 }

@@ -1,5 +1,6 @@
 /**
  * Woofalytics - Real-time Bark Detection Dashboard
+ * NASA Mission Control Edition
  */
 
 class WoofalyticsApp {
@@ -15,6 +16,17 @@ class WoofalyticsApp {
         this.gaugeRadius = 54;
         this.gaugeCircumference = 2 * Math.PI * this.gaugeRadius;
 
+        // Mission Control state
+        this.missionStartTime = Date.now();
+        this.isBarkActive = false;
+        this.barkTimeout = null;
+
+        // Waveform visualizer
+        this.waveformVisualizer = null;
+
+        // Particle system
+        this.particleSystem = null;
+
         this.init();
     }
 
@@ -23,9 +35,78 @@ class WoofalyticsApp {
         this.connectAudioWebSocket();
         this.loadStatus();
         this.loadEvidence();
+        this.initMissionClock();
+        this.initGeolocation();
+        this.initWaveformVisualizer();
+        this.initParticleSystem();
 
         // Refresh status every 30 seconds
         setInterval(() => this.loadStatus(), 30000);
+    }
+
+    initWaveformVisualizer() {
+        this.waveformVisualizer = new WaveformVisualizer('waveform-canvas');
+    }
+
+    initParticleSystem() {
+        this.particleSystem = new ParticleSystem('particle-canvas');
+    }
+
+    // =========================================
+    // NASA Mission Control Telemetry
+    // =========================================
+
+    initMissionClock() {
+        // Update mission clock every 10ms for centisecond precision
+        setInterval(() => this.updateMissionClock(), 10);
+    }
+
+    updateMissionClock() {
+        const elapsed = Date.now() - this.missionStartTime;
+        const hours = Math.floor(elapsed / 3600000);
+        const minutes = Math.floor((elapsed % 3600000) / 60000);
+        const seconds = Math.floor((elapsed % 60000) / 1000);
+        const centiseconds = Math.floor((elapsed % 1000) / 10);
+
+        const clockValue = document.getElementById('mission-clock');
+        if (clockValue) {
+            clockValue.textContent =
+                `${hours.toString().padStart(2, '0')}:` +
+                `${minutes.toString().padStart(2, '0')}:` +
+                `${seconds.toString().padStart(2, '0')}.` +
+                `${centiseconds.toString().padStart(2, '0')}`;
+        }
+    }
+
+    initGeolocation() {
+        // Try to get geolocation for the coordinates display
+        if ('geolocation' in navigator) {
+            navigator.geolocation.getCurrentPosition(
+                (position) => {
+                    const lat = position.coords.latitude;
+                    const lon = position.coords.longitude;
+                    const latEl = document.getElementById('coord-lat');
+                    const lonEl = document.getElementById('coord-lon');
+                    if (latEl && lonEl) {
+                        latEl.textContent = (lat >= 0 ? '+' : '') + lat.toFixed(4);
+                        lonEl.textContent = (lon >= 0 ? '+' : '') + lon.toFixed(4);
+                    }
+                },
+                () => {
+                    // Geolocation denied or unavailable - leave defaults
+                }
+            );
+        }
+    }
+
+    updateLedStatus(ledId, state) {
+        const led = document.getElementById(ledId);
+        if (led) {
+            led.classList.remove('active', 'warning', 'alert');
+            if (state) {
+                led.classList.add(state);
+            }
+        }
     }
 
     // WebSocket Connection
@@ -38,6 +119,7 @@ class WoofalyticsApp {
         this.ws.onopen = () => {
             console.log('WebSocket connected');
             this.updateStatus('connected', 'Connected');
+            this.updateLedStatus('led-ws', 'active');
             this.reconnectAttempts = 0;
         };
 
@@ -49,12 +131,14 @@ class WoofalyticsApp {
         this.ws.onclose = () => {
             console.log('WebSocket disconnected');
             this.updateStatus('disconnected', 'Disconnected');
+            this.updateLedStatus('led-ws', 'warning');
             this.scheduleReconnect();
         };
 
         this.ws.onerror = (error) => {
             console.error('WebSocket error:', error);
             this.updateStatus('error', 'Error');
+            this.updateLedStatus('led-ws', 'alert');
         };
     }
 
@@ -68,6 +152,14 @@ class WoofalyticsApp {
             const data = JSON.parse(event.data);
             if (data.type === 'audio_level') {
                 this.updateAudioLevel(data.data.level, data.data.peak);
+                // Update MIC LED based on audio level
+                if (data.data.level > 0.01) {
+                    this.updateLedStatus('led-mic', 'active');
+                }
+                // Feed sample to waveform visualizer
+                if (this.waveformVisualizer) {
+                    this.waveformVisualizer.addSample(data.data.level);
+                }
             }
         };
 
@@ -138,6 +230,27 @@ class WoofalyticsApp {
                     </svg>
                 `;
                 barkText.textContent = 'BARK DETECTED!';
+
+                // Update BARK LED to alert state
+                this.updateLedStatus('led-bark', 'alert');
+                this.isBarkActive = true;
+
+                // Trigger particle explosion!
+                if (this.particleSystem) {
+                    this.particleSystem.emit(35);
+                }
+
+                // Clear any existing timeout
+                if (this.barkTimeout) {
+                    clearTimeout(this.barkTimeout);
+                }
+
+                // Reset bark LED after 2 seconds of no barking
+                this.barkTimeout = setTimeout(() => {
+                    if (!this.isBarkActive) {
+                        this.updateLedStatus('led-bark', null);
+                    }
+                }, 2000);
             } else {
                 barkPanel.classList.remove('barking');
                 barkIcon.innerHTML = `
@@ -148,6 +261,7 @@ class WoofalyticsApp {
                     </svg>
                 `;
                 barkText.textContent = 'Monitoring';
+                this.isBarkActive = false;
             }
         }
 
@@ -351,6 +465,349 @@ class WoofalyticsApp {
 // Global function for refresh button
 function loadEvidence() {
     window.app.loadEvidence();
+}
+
+// =========================================
+// Particle System Class
+// =========================================
+
+class Particle {
+    constructor(x, y, options = {}) {
+        this.x = x;
+        this.y = y;
+
+        // Random velocity in all directions
+        const angle = Math.random() * Math.PI * 2;
+        const speed = options.speed || (2 + Math.random() * 4);
+        this.vx = Math.cos(angle) * speed;
+        this.vy = Math.sin(angle) * speed;
+
+        // Gravity
+        this.gravity = options.gravity || 0.1;
+
+        // Size and decay
+        this.size = options.size || (3 + Math.random() * 4);
+        this.life = 1.0;
+        this.decay = options.decay || (0.01 + Math.random() * 0.02);
+
+        // Color (coral/amber palette)
+        this.hue = options.hue || (15 + Math.random() * 30);  // Orange to coral range
+        this.saturation = 80 + Math.random() * 20;
+        this.lightness = 50 + Math.random() * 20;
+
+        // Is this a golden bone easter egg?
+        this.isBone = options.isBone || false;
+        this.rotation = Math.random() * Math.PI * 2;
+        this.rotationSpeed = (Math.random() - 0.5) * 0.3;
+    }
+
+    update() {
+        this.x += this.vx;
+        this.y += this.vy;
+        this.vy += this.gravity;
+        this.life -= this.decay;
+        this.rotation += this.rotationSpeed;
+
+        // Friction
+        this.vx *= 0.99;
+        this.vy *= 0.99;
+    }
+
+    draw(ctx) {
+        if (this.life <= 0) return;
+
+        ctx.save();
+        ctx.globalAlpha = this.life;
+
+        if (this.isBone) {
+            // Draw golden bone shape
+            ctx.translate(this.x, this.y);
+            ctx.rotate(this.rotation);
+            ctx.fillStyle = `hsl(45, 90%, ${60 + this.life * 20}%)`;
+            ctx.strokeStyle = `hsl(35, 80%, 40%)`;
+            ctx.lineWidth = 1;
+
+            // Bone shape - simplified
+            const boneSize = this.size * 2;
+            ctx.beginPath();
+            // Left knob
+            ctx.arc(-boneSize, 0, boneSize * 0.4, 0, Math.PI * 2);
+            ctx.fill();
+            // Right knob
+            ctx.beginPath();
+            ctx.arc(boneSize, 0, boneSize * 0.4, 0, Math.PI * 2);
+            ctx.fill();
+            // Shaft
+            ctx.fillRect(-boneSize, -boneSize * 0.2, boneSize * 2, boneSize * 0.4);
+        } else {
+            // Regular particle with glow
+            const gradient = ctx.createRadialGradient(this.x, this.y, 0, this.x, this.y, this.size * 2);
+            gradient.addColorStop(0, `hsla(${this.hue}, ${this.saturation}%, ${this.lightness}%, ${this.life})`);
+            gradient.addColorStop(0.5, `hsla(${this.hue}, ${this.saturation}%, ${this.lightness}%, ${this.life * 0.5})`);
+            gradient.addColorStop(1, 'transparent');
+
+            ctx.fillStyle = gradient;
+            ctx.beginPath();
+            ctx.arc(this.x, this.y, this.size * 2, 0, Math.PI * 2);
+            ctx.fill();
+
+            // Core
+            ctx.fillStyle = `hsla(${this.hue}, 100%, 80%, ${this.life})`;
+            ctx.beginPath();
+            ctx.arc(this.x, this.y, this.size * 0.5, 0, Math.PI * 2);
+            ctx.fill();
+        }
+
+        ctx.restore();
+    }
+
+    isAlive() {
+        return this.life > 0;
+    }
+}
+
+class ParticleSystem {
+    constructor(canvasId) {
+        this.canvas = document.getElementById(canvasId);
+        if (!this.canvas) return;
+
+        this.ctx = this.canvas.getContext('2d');
+        this.particles = [];
+        this.isAnimating = false;
+        this.barkCount = 0;  // Track barks for easter egg
+
+        this.resize();
+        window.addEventListener('resize', () => this.resize());
+    }
+
+    resize() {
+        if (!this.canvas) return;
+        const rect = this.canvas.parentElement.getBoundingClientRect();
+        this.canvas.width = rect.width * window.devicePixelRatio;
+        this.canvas.height = rect.height * window.devicePixelRatio;
+        this.ctx.scale(window.devicePixelRatio, window.devicePixelRatio);
+        this.width = rect.width;
+        this.height = rect.height;
+    }
+
+    emit(count = 30) {
+        if (!this.canvas) return;
+
+        // Center of the gauge
+        const centerX = this.width / 2;
+        const centerY = this.height / 2 - 20;  // Slightly above center for gauge
+
+        this.barkCount++;
+
+        // Easter egg: every 10th bark includes golden bones!
+        const includeBones = this.barkCount % 10 === 0;
+
+        for (let i = 0; i < count; i++) {
+            const isBone = includeBones && i < 5;  // 5 bones on easter egg
+            this.particles.push(new Particle(centerX, centerY, {
+                speed: isBone ? 3 + Math.random() * 2 : 2 + Math.random() * 4,
+                gravity: isBone ? 0.15 : 0.1,
+                decay: isBone ? 0.008 : 0.01 + Math.random() * 0.02,
+                size: isBone ? 5 + Math.random() * 3 : 3 + Math.random() * 4,
+                isBone: isBone
+            }));
+        }
+
+        // Add a central flash
+        this.particles.push(new Particle(centerX, centerY, {
+            speed: 0,
+            gravity: 0,
+            decay: 0.05,
+            size: 20,
+            hue: 45
+        }));
+
+        if (!this.isAnimating) {
+            this.isAnimating = true;
+            this.animate();
+        }
+    }
+
+    animate() {
+        if (!this.canvas) return;
+
+        // Clear canvas
+        this.ctx.clearRect(0, 0, this.width, this.height);
+
+        // Update and draw particles
+        this.particles = this.particles.filter(p => {
+            p.update();
+            p.draw(this.ctx);
+            return p.isAlive();
+        });
+
+        if (this.particles.length > 0) {
+            requestAnimationFrame(() => this.animate());
+        } else {
+            this.isAnimating = false;
+        }
+    }
+}
+
+// =========================================
+// Waveform Visualizer Class
+// =========================================
+
+class WaveformVisualizer {
+    constructor(canvasId) {
+        this.canvas = document.getElementById(canvasId);
+        if (!this.canvas) return;
+
+        this.ctx = this.canvas.getContext('2d');
+        this.samples = [];
+        this.maxSamples = 200;  // Number of samples to display
+        this.phosphorTrails = [];  // For persistence effect
+        this.maxTrails = 3;
+
+        // Colors for gradient based on amplitude
+        this.colorLow = { r: 20, g: 184, b: 166 };      // Teal
+        this.colorHigh = { r: 248, g: 81, b: 73 };      // Coral
+
+        this.resize();
+        window.addEventListener('resize', () => this.resize());
+
+        // Start animation loop
+        this.animate();
+    }
+
+    resize() {
+        if (!this.canvas) return;
+        const rect = this.canvas.parentElement.getBoundingClientRect();
+        this.canvas.width = rect.width * window.devicePixelRatio;
+        this.canvas.height = rect.height * window.devicePixelRatio;
+        this.ctx.scale(window.devicePixelRatio, window.devicePixelRatio);
+        this.width = rect.width;
+        this.height = rect.height;
+    }
+
+    addSample(level) {
+        this.samples.push(level);
+        if (this.samples.length > this.maxSamples) {
+            this.samples.shift();
+        }
+    }
+
+    interpolateColor(t) {
+        // t is 0-1, interpolate between teal and coral
+        const r = Math.round(this.colorLow.r + (this.colorHigh.r - this.colorLow.r) * t);
+        const g = Math.round(this.colorLow.g + (this.colorHigh.g - this.colorLow.g) * t);
+        const b = Math.round(this.colorLow.b + (this.colorHigh.b - this.colorLow.b) * t);
+        return `rgb(${r}, ${g}, ${b})`;
+    }
+
+    animate() {
+        if (!this.canvas) return;
+
+        // Clear with slight fade for phosphor persistence effect
+        this.ctx.fillStyle = 'rgba(33, 38, 45, 0.3)';
+        this.ctx.fillRect(0, 0, this.width, this.height);
+
+        // Draw grid lines
+        this.ctx.strokeStyle = 'rgba(125, 133, 144, 0.1)';
+        this.ctx.lineWidth = 1;
+
+        // Horizontal center line
+        this.ctx.beginPath();
+        this.ctx.moveTo(0, this.height / 2);
+        this.ctx.lineTo(this.width, this.height / 2);
+        this.ctx.stroke();
+
+        // Vertical grid lines
+        const gridSpacing = this.width / 10;
+        for (let x = gridSpacing; x < this.width; x += gridSpacing) {
+            this.ctx.beginPath();
+            this.ctx.moveTo(x, 0);
+            this.ctx.lineTo(x, this.height);
+            this.ctx.stroke();
+        }
+
+        if (this.samples.length < 2) {
+            requestAnimationFrame(() => this.animate());
+            return;
+        }
+
+        // Draw waveform with glow effect
+        const stepX = this.width / (this.maxSamples - 1);
+        const centerY = this.height / 2;
+        const amplitude = this.height * 0.4;
+
+        // Draw glow layer
+        this.ctx.lineWidth = 6;
+        this.ctx.lineCap = 'round';
+        this.ctx.lineJoin = 'round';
+
+        this.ctx.beginPath();
+        for (let i = 0; i < this.samples.length; i++) {
+            const x = i * stepX;
+            const level = this.samples[i];
+            const y = centerY - (level * amplitude * 2 - amplitude);
+
+            if (i === 0) {
+                this.ctx.moveTo(x, y);
+            } else {
+                this.ctx.lineTo(x, y);
+            }
+        }
+
+        // Glow effect
+        const avgLevel = this.samples.reduce((a, b) => a + b, 0) / this.samples.length;
+        const glowColor = this.interpolateColor(avgLevel);
+        this.ctx.strokeStyle = glowColor.replace('rgb', 'rgba').replace(')', ', 0.3)');
+        this.ctx.stroke();
+
+        // Draw main waveform line
+        this.ctx.lineWidth = 2;
+        this.ctx.beginPath();
+
+        for (let i = 0; i < this.samples.length; i++) {
+            const x = i * stepX;
+            const level = this.samples[i];
+            const y = centerY - (level * amplitude * 2 - amplitude);
+
+            if (i === 0) {
+                this.ctx.moveTo(x, y);
+            } else {
+                this.ctx.lineTo(x, y);
+            }
+        }
+
+        // Create gradient based on average level
+        const gradient = this.ctx.createLinearGradient(0, 0, this.width, 0);
+        gradient.addColorStop(0, this.interpolateColor(0.2));
+        gradient.addColorStop(0.5, this.interpolateColor(avgLevel));
+        gradient.addColorStop(1, this.interpolateColor(Math.min(avgLevel * 1.5, 1)));
+
+        this.ctx.strokeStyle = gradient;
+        this.ctx.stroke();
+
+        // Draw leading edge dot
+        if (this.samples.length > 0) {
+            const lastX = (this.samples.length - 1) * stepX;
+            const lastLevel = this.samples[this.samples.length - 1];
+            const lastY = centerY - (lastLevel * amplitude * 2 - amplitude);
+
+            this.ctx.beginPath();
+            this.ctx.arc(lastX, lastY, 4, 0, Math.PI * 2);
+            this.ctx.fillStyle = this.interpolateColor(lastLevel);
+            this.ctx.fill();
+
+            // Add glow to the dot
+            this.ctx.beginPath();
+            this.ctx.arc(lastX, lastY, 8, 0, Math.PI * 2);
+            const dotGlow = this.ctx.createRadialGradient(lastX, lastY, 0, lastX, lastY, 8);
+            dotGlow.addColorStop(0, this.interpolateColor(lastLevel).replace('rgb', 'rgba').replace(')', ', 0.5)'));
+            dotGlow.addColorStop(1, 'transparent');
+            this.ctx.fillStyle = dotGlow;
+            this.ctx.fill();
+        }
+
+        requestAnimationFrame(() => this.animate());
+    }
 }
 
 // Initialize app when DOM is ready
