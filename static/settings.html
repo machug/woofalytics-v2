@@ -26,6 +26,13 @@
             max-width: 900px;
             margin: 0 auto;
             padding: var(--space-lg);
+            min-height: calc(100vh - 48px);
+            display: flex;
+            flex-direction: column;
+        }
+
+        .settings-content {
+            flex: 1;
         }
 
         .page-header {
@@ -415,6 +422,7 @@
 </head>
 <body class="settings-page">
     <div class="settings-container">
+        <div class="settings-content">
         <!-- Page Header -->
         <div class="page-header">
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
@@ -517,6 +525,7 @@
                 </div>
                 <div class="result-message" id="fingerprintsResult"></div>
             </div>
+        </div>
         </div>
 
         <!-- Footer -->
