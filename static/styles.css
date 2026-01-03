@@ -64,6 +64,43 @@ body {
     line-height: 1.5;
     -webkit-font-smoothing: antialiased;
     -moz-osx-font-smoothing: grayscale;
+    position: relative;
+}
+
+/* NASA Mission Control - Animated Gradient Background */
+body::before {
+    content: '';
+    position: fixed;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    background:
+        radial-gradient(ellipse at 20% 20%, rgba(20, 184, 166, 0.08) 0%, transparent 50%),
+        radial-gradient(ellipse at 80% 80%, rgba(245, 158, 11, 0.06) 0%, transparent 50%),
+        radial-gradient(ellipse at 50% 50%, rgba(248, 81, 73, 0.04) 0%, transparent 60%);
+    animation: gradientShift 20s ease-in-out infinite;
+    pointer-events: none;
+    z-index: -1;
+}
+
+@keyframes gradientShift {
+    0%, 100% {
+        background-position: 0% 0%, 100% 100%, 50% 50%;
+        opacity: 1;
+    }
+    25% {
+        background-position: 100% 0%, 0% 100%, 50% 0%;
+        opacity: 0.8;
+    }
+    50% {
+        background-position: 100% 100%, 0% 0%, 0% 50%;
+        opacity: 1;
+    }
+    75% {
+        background-position: 0% 100%, 100% 0%, 100% 50%;
+        opacity: 0.9;
+    }
 }
 
 /* App Container */
@@ -110,11 +147,19 @@ body {
     align-items: center;
     gap: var(--space-sm);
     padding: var(--space-sm) var(--space-md);
-    background: var(--bg-surface);
+    background: rgba(22, 27, 34, 0.7);
     border: 1px solid var(--border-default);
     border-radius: var(--radius-full);
     font-size: 0.875rem;
     font-weight: 500;
+}
+
+@supports (backdrop-filter: blur(20px)) {
+    .status-badge {
+        background: rgba(22, 27, 34, 0.5);
+        backdrop-filter: blur(20px) saturate(180%);
+        -webkit-backdrop-filter: blur(20px) saturate(180%);
+    }
 }
 
 .status-dot {
@@ -148,13 +193,47 @@ body {
     flex: 1;
 }
 
-/* Panel Base */
+/* Panel Base - NASA Mission Control Glassmorphism */
 .panel {
-    background: var(--bg-surface);
+    background: rgba(22, 27, 34, 0.7);
     border: 1px solid var(--border-default);
     border-radius: var(--radius-lg);
     padding: var(--space-lg);
-    transition: border-color var(--transition-base), box-shadow var(--transition-base);
+    transition: border-color var(--transition-base), box-shadow var(--transition-base), transform var(--transition-base);
+    position: relative;
+    overflow: hidden;
+}
+
+/* Glassmorphism with progressive enhancement */
+@supports (backdrop-filter: blur(20px)) {
+    .panel {
+        background: rgba(22, 27, 34, 0.6);
+        backdrop-filter: blur(20px) saturate(180%);
+        -webkit-backdrop-filter: blur(20px) saturate(180%);
+    }
+}
+
+/* Panel glow effect on hover */
+.panel::before {
+    content: '';
+    position: absolute;
+    top: 0;
+    left: 0;
+    right: 0;
+    height: 1px;
+    background: linear-gradient(90deg, transparent, rgba(20, 184, 166, 0.4), transparent);
+    opacity: 0;
+    transition: opacity var(--transition-base);
+}
+
+.panel:hover::before {
+    opacity: 1;
+}
+
+.panel:hover {
+    transform: translateY(-2px);
+    border-color: rgba(20, 184, 166, 0.3);
+    box-shadow: 0 8px 32px rgba(0, 0, 0, 0.3), 0 0 0 1px rgba(20, 184, 166, 0.1);
 }
 
 .panel-title {
