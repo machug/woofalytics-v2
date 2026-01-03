@@ -39,6 +39,15 @@ class CLAPConfig:
         "woman talking",
     ])
 
+    # Percussive/keyboard labels that should veto bark detection
+    percussive_labels: list[str] = field(default_factory=lambda: [
+        "This is a sound of keyboard typing and clicking",
+        "This is a sound of mechanical keyboard switches",
+        "This is a sound of mouse clicking",
+        "This is a sound of knocking on a surface",
+        "This is a sound of tapping on a table",
+    ])
+
     # Other non-bark sounds
     other_labels: list[str] = field(default_factory=lambda: [
         "silence",
