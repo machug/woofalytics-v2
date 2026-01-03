@@ -54,41 +54,41 @@ This project was created with specific intentions:
 ```
 ┌───────────────────────────────────────────────────────────────┐
 │                      FastAPI Application                      │
-│  ┌────────────┐  ┌────────────┐  ┌────────────────────────┐  │
-│  │  REST API  │  │  WebSocket │  │     Static Files       │  │
-│  │  /api/*    │  │  /ws/bark  │  │     /static/*          │  │
-│  │            │  │  /ws/audio │  │                        │  │
-│  └─────┬──────┘  └─────┬──────┘  └────────────────────────┘  │
+│  ┌────────────┐  ┌────────────┐  ┌────────────────────────┐   │
+│  │  REST API  │  │  WebSocket │  │     Static Files       │   │
+│  │  /api/*    │  │  /ws/bark  │  │     /static/*          │   │
+│  │            │  │  /ws/audio │  │                        │   │
+│  └─────┬──────┘  └─────┬──────┘  └────────────────────────┘   │
 │        │               │                                      │
 │        └───────┬───────┘                                      │
 │                ▼                                              │
-│  ┌─────────────────────────────────────────────────────────┐ │
-│  │                     BarkDetector                        │ │
-│  │  - Coordinates audio capture, inference, callbacks      │ │
-│  │  - Runs inference loop every 500ms (CLAP) or 80ms (MLP) │ │
-│  │  - Produces BarkEvent objects                           │ │
-│  └─────────────────────────────────────────────────────────┘ │
+│  ┌─────────────────────────────────────────────────────────┐  │
+│  │                     BarkDetector                        │  │
+│  │  - Coordinates audio capture, inference, callbacks      │  │
+│  │  - Runs inference loop every 500ms (CLAP) or 80ms (MLP) │  │
+│  │  - Produces BarkEvent objects                           │  │
+│  └─────────────────────────────────────────────────────────┘  │
 │        │                │                   │                 │
 │        ▼                ▼                   ▼                 │
-│  ┌───────────┐  ┌─────────────┐  ┌─────────────────────────┐ │
-│  │ Audio     │  │  VAD Gate   │  │     DOA Estimator       │ │
-│  │ Capture   │  │ (fast skip) │  │  (Bartlett/Capon/MEM)   │ │
-│  └───────────┘  └──────┬──────┘  └─────────────────────────┘ │
+│  ┌───────────┐  ┌─────────────┐  ┌─────────────────────────┐  │
+│  │ Audio     │  │  VAD Gate   │  │     DOA Estimator       │  │
+│  │ Capture   │  │ (fast skip) │  │  (Bartlett/Capon/MEM)   │  │
+│  └───────────┘  └──────┬──────┘  └─────────────────────────┘  │
 │                        ▼                                      │
-│  ┌─────────────────────────────────────────────────────────┐ │
-│  │                    CLAP Detector                        │ │
-│  │  - Zero-shot audio classification (laion/clap-htsat)    │ │
-│  │  - Multi-label veto (speech, percussion, birds)         │ │
-│  │  - Rolling window + high-confidence bypass              │ │
-│  └─────────────────────────────────────────────────────────┘ │
+│  ┌─────────────────────────────────────────────────────────┐  │
+│  │                    CLAP Detector                        │  │
+│  │  - Zero-shot audio classification (laion/clap-htsat)    │  │
+│  │  - Multi-label veto (speech, percussion, birds)         │  │
+│  │  - Rolling window + high-confidence bypass              │  │ 
+│  └─────────────────────────────────────────────────────────┘  │
 │        │                                                      │
 │        ▼                                                      │
-│  ┌─────────────────────────────────────────────────────────┐ │
-│  │                   EvidenceStorage                       │ │
-│  │  - Records WAV clips on bark detection                  │ │
-│  │  - Creates JSON metadata sidecars                       │ │
-│  │  - Maintains evidence index                             │ │
-│  └─────────────────────────────────────────────────────────┘ │
+│  ┌─────────────────────────────────────────────────────────┐  │
+│  │                   EvidenceStorage                       │  │
+│  │  - Records WAV clips on bark detection                  │  │
+│  │  - Creates JSON metadata sidecars                       │  │
+│  │  - Maintains evidence index                             │  │
+│  └─────────────────────────────────────────────────────────┘  │
 └───────────────────────────────────────────────────────────────┘
 ```
 
