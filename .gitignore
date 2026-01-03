@@ -45,3 +45,8 @@ Thumbs.db
 
 # Claude Code
 .beads/
+
+.playwrite-mcp/
+.ruff_cache/
+# Playwright MCP
+.playwright-mcp/
