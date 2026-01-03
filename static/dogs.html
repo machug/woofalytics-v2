@@ -960,16 +960,17 @@
             this.init();
         }
 
-        init() {
-            this.loadDogs();
-            this.loadUntaggedBarks();
+        async init() {
+            // Load dogs first, then untagged barks (which needs dogs for dropdown)
+            await this.loadDogs();
+            await this.loadUntaggedBarks();
             this.loadStats();
             this.setupEventListeners();
 
             // Refresh every 30 seconds
-            setInterval(() => {
-                this.loadDogs();
-                this.loadUntaggedBarks();
+            setInterval(async () => {
+                await this.loadDogs();
+                await this.loadUntaggedBarks();
                 this.loadStats();
             }, 30000);
         }
