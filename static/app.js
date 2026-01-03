@@ -24,6 +24,9 @@ class WoofalyticsApp {
         // Waveform visualizer
         this.waveformVisualizer = null;
 
+        // Particle system
+        this.particleSystem = null;
+
         this.init();
     }
 
@@ -35,6 +38,7 @@ class WoofalyticsApp {
         this.initMissionClock();
         this.initGeolocation();
         this.initWaveformVisualizer();
+        this.initParticleSystem();
 
         // Refresh status every 30 seconds
         setInterval(() => this.loadStatus(), 30000);
@@ -42,6 +46,10 @@ class WoofalyticsApp {
 
     initWaveformVisualizer() {
         this.waveformVisualizer = new WaveformVisualizer('waveform-canvas');
+    }
+
+    initParticleSystem() {
+        this.particleSystem = new ParticleSystem('particle-canvas');
     }
 
     // =========================================
@@ -226,6 +234,11 @@ class WoofalyticsApp {
                 // Update BARK LED to alert state
                 this.updateLedStatus('led-bark', 'alert');
                 this.isBarkActive = true;
+
+                // Trigger particle explosion!
+                if (this.particleSystem) {
+                    this.particleSystem.emit(35);
+                }
 
                 // Clear any existing timeout
                 if (this.barkTimeout) {
@@ -452,6 +465,188 @@ class WoofalyticsApp {
 // Global function for refresh button
 function loadEvidence() {
     window.app.loadEvidence();
+}
+
+// =========================================
+// Particle System Class
+// =========================================
+
+class Particle {
+    constructor(x, y, options = {}) {
+        this.x = x;
+        this.y = y;
+
+        // Random velocity in all directions
+        const angle = Math.random() * Math.PI * 2;
+        const speed = options.speed || (2 + Math.random() * 4);
+        this.vx = Math.cos(angle) * speed;
+        this.vy = Math.sin(angle) * speed;
+
+        // Gravity
+        this.gravity = options.gravity || 0.1;
+
+        // Size and decay
+        this.size = options.size || (3 + Math.random() * 4);
+        this.life = 1.0;
+        this.decay = options.decay || (0.01 + Math.random() * 0.02);
+
+        // Color (coral/amber palette)
+        this.hue = options.hue || (15 + Math.random() * 30);  // Orange to coral range
+        this.saturation = 80 + Math.random() * 20;
+        this.lightness = 50 + Math.random() * 20;
+
+        // Is this a golden bone easter egg?
+        this.isBone = options.isBone || false;
+        this.rotation = Math.random() * Math.PI * 2;
+        this.rotationSpeed = (Math.random() - 0.5) * 0.3;
+    }
+
+    update() {
+        this.x += this.vx;
+        this.y += this.vy;
+        this.vy += this.gravity;
+        this.life -= this.decay;
+        this.rotation += this.rotationSpeed;
+
+        // Friction
+        this.vx *= 0.99;
+        this.vy *= 0.99;
+    }
+
+    draw(ctx) {
+        if (this.life <= 0) return;
+
+        ctx.save();
+        ctx.globalAlpha = this.life;
+
+        if (this.isBone) {
+            // Draw golden bone shape
+            ctx.translate(this.x, this.y);
+            ctx.rotate(this.rotation);
+            ctx.fillStyle = `hsl(45, 90%, ${60 + this.life * 20}%)`;
+            ctx.strokeStyle = `hsl(35, 80%, 40%)`;
+            ctx.lineWidth = 1;
+
+            // Bone shape - simplified
+            const boneSize = this.size * 2;
+            ctx.beginPath();
+            // Left knob
+            ctx.arc(-boneSize, 0, boneSize * 0.4, 0, Math.PI * 2);
+            ctx.fill();
+            // Right knob
+            ctx.beginPath();
+            ctx.arc(boneSize, 0, boneSize * 0.4, 0, Math.PI * 2);
+            ctx.fill();
+            // Shaft
+            ctx.fillRect(-boneSize, -boneSize * 0.2, boneSize * 2, boneSize * 0.4);
+        } else {
+            // Regular particle with glow
+            const gradient = ctx.createRadialGradient(this.x, this.y, 0, this.x, this.y, this.size * 2);
+            gradient.addColorStop(0, `hsla(${this.hue}, ${this.saturation}%, ${this.lightness}%, ${this.life})`);
+            gradient.addColorStop(0.5, `hsla(${this.hue}, ${this.saturation}%, ${this.lightness}%, ${this.life * 0.5})`);
+            gradient.addColorStop(1, 'transparent');
+
+            ctx.fillStyle = gradient;
+            ctx.beginPath();
+            ctx.arc(this.x, this.y, this.size * 2, 0, Math.PI * 2);
+            ctx.fill();
+
+            // Core
+            ctx.fillStyle = `hsla(${this.hue}, 100%, 80%, ${this.life})`;
+            ctx.beginPath();
+            ctx.arc(this.x, this.y, this.size * 0.5, 0, Math.PI * 2);
+            ctx.fill();
+        }
+
+        ctx.restore();
+    }
+
+    isAlive() {
+        return this.life > 0;
+    }
+}
+
+class ParticleSystem {
+    constructor(canvasId) {
+        this.canvas = document.getElementById(canvasId);
+        if (!this.canvas) return;
+
+        this.ctx = this.canvas.getContext('2d');
+        this.particles = [];
+        this.isAnimating = false;
+        this.barkCount = 0;  // Track barks for easter egg
+
+        this.resize();
+        window.addEventListener('resize', () => this.resize());
+    }
+
+    resize() {
+        if (!this.canvas) return;
+        const rect = this.canvas.parentElement.getBoundingClientRect();
+        this.canvas.width = rect.width * window.devicePixelRatio;
+        this.canvas.height = rect.height * window.devicePixelRatio;
+        this.ctx.scale(window.devicePixelRatio, window.devicePixelRatio);
+        this.width = rect.width;
+        this.height = rect.height;
+    }
+
+    emit(count = 30) {
+        if (!this.canvas) return;
+
+        // Center of the gauge
+        const centerX = this.width / 2;
+        const centerY = this.height / 2 - 20;  // Slightly above center for gauge
+
+        this.barkCount++;
+
+        // Easter egg: every 10th bark includes golden bones!
+        const includeBones = this.barkCount % 10 === 0;
+
+        for (let i = 0; i < count; i++) {
+            const isBone = includeBones && i < 5;  // 5 bones on easter egg
+            this.particles.push(new Particle(centerX, centerY, {
+                speed: isBone ? 3 + Math.random() * 2 : 2 + Math.random() * 4,
+                gravity: isBone ? 0.15 : 0.1,
+                decay: isBone ? 0.008 : 0.01 + Math.random() * 0.02,
+                size: isBone ? 5 + Math.random() * 3 : 3 + Math.random() * 4,
+                isBone: isBone
+            }));
+        }
+
+        // Add a central flash
+        this.particles.push(new Particle(centerX, centerY, {
+            speed: 0,
+            gravity: 0,
+            decay: 0.05,
+            size: 20,
+            hue: 45
+        }));
+
+        if (!this.isAnimating) {
+            this.isAnimating = true;
+            this.animate();
+        }
+    }
+
+    animate() {
+        if (!this.canvas) return;
+
+        // Clear canvas
+        this.ctx.clearRect(0, 0, this.width, this.height);
+
+        // Update and draw particles
+        this.particles = this.particles.filter(p => {
+            p.update();
+            p.draw(this.ctx);
+            return p.isAlive();
+        });
+
+        if (this.particles.length > 0) {
+            requestAnimationFrame(() => this.animate());
+        } else {
+            this.isAnimating = false;
+        }
+    }
 }
 
 // =========================================
