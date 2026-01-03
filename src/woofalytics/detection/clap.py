@@ -61,6 +61,9 @@ class CLAPConfig:
     # If any speech label exceeds this, veto the bark detection
     speech_veto_threshold: float = 0.15
 
+    # If any percussive label exceeds this, veto the bark detection
+    percussive_veto_threshold: float = 0.20
+
     # Device for inference
     device: str = "cpu"
 
@@ -83,6 +86,7 @@ class CLAPDetector:
         self._all_labels: list[str] = []
         self._positive_indices: set[int] = set()
         self._speech_indices: set[int] = set()
+        self._percussive_indices: set[int] = set()
 
     def load(self) -> None:
         """Load the CLAP model.
@@ -103,10 +107,11 @@ class CLAPDetector:
             device=self.config.device,
         )
 
-        # Combine all labels: positive, speech (for veto), and other
+        # Combine all labels: positive, speech (for veto), percussive (for veto), and other
         self._all_labels = (
             self.config.positive_labels +
             self.config.speech_labels +
+            self.config.percussive_labels +
             self.config.other_labels
         )
         self._positive_indices = set(range(len(self.config.positive_labels)))
@@ -116,12 +121,19 @@ class CLAPDetector:
         speech_end = speech_start + len(self.config.speech_labels)
         self._speech_indices = set(range(speech_start, speech_end))
 
+        # Track percussive label indices for veto logic
+        percussive_start = speech_end
+        percussive_end = percussive_start + len(self.config.percussive_labels)
+        self._percussive_indices = set(range(percussive_start, percussive_end))
+
         logger.info(
             "clap_model_loaded",
             positive_labels=self.config.positive_labels,
             speech_labels=self.config.speech_labels,
+            percussive_labels=self.config.percussive_labels,
             other_labels=self.config.other_labels,
             speech_veto_threshold=self.config.speech_veto_threshold,
+            percussive_veto_threshold=self.config.percussive_veto_threshold,
         )
 
     @property
@@ -190,8 +202,19 @@ class CLAPDetector:
         )
         speech_detected = max_speech_score >= self.config.speech_veto_threshold
 
-        # Apply detection logic with speech veto
-        is_barking = bark_prob >= self.config.threshold and not speech_detected
+        # Check for percussive veto - if any percussive label is high, don't trigger bark
+        max_percussive_score = max(
+            label_scores.get(label, 0.0)
+            for label in self.config.percussive_labels
+        )
+        percussive_detected = max_percussive_score >= self.config.percussive_veto_threshold
+
+        # Apply detection logic with speech and percussive veto
+        is_barking = (
+            bark_prob >= self.config.threshold
+            and not speech_detected
+            and not percussive_detected
+        )
 
         # Log when speech veto is applied
         if bark_prob >= self.config.threshold and speech_detected:
@@ -205,6 +228,20 @@ class CLAPDetector:
                 speech_label=top_speech[0],
                 speech_score=f"{top_speech[1]:.3f}",
                 threshold=self.config.speech_veto_threshold,
+            )
+
+        # Log when percussive veto is applied
+        if bark_prob >= self.config.threshold and percussive_detected and not speech_detected:
+            top_percussive = max(
+                ((label, label_scores.get(label, 0.0)) for label in self.config.percussive_labels),
+                key=lambda x: x[1],
+            )
+            logger.debug(
+                "bark_vetoed_by_percussive",
+                bark_prob=f"{bark_prob:.3f}",
+                percussive_label=top_percussive[0],
+                percussive_score=f"{top_percussive[1]:.3f}",
+                threshold=self.config.percussive_veto_threshold,
             )
 
         return bark_prob, is_barking, label_scores
