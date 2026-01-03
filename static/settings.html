@@ -1,0 +1,750 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Settings & Maintenance - Woofalytics</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="/static/styles.css">
+    <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🐕</text></svg>">
+    <style>
+        /* ===== Settings Page Styles ===== */
+
+        .settings-page {
+            --card-bg: rgba(22, 27, 34, 0.6);
+            --danger-bg: rgba(239, 68, 68, 0.1);
+            --danger-border: rgba(239, 68, 68, 0.3);
+            --danger-text: #ef4444;
+            --warning-bg: rgba(245, 158, 11, 0.1);
+            --warning-border: rgba(245, 158, 11, 0.3);
+            --warning-text: #f59e0b;
+        }
+
+        .settings-container {
+            max-width: 900px;
+            margin: 0 auto;
+            padding: var(--space-lg);
+        }
+
+        .page-header {
+            display: flex;
+            align-items: center;
+            gap: var(--space-md);
+            margin-bottom: var(--space-xl);
+        }
+
+        .page-header svg {
+            width: 32px;
+            height: 32px;
+            color: var(--accent-amber);
+        }
+
+        .page-header h1 {
+            font-size: 1.75rem;
+            font-weight: 700;
+            color: var(--text-primary);
+            margin: 0;
+        }
+
+        .page-header p {
+            margin: 4px 0 0 0;
+            color: var(--text-muted);
+            font-size: 0.875rem;
+        }
+
+        /* Stats Overview */
+        .stats-overview {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+            gap: var(--space-md);
+            margin-bottom: var(--space-xl);
+        }
+
+        .stat-card {
+            background: var(--card-bg);
+            border: 1px solid var(--border-default);
+            border-radius: var(--radius-lg);
+            padding: var(--space-lg);
+            backdrop-filter: blur(20px);
+        }
+
+        .stat-card-label {
+            font-size: 0.75rem;
+            font-weight: 600;
+            color: var(--text-muted);
+            text-transform: uppercase;
+            letter-spacing: 0.05em;
+            margin-bottom: var(--space-xs);
+        }
+
+        .stat-card-value {
+            font-size: 2rem;
+            font-weight: 700;
+            font-family: 'JetBrains Mono', monospace;
+            color: var(--text-primary);
+        }
+
+        .stat-card-detail {
+            font-size: 0.8rem;
+            color: var(--text-muted);
+            margin-top: var(--space-xs);
+        }
+
+        .stat-card--evidence .stat-card-value { color: var(--accent-teal); }
+        .stat-card--fingerprints .stat-card-value { color: var(--accent-amber); }
+        .stat-card--untagged .stat-card-value { color: var(--accent-coral); }
+        .stat-card--dogs .stat-card-value { color: var(--accent-purple); }
+
+        /* Maintenance Sections */
+        .maintenance-section {
+            background: var(--card-bg);
+            border: 1px solid var(--border-default);
+            border-radius: var(--radius-lg);
+            margin-bottom: var(--space-lg);
+            backdrop-filter: blur(20px);
+            overflow: hidden;
+        }
+
+        .maintenance-section--danger {
+            border-color: var(--danger-border);
+        }
+
+        .section-header {
+            display: flex;
+            align-items: center;
+            gap: var(--space-sm);
+            padding: var(--space-md) var(--space-lg);
+            border-bottom: 1px solid var(--border-muted);
+            background: rgba(0, 0, 0, 0.2);
+        }
+
+        .section-header svg {
+            width: 20px;
+            height: 20px;
+            color: var(--accent-amber);
+        }
+
+        .maintenance-section--danger .section-header svg {
+            color: var(--danger-text);
+        }
+
+        .section-header h2 {
+            font-size: 1rem;
+            font-weight: 600;
+            color: var(--text-primary);
+            margin: 0;
+        }
+
+        .section-body {
+            padding: var(--space-lg);
+        }
+
+        .section-description {
+            color: var(--text-muted);
+            font-size: 0.875rem;
+            margin-bottom: var(--space-lg);
+            line-height: 1.6;
+        }
+
+        /* Form Controls */
+        .form-group {
+            margin-bottom: var(--space-lg);
+        }
+
+        .form-label {
+            display: block;
+            font-size: 0.8rem;
+            font-weight: 600;
+            color: var(--text-secondary);
+            margin-bottom: var(--space-xs);
+        }
+
+        .form-input {
+            width: 100%;
+            max-width: 300px;
+            padding: var(--space-sm) var(--space-md);
+            background: var(--bg-surface);
+            border: 1px solid var(--border-default);
+            border-radius: var(--radius-md);
+            color: var(--text-primary);
+            font-size: 0.875rem;
+            font-family: inherit;
+        }
+
+        .form-input:focus {
+            outline: none;
+            border-color: var(--accent-amber);
+        }
+
+        .form-input[type="date"] {
+            color-scheme: dark;
+        }
+
+        .form-hint {
+            font-size: 0.75rem;
+            color: var(--text-muted);
+            margin-top: var(--space-xs);
+        }
+
+        .form-row {
+            display: flex;
+            align-items: flex-end;
+            gap: var(--space-md);
+            flex-wrap: wrap;
+        }
+
+        /* Buttons */
+        .btn {
+            display: inline-flex;
+            align-items: center;
+            gap: var(--space-sm);
+            padding: var(--space-sm) var(--space-lg);
+            border: none;
+            border-radius: var(--radius-md);
+            font-size: 0.875rem;
+            font-weight: 600;
+            cursor: pointer;
+            transition: all var(--transition-fast);
+        }
+
+        .btn svg {
+            width: 16px;
+            height: 16px;
+        }
+
+        .btn-warning {
+            background: var(--warning-bg);
+            color: var(--warning-text);
+            border: 1px solid var(--warning-border);
+        }
+
+        .btn-warning:hover {
+            background: rgba(245, 158, 11, 0.2);
+        }
+
+        .btn-danger {
+            background: var(--danger-bg);
+            color: var(--danger-text);
+            border: 1px solid var(--danger-border);
+        }
+
+        .btn-danger:hover {
+            background: rgba(239, 68, 68, 0.2);
+        }
+
+        .btn:disabled {
+            opacity: 0.5;
+            cursor: not-allowed;
+        }
+
+        /* Checkbox */
+        .checkbox-group {
+            display: flex;
+            align-items: center;
+            gap: var(--space-sm);
+            margin-bottom: var(--space-md);
+        }
+
+        .checkbox-group input[type="checkbox"] {
+            width: 18px;
+            height: 18px;
+            accent-color: var(--accent-amber);
+        }
+
+        .checkbox-group label {
+            font-size: 0.875rem;
+            color: var(--text-secondary);
+        }
+
+        /* Result Messages */
+        .result-message {
+            margin-top: var(--space-md);
+            padding: var(--space-md);
+            border-radius: var(--radius-md);
+            font-size: 0.875rem;
+            display: none;
+        }
+
+        .result-message.show {
+            display: block;
+        }
+
+        .result-message.success {
+            background: rgba(16, 185, 129, 0.1);
+            border: 1px solid rgba(16, 185, 129, 0.3);
+            color: #10b981;
+        }
+
+        .result-message.error {
+            background: var(--danger-bg);
+            border: 1px solid var(--danger-border);
+            color: var(--danger-text);
+        }
+
+        /* Confirmation Modal */
+        .modal-overlay {
+            position: fixed;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            background: rgba(0, 0, 0, 0.8);
+            display: none;
+            align-items: center;
+            justify-content: center;
+            z-index: 1000;
+            backdrop-filter: blur(4px);
+        }
+
+        .modal-overlay.show {
+            display: flex;
+        }
+
+        .modal {
+            background: var(--bg-elevated);
+            border: 1px solid var(--border-default);
+            border-radius: var(--radius-lg);
+            padding: var(--space-xl);
+            max-width: 450px;
+            width: 90%;
+        }
+
+        .modal h3 {
+            display: flex;
+            align-items: center;
+            gap: var(--space-sm);
+            font-size: 1.25rem;
+            color: var(--danger-text);
+            margin: 0 0 var(--space-md) 0;
+        }
+
+        .modal h3 svg {
+            width: 24px;
+            height: 24px;
+        }
+
+        .modal p {
+            color: var(--text-secondary);
+            line-height: 1.6;
+            margin: 0 0 var(--space-lg) 0;
+        }
+
+        .modal-stats {
+            background: var(--bg-overlay);
+            border-radius: var(--radius-md);
+            padding: var(--space-md);
+            margin-bottom: var(--space-lg);
+            font-family: 'JetBrains Mono', monospace;
+            font-size: 0.875rem;
+        }
+
+        .modal-stats-row {
+            display: flex;
+            justify-content: space-between;
+            padding: var(--space-xs) 0;
+        }
+
+        .modal-stats-label {
+            color: var(--text-muted);
+        }
+
+        .modal-stats-value {
+            color: var(--text-primary);
+            font-weight: 600;
+        }
+
+        .modal-actions {
+            display: flex;
+            gap: var(--space-md);
+            justify-content: flex-end;
+        }
+
+        .btn-cancel {
+            background: var(--bg-overlay);
+            color: var(--text-secondary);
+            border: 1px solid var(--border-default);
+        }
+
+        .btn-cancel:hover {
+            background: var(--bg-surface);
+        }
+
+        /* Footer */
+        .footer {
+            text-align: center;
+            padding: var(--space-lg);
+            color: var(--text-muted);
+            font-size: 0.8rem;
+        }
+
+        .footer a {
+            color: var(--text-secondary);
+            text-decoration: none;
+        }
+
+        .footer a:hover {
+            color: var(--accent-amber);
+        }
+
+        .footer-divider {
+            margin: 0 var(--space-sm);
+            opacity: 0.5;
+        }
+
+        /* Loading State */
+        .loading {
+            opacity: 0.6;
+            pointer-events: none;
+        }
+
+        @keyframes spin {
+            to { transform: rotate(360deg); }
+        }
+
+        .spinner {
+            width: 16px;
+            height: 16px;
+            border: 2px solid transparent;
+            border-top-color: currentColor;
+            border-radius: 50%;
+            animation: spin 0.8s linear infinite;
+        }
+    </style>
+</head>
+<body class="settings-page">
+    <div class="settings-container">
+        <!-- Page Header -->
+        <div class="page-header">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <circle cx="12" cy="12" r="3"/>
+                <path d="M19.4 15a1.65 1.65 0 00.33 1.82l.06.06a2 2 0 010 2.83 2 2 0 01-2.83 0l-.06-.06a1.65 1.65 0 00-1.82-.33 1.65 1.65 0 00-1 1.51V21a2 2 0 01-2 2 2 2 0 01-2-2v-.09A1.65 1.65 0 009 19.4a1.65 1.65 0 00-1.82.33l-.06.06a2 2 0 01-2.83 0 2 2 0 010-2.83l.06-.06a1.65 1.65 0 00.33-1.82 1.65 1.65 0 00-1.51-1H3a2 2 0 01-2-2 2 2 0 012-2h.09A1.65 1.65 0 004.6 9a1.65 1.65 0 00-.33-1.82l-.06-.06a2 2 0 010-2.83 2 2 0 012.83 0l.06.06a1.65 1.65 0 001.82.33H9a1.65 1.65 0 001-1.51V3a2 2 0 012-2 2 2 0 012 2v.09a1.65 1.65 0 001 1.51 1.65 1.65 0 001.82-.33l.06-.06a2 2 0 012.83 0 2 2 0 010 2.83l-.06.06a1.65 1.65 0 00-.33 1.82V9a1.65 1.65 0 001.51 1H21a2 2 0 012 2 2 2 0 01-2 2h-.09a1.65 1.65 0 00-1.51 1z"/>
+            </svg>
+            <div>
+                <h1>Settings & Maintenance</h1>
+                <p>Manage storage and cleanup old data</p>
+            </div>
+        </div>
+
+        <!-- Stats Overview -->
+        <div class="stats-overview" id="statsOverview">
+            <div class="stat-card stat-card--evidence">
+                <div class="stat-card-label">Evidence Files</div>
+                <div class="stat-card-value" id="statEvidenceCount">--</div>
+                <div class="stat-card-detail" id="statEvidenceDuration">-- recorded</div>
+            </div>
+            <div class="stat-card stat-card--fingerprints">
+                <div class="stat-card-label">Fingerprints</div>
+                <div class="stat-card-value" id="statFingerprintsCount">--</div>
+                <div class="stat-card-detail" id="statFingerprintsTagged">-- tagged</div>
+            </div>
+            <div class="stat-card stat-card--untagged">
+                <div class="stat-card-label">Untagged</div>
+                <div class="stat-card-value" id="statUntaggedCount">--</div>
+                <div class="stat-card-detail">awaiting classification</div>
+            </div>
+            <div class="stat-card stat-card--dogs">
+                <div class="stat-card-label">Dogs</div>
+                <div class="stat-card-value" id="statDogsCount">--</div>
+                <div class="stat-card-detail" id="statDogsConfirmed">-- confirmed</div>
+            </div>
+        </div>
+
+        <!-- Purge Evidence Section -->
+        <div class="maintenance-section">
+            <div class="section-header">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z"/>
+                    <polyline points="14 2 14 8 20 8"/>
+                    <line x1="9" y1="15" x2="15" y2="15"/>
+                </svg>
+                <h2>Purge Evidence Files</h2>
+            </div>
+            <div class="section-body">
+                <p class="section-description">
+                    Remove old evidence recordings to free up disk space. Audio files (.wav) and their
+                    metadata (.json) will be permanently deleted. Cached transcoded files (.opus) are also removed.
+                </p>
+                <div class="form-row">
+                    <div class="form-group">
+                        <label class="form-label">Delete evidence before</label>
+                        <input type="date" class="form-input" id="evidenceBeforeDate">
+                        <div class="form-hint">All recordings before this date will be deleted</div>
+                    </div>
+                    <button class="btn btn-warning" id="btnPurgeEvidence" onclick="maintenance.purgeEvidence()">
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                            <polyline points="3 6 5 6 21 6"/>
+                            <path d="M19 6v14a2 2 0 01-2 2H7a2 2 0 01-2-2V6m3 0V4a2 2 0 012-2h4a2 2 0 012 2v2"/>
+                        </svg>
+                        Purge Evidence
+                    </button>
+                </div>
+                <div class="result-message" id="evidenceResult"></div>
+            </div>
+        </div>
+
+        <!-- Purge Fingerprints Section -->
+        <div class="maintenance-section">
+            <div class="section-header">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <path d="M12 11c0 3.517-1.009 6.799-2.753 9.571m-3.44-2.04l.054-.09A13.916 13.916 0 008 11a4 4 0 118 0c0 1.017-.07 2.019-.203 3m-2.118 6.844A21.88 21.88 0 0015.171 17m3.839 1.132c.645-2.266.99-4.659.99-7.132A8 8 0 008 4.07M3 15.364c.64-1.319 1-2.8 1-4.364 0-1.457.39-2.823 1.07-4"/>
+                </svg>
+                <h2>Purge Fingerprints</h2>
+            </div>
+            <div class="section-body">
+                <p class="section-description">
+                    Remove bark fingerprints from the database. This affects the acoustic matching system.
+                    Fingerprints tagged to dogs contribute to their identification profile.
+                </p>
+                <div class="checkbox-group">
+                    <input type="checkbox" id="untaggedOnly" checked>
+                    <label for="untaggedOnly">Only purge untagged fingerprints (recommended)</label>
+                </div>
+                <div class="form-row">
+                    <div class="form-group">
+                        <label class="form-label">Delete fingerprints before (optional)</label>
+                        <input type="date" class="form-input" id="fingerprintsBeforeDate">
+                        <div class="form-hint">Leave empty to delete all untagged fingerprints</div>
+                    </div>
+                    <button class="btn btn-warning" id="btnPurgeFingerprints" onclick="maintenance.purgeFingerprints()">
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                            <polyline points="3 6 5 6 21 6"/>
+                            <path d="M19 6v14a2 2 0 01-2 2H7a2 2 0 01-2-2V6m3 0V4a2 2 0 012-2h4a2 2 0 012 2v2"/>
+                        </svg>
+                        Purge Fingerprints
+                    </button>
+                </div>
+                <div class="result-message" id="fingerprintsResult"></div>
+            </div>
+        </div>
+
+        <!-- Footer -->
+        <footer class="footer">
+            <span>Woofalytics v2.0.0</span>
+            <span class="footer-divider">·</span>
+            <a href="/">Dashboard</a>
+            <span class="footer-divider">·</span>
+            <a href="/dogs.html">Manage Dogs</a>
+            <span class="footer-divider">·</span>
+            <a href="/fingerprints.html">Fingerprints</a>
+            <span class="footer-divider">·</span>
+            <a href="/api/docs">API Documentation</a>
+        </footer>
+    </div>
+
+    <!-- Confirmation Modal -->
+    <div class="modal-overlay" id="confirmModal">
+        <div class="modal">
+            <h3>
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <path d="M10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0z"/>
+                    <line x1="12" y1="9" x2="12" y2="13"/>
+                    <line x1="12" y1="17" x2="12.01" y2="17"/>
+                </svg>
+                <span id="modalTitle">Confirm Deletion</span>
+            </h3>
+            <p id="modalMessage">This action cannot be undone.</p>
+            <div class="modal-stats" id="modalStats"></div>
+            <div class="modal-actions">
+                <button class="btn btn-cancel" onclick="maintenance.closeModal()">Cancel</button>
+                <button class="btn btn-danger" id="modalConfirmBtn" onclick="maintenance.confirmAction()">
+                    Delete Permanently
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        const maintenance = {
+            pendingAction: null,
+            pendingData: null,
+
+            async init() {
+                await this.loadStats();
+            },
+
+            async loadStats() {
+                try {
+                    // Load evidence stats
+                    const evidenceRes = await fetch('/api/evidence/stats');
+                    if (evidenceRes.ok) {
+                        const evidence = await evidenceRes.json();
+                        document.getElementById('statEvidenceCount').textContent = evidence.total_recordings;
+                        const duration = this.formatDuration(evidence.total_duration_seconds);
+                        document.getElementById('statEvidenceDuration').textContent = `${duration} recorded`;
+                    }
+
+                    // Load fingerprint stats
+                    const fpRes = await fetch('/api/fingerprints/stats');
+                    if (fpRes.ok) {
+                        const fp = await fpRes.json();
+                        const tagged = fp.fingerprints - fp.untagged;
+                        document.getElementById('statFingerprintsCount').textContent = fp.fingerprints;
+                        document.getElementById('statFingerprintsTagged').textContent = `${tagged} tagged`;
+                        document.getElementById('statUntaggedCount').textContent = fp.untagged;
+                    }
+
+                    // Load dogs
+                    const dogsRes = await fetch('/api/dogs');
+                    if (dogsRes.ok) {
+                        const dogs = await dogsRes.json();
+                        document.getElementById('statDogsCount').textContent = dogs.length;
+                        const confirmed = dogs.filter(d => d.confirmed).length;
+                        document.getElementById('statDogsConfirmed').textContent = `${confirmed} confirmed`;
+                    }
+                } catch (error) {
+                    console.error('Failed to load stats:', error);
+                }
+            },
+
+            formatDuration(seconds) {
+                if (seconds < 60) return `${Math.round(seconds)}s`;
+                if (seconds < 3600) return `${Math.round(seconds / 60)}m`;
+                const hours = Math.floor(seconds / 3600);
+                const mins = Math.round((seconds % 3600) / 60);
+                return `${hours}h ${mins}m`;
+            },
+
+            purgeEvidence() {
+                const beforeDate = document.getElementById('evidenceBeforeDate').value;
+                if (!beforeDate) {
+                    this.showResult('evidenceResult', 'Please select a date', 'error');
+                    return;
+                }
+
+                this.pendingAction = 'evidence';
+                this.pendingData = { before: beforeDate + 'T23:59:59' };
+
+                document.getElementById('modalTitle').textContent = 'Purge Evidence Files';
+                document.getElementById('modalMessage').textContent =
+                    `This will permanently delete all evidence files recorded before ${beforeDate}. ` +
+                    'This includes audio recordings (.wav), metadata (.json), and cached files (.opus).';
+                document.getElementById('modalStats').innerHTML = `
+                    <div class="modal-stats-row">
+                        <span class="modal-stats-label">Delete before:</span>
+                        <span class="modal-stats-value">${beforeDate}</span>
+                    </div>
+                `;
+                document.getElementById('confirmModal').classList.add('show');
+            },
+
+            purgeFingerprints() {
+                const beforeDate = document.getElementById('fingerprintsBeforeDate').value;
+                const untaggedOnly = document.getElementById('untaggedOnly').checked;
+
+                if (!beforeDate && !untaggedOnly) {
+                    this.showResult('fingerprintsResult', 'Please select a date or check "untagged only"', 'error');
+                    return;
+                }
+
+                this.pendingAction = 'fingerprints';
+                this.pendingData = {
+                    untagged_only: untaggedOnly
+                };
+                if (beforeDate) {
+                    this.pendingData.before = beforeDate + 'T23:59:59';
+                }
+
+                let message = 'This will permanently delete ';
+                if (untaggedOnly && beforeDate) {
+                    message += `untagged fingerprints before ${beforeDate}.`;
+                } else if (untaggedOnly) {
+                    message += 'all untagged fingerprints.';
+                } else {
+                    message += `all fingerprints before ${beforeDate}.`;
+                }
+
+                document.getElementById('modalTitle').textContent = 'Purge Fingerprints';
+                document.getElementById('modalMessage').textContent = message;
+                document.getElementById('modalStats').innerHTML = `
+                    <div class="modal-stats-row">
+                        <span class="modal-stats-label">Untagged only:</span>
+                        <span class="modal-stats-value">${untaggedOnly ? 'Yes' : 'No'}</span>
+                    </div>
+                    ${beforeDate ? `
+                    <div class="modal-stats-row">
+                        <span class="modal-stats-label">Before date:</span>
+                        <span class="modal-stats-value">${beforeDate}</span>
+                    </div>
+                    ` : ''}
+                `;
+                document.getElementById('confirmModal').classList.add('show');
+            },
+
+            closeModal() {
+                document.getElementById('confirmModal').classList.remove('show');
+                this.pendingAction = null;
+                this.pendingData = null;
+            },
+
+            async confirmAction() {
+                if (!this.pendingAction || !this.pendingData) return;
+
+                const btn = document.getElementById('modalConfirmBtn');
+                btn.disabled = true;
+                btn.innerHTML = '<span class="spinner"></span> Deleting...';
+
+                try {
+                    let endpoint, resultId;
+                    if (this.pendingAction === 'evidence') {
+                        endpoint = '/api/maintenance/purge-evidence';
+                        resultId = 'evidenceResult';
+                    } else {
+                        endpoint = '/api/maintenance/purge-fingerprints';
+                        resultId = 'fingerprintsResult';
+                    }
+
+                    const response = await fetch(endpoint, {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify(this.pendingData)
+                    });
+
+                    if (response.ok) {
+                        const result = await response.json();
+                        this.showResult(resultId,
+                            `Successfully deleted ${result.deleted_count} ${result.resource_type}`,
+                            'success'
+                        );
+                        await this.loadStats();
+                    } else {
+                        const error = await response.json();
+                        this.showResult(resultId,
+                            `Error: ${error.detail || 'Failed to purge'}`,
+                            'error'
+                        );
+                    }
+                } catch (error) {
+                    console.error('Purge failed:', error);
+                    this.showResult(
+                        this.pendingAction === 'evidence' ? 'evidenceResult' : 'fingerprintsResult',
+                        'Network error: ' + error.message,
+                        'error'
+                    );
+                } finally {
+                    btn.disabled = false;
+                    btn.innerHTML = 'Delete Permanently';
+                    this.closeModal();
+                }
+            },
+
+            showResult(elementId, message, type) {
+                const el = document.getElementById(elementId);
+                el.textContent = message;
+                el.className = `result-message show ${type}`;
+
+                // Auto-hide success messages
+                if (type === 'success') {
+                    setTimeout(() => {
+                        el.classList.remove('show');
+                    }, 5000);
+                }
+            }
+        };
+
+        // Initialize on load
+        document.addEventListener('DOMContentLoaded', () => maintenance.init());
+    </script>
+</body>
+</html>

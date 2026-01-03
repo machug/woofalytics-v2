@@ -225,6 +225,14 @@ def create_app() -> FastAPI:
             return FileResponse(fingerprints_path)
         return {"error": "Fingerprints page not found"}
 
+    # Settings/maintenance page
+    @app.get("/settings.html", include_in_schema=False, response_model=None)
+    async def settings_page():
+        settings_path = static_path / "settings.html"
+        if settings_path.exists():
+            return FileResponse(settings_path)
+        return {"error": "Settings page not found"}
+
     return app
 
 
