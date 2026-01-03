@@ -1,8 +1,8 @@
 # 🐕 Woofalytics v2.0
 
-**AI-powered dog bark detection with evidence collection for Raspberry Pi**
+**AI-powered dog bark detection and cataloging for Raspberry Pi**
 
-A complete modernization of the original woofalytics project, built for tracking nuisance barking and collecting timestamped evidence for council complaints.
+A complete modernization of the original woofalytics project, built for cataloging and fingerprinting barking dogs within earshot. Uses zero-shot audio classification (CLAP) to detect barks without training data, with automatic recording for documentation purposes.
 
 ---
 
@@ -31,19 +31,21 @@ A complete modernization of the original woofalytics project, built for tracking
 This project was created with specific intentions:
 
 1. **Learning** - Push modern Python patterns to the limits (deliberately over-engineered)
-2. **Evidence Collection** - Reliable recording for council complaints about barking dogs
+2. **Dog Cataloging** - Document and fingerprint all barking dogs within earshot
 3. **Hardware Optimization** - Maximize Raspberry Pi 4B capabilities
 4. **Best Practices** - Latest patterns, proper architecture, comprehensive documentation
 
 ### Key Features
 
-- **Real-time Bark Detection** - ML-powered using TorchScript models (~80ms inference)
+- **Zero-Shot Bark Detection** - CLAP-powered classification without training data (~500ms inference)
+- **Multi-Layer Veto System** - Rejects speech, percussion, and bird sounds to reduce false positives
 - **Direction of Arrival (DOA)** - Know which direction barks come from using stereo microphones
 - **Evidence Recording** - Automatic 30-second clips with JSON metadata sidecars
 - **Modern Web UI** - Real-time dashboard with WebSocket updates
 - **REST API** - Full OpenAPI documentation at `/api/docs`
 - **Docker Support** - Easy deployment with Docker Compose
 - **Flexible Configuration** - YAML config with environment variable overrides
+- **Legacy MLP Support** - Optional TorchScript models for faster inference on constrained hardware
 
 ---
 
@@ -86,13 +88,19 @@ This project was created with specific intentions:
 ### Data Flow
 
 1. **Audio Capture** (`audio/capture.py`) runs in a background thread, filling a ring buffer
-2. **BarkDetector** (`detection/model.py`) reads 8 frames (80ms) from buffer every inference cycle
-3. **FeatureExtractor** (`detection/features.py`) converts audio to 80-dim Mel filterbank features
-4. **TorchScript Model** runs inference, returning bark probability (0.0-1.0)
+2. **BarkDetector** (`detection/model.py`) reads ~100 frames (1 second) from buffer every 500ms
+3. **VAD Gate** (`detection/vad.py`) fast-rejects silent audio before expensive CLAP inference
+4. **CLAP Detector** (`detection/clap.py`) runs zero-shot classification with multi-label veto:
+   - Compares "dog barking" against speech, percussion, bird, and other sound labels
+   - Uses rolling window (2/3 positives required) to smooth detections
+   - High-confidence barks (≥80%) bypass rolling window for instant detection
+   - Detection cooldown prevents rapid-fire triggers from the same sound
 5. **DOA Estimator** (`detection/doa.py`) calculates direction using pyargus algorithms
 6. **BarkEvent** is created and broadcast to all registered callbacks
 7. **EvidenceStorage** (`evidence/storage.py`) records clips when barks are detected
 8. **WebSocket** broadcasts events to connected web clients in real-time
+
+*Note: Legacy MLP mode uses 80ms inference with TorchScript for faster but less accurate detection.*
 
 ---
 
@@ -114,7 +122,9 @@ woofalytics-v2/
 │   ├── detection/
 │   │   ├── __init__.py          # Module exports
 │   │   ├── model.py             # BarkDetector orchestrator + BarkEvent
-│   │   ├── features.py          # Mel filterbank feature extraction
+│   │   ├── clap.py              # CLAP zero-shot classifier (primary)
+│   │   ├── vad.py               # Voice activity detection gate
+│   │   ├── features.py          # Mel filterbank feature extraction (legacy)
 │   │   └── doa.py               # Direction of arrival estimation
 │   │
 │   ├── evidence/
@@ -219,14 +229,38 @@ class Settings(BaseSettings):
   - **MEM** - Maximum entropy, best for close sources
 - `angle_to_direction(angle)` - Converts degrees to "left", "front", "right", etc.
 
-### `detection/model.py` - Bark Detector
+### `detection/clap.py` - CLAP Zero-Shot Classifier (Primary)
+
+- `CLAPConfig` - Configuration for CLAP detection
+  - `bark_labels` - Positive bark sound labels
+  - `speech_labels` - Human speech for veto
+  - `percussive_labels` - Claps, knocks for veto
+  - `bird_labels` - Bird sounds for veto
+  - `threshold`, `speech_veto_threshold`, `bird_veto_threshold`
+  - `rolling_window_size`, `detection_cooldown_frames`
+- `CLAPDetector` - Zero-shot audio classifier using LAION CLAP
+  - Uses `laion/clap-htsat-unfused` model by default
+  - Caches text embeddings for efficiency
+  - Multi-label detection with veto system
+  - Rolling window smoothing with high-confidence bypass
+  - Detection cooldown to prevent rapid-fire triggers
+
+### `detection/vad.py` - Voice Activity Detection Gate
+
+- `VADConfig` - Configuration for VAD gate
+- `VADGate` - Fast energy-based rejection of silent audio
+  - Skips expensive CLAP inference on silent frames
+  - Configurable energy threshold in dB
+
+### `detection/model.py` - Bark Detector Orchestrator
 
 - `BarkEvent` - Detection event with timestamp, probability, DOA
 - `BarkDetector` - Main orchestrator
-  - Loads TorchScript model
-  - Runs inference loop (80ms interval)
+  - Supports both CLAP (default) and legacy MLP modes
+  - CLAP mode: 500ms inference interval with 1s audio windows
+  - Legacy mode: 80ms inference interval with TorchScript
   - Manages callbacks for event notification
-  - Tracks statistics (uptime, total barks)
+  - Tracks statistics (uptime, total barks, VAD skips)
 
 ### `evidence/metadata.py` - Metadata Models
 
@@ -274,9 +308,16 @@ audio:
   volume_percent: 75       # Microphone gain (0-100)
 
 model:
+  use_clap: true           # Use CLAP zero-shot (recommended)
+  clap_model: laion/clap-htsat-unfused
+  clap_threshold: 0.5      # Bark confidence threshold
+  clap_device: cpu         # or cuda
+  vad_enabled: true        # Fast rejection of silent audio
+  vad_threshold_db: -40    # Energy threshold for VAD
+  # Legacy MLP settings (when use_clap: false)
   path: ./models/traced_model.pt
   target_sample_rate: 16000
-  threshold: 0.88          # Detection threshold (0.0-1.0)
+  threshold: 0.88
 
 doa:
   enabled: true
@@ -602,19 +643,33 @@ Each has trade-offs:
 - **Capon** - Better resolution, more sensitive to calibration
 - **MEM** - Best for multiple sources, computationally heavier
 
-### Why 80ms Inference Interval?
+### Why CLAP Instead of Custom Models?
 
-Balances latency vs CPU usage on RPi 4:
-- 8 audio chunks × 10ms = 80ms of audio
-- Produces 6 Mel frames (enough for model)
-- ~12.5 inferences/second
+CLAP (Contrastive Language-Audio Pretraining) offers key advantages:
+- **Zero-shot** - No training data required, works immediately
+- **Multi-label** - Can detect bark AND check for speech/birds simultaneously
+- **Veto system** - Reduces false positives by rejecting similar sounds
+- **Generalizes** - Works across dog breeds without fine-tuning
+
+The downside is slower inference (~500ms vs 80ms), which is why:
+- VAD gate fast-rejects silent audio before CLAP
+- High-confidence bypass (≥80%) enables instant detection
+- Detection cooldown prevents rapid-fire from same sound
+
+### Why Legacy MLP Mode?
+
+For constrained hardware (RPi 3, RPi Zero), the legacy MLP model offers:
+- 80ms inference interval (12.5 inferences/second)
+- Smaller memory footprint
+- Less accurate but faster
 
 ### Why JSON Sidecars for Evidence?
 
-For council complaints, metadata must be:
+For documentation purposes, metadata must be:
 - Human-readable (JSON, not binary)
 - Separate from audio (can't be embedded in WAV easily)
 - Include precise timestamps, probabilities, device info
+- Machine-parseable for cataloging and fingerprinting
 
 ---
 
@@ -631,8 +686,9 @@ For council complaints, metadata must be:
 
 1. **Prometheus Metrics** - For Grafana dashboards
 2. **Home Assistant Integration** - MQTT or REST
-3. **Multi-dog Differentiation** - Train custom models
+3. **Multi-Dog Fingerprinting** - Identify individual dogs by bark signature
 4. **SMS/Push Notifications** - Via Pushover/Twilio
+5. **Bark Pattern Analysis** - Track frequency, duration, and timing patterns per dog
 
 ### Known Limitations
 
@@ -649,6 +705,8 @@ This is a fork/rewrite of the original woofalytics project. Key changes:
 | Aspect | Original | v2.0 |
 |--------|----------|------|
 | Python | 3.9+ | 3.11+ |
+| Detection | Custom MLP | CLAP zero-shot (+ legacy MLP) |
+| False Positives | High | Multi-layer veto system |
 | Web Framework | Basic HTTP | FastAPI |
 | Config | Hardcoded | Pydantic v2 |
 | Microphone | Andrea only | Any USB mic |
