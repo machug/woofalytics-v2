@@ -131,6 +131,19 @@
         </footer>
     </div>
 
+    <!-- View Barks Modal -->
+    <div class="modal-backdrop" id="barks-modal">
+        <div class="modal" style="max-width: 600px; max-height: 80vh; overflow: hidden; display: flex; flex-direction: column;">
+            <h3 class="modal-title" id="barks-modal-title">Dog Barks</h3>
+            <div id="barks-modal-content" style="overflow-y: auto; flex: 1; margin: var(--space-md) 0;">
+                <!-- Barks will be rendered here -->
+            </div>
+            <div class="modal-actions">
+                <button type="button" class="btn btn-outline" onclick="closeBarkModal()">Close</button>
+            </div>
+        </div>
+    </div>
+
     <!-- Edit Dog Modal -->
     <div class="modal-backdrop" id="edit-modal">
         <div class="modal">
@@ -305,6 +318,13 @@
                         </div>
                         <div class="dog-card-actions">
                             ${confirmBtn}
+                            <button class="btn btn-teal btn-sm" onclick="admin.viewBarks('${dog.id}')">
+                                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="width:14px;height:14px">
+                                    <path d="M11 5L6 9H2v6h4l5 4V5z"/>
+                                    <path d="M15.54 8.46a5 5 0 010 7.07"/>
+                                </svg>
+                                View Barks (${dog.total_barks || 0})
+                            </button>
                             <button class="btn btn-outline btn-sm" onclick="admin.editDog('${dog.id}')">
                                 <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="width:14px;height:14px">
                                     <path d="M11 4H4a2 2 0 00-2 2v14a2 2 0 002 2h14a2 2 0 002-2v-7"/>
@@ -573,6 +593,111 @@
             }
         }
 
+        async viewBarks(dogId) {
+            const dog = this.dogs.find(d => d.id === dogId);
+            if (!dog) return;
+
+            document.getElementById('barks-modal-title').textContent = `${dog.name}'s Barks (${dog.total_barks || 0})`;
+            document.getElementById('barks-modal-content').innerHTML = `
+                <div style="text-align: center; padding: var(--space-lg); color: var(--text-muted);">
+                    Loading barks...
+                </div>
+            `;
+            document.getElementById('barks-modal').classList.add('active');
+
+            try {
+                const response = await fetch(`/api/dogs/${dogId}/barks?limit=100`);
+                if (!response.ok) throw new Error('Failed to load barks');
+                const data = await response.json();
+
+                this.renderDogBarks(dog, data.barks || []);
+            } catch (error) {
+                console.error('Error loading dog barks:', error);
+                document.getElementById('barks-modal-content').innerHTML = `
+                    <div style="text-align: center; padding: var(--space-lg); color: var(--accent-coral);">
+                        Error loading barks: ${error.message}
+                    </div>
+                `;
+            }
+        }
+
+        renderDogBarks(dog, barks) {
+            const container = document.getElementById('barks-modal-content');
+
+            if (barks.length === 0) {
+                container.innerHTML = `
+                    <div style="text-align: center; padding: var(--space-lg); color: var(--text-muted);">
+                        No barks recorded for this dog yet.
+                    </div>
+                `;
+                return;
+            }
+
+            const html = barks.map(bark => {
+                const time = new Date(bark.timestamp).toLocaleString();
+                const confidence = bark.match_confidence
+                    ? (bark.match_confidence * 100).toFixed(0) + '%'
+                    : '--';
+                const detection = bark.detection_probability
+                    ? (bark.detection_probability * 100).toFixed(0) + '%'
+                    : '--';
+                const doa = bark.doa_degrees !== null ? `${bark.doa_degrees}°` : '--';
+
+                return `
+                    <div class="bark-card" data-bark-id="${bark.id}" style="margin-bottom: var(--space-sm);">
+                        <div class="bark-card-header">
+                            <span class="bark-card-time">${time}</span>
+                            <span class="bark-card-confidence" title="Match confidence">${confidence}</span>
+                        </div>
+                        <div class="bark-card-meta" style="display: flex; gap: var(--space-md); margin-bottom: var(--space-sm);">
+                            <span>Detection: <strong>${detection}</strong></span>
+                            <span>Direction: <strong>${doa}</strong></span>
+                            <span>ID: <code style="font-size: 0.7rem;">${bark.id}</code></span>
+                        </div>
+                        <div class="bark-card-actions">
+                            <button class="btn btn-outline btn-sm" onclick="admin.untagBark('${bark.id}', '${dog.id}')" style="color: var(--accent-coral);">
+                                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="width:14px;height:14px">
+                                    <circle cx="12" cy="12" r="10"/>
+                                    <line x1="15" y1="9" x2="9" y2="15"/>
+                                    <line x1="9" y1="9" x2="15" y2="15"/>
+                                </svg>
+                                Untag
+                            </button>
+                        </div>
+                    </div>
+                `;
+            }).join('');
+
+            container.innerHTML = html;
+        }
+
+        async untagBark(barkId, dogId) {
+            if (!confirm('Untag this bark? It will be moved to the untagged barks list.')) {
+                return;
+            }
+
+            try {
+                const response = await fetch(`/api/barks/${barkId}/tag`, {
+                    method: 'DELETE'
+                });
+
+                if (response.ok) {
+                    // Refresh the modal content
+                    await this.viewBarks(dogId);
+                    // Refresh stats and dogs
+                    await this.loadDogs();
+                    await this.loadStats();
+                    await this.loadUntaggedBarks();
+                } else {
+                    const error = await response.json();
+                    alert('Error: ' + (error.detail || 'Failed to untag bark'));
+                }
+            } catch (error) {
+                console.error('Error untagging bark:', error);
+                alert('Error untagging bark');
+            }
+        }
+
         escapeHtml(text) {
             const div = document.createElement('div');
             div.textContent = text;
@@ -585,8 +710,17 @@
         document.getElementById('edit-modal').classList.remove('active');
     }
 
+    function closeBarkModal() {
+        document.getElementById('barks-modal').classList.remove('active');
+    }
+
     // Initialize
     const admin = new DogsAdmin();
+
+    // Close modals on backdrop click
+    document.getElementById('barks-modal').addEventListener('click', (e) => {
+        if (e.target.id === 'barks-modal') closeBarkModal();
+    });
     </script>
 </body>
 </html>
