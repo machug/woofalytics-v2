@@ -24,6 +24,8 @@ from woofalytics.config import Settings
 from woofalytics.detection.clap import CLAPConfig, CLAPDetector
 from woofalytics.detection.doa import DirectionEstimator
 from woofalytics.detection.features import FeatureExtractor, create_default_extractor
+from woofalytics.detection.vad import VADConfig, VADGate
+from woofalytics.observability.metrics import get_metrics
 
 logger = structlog.get_logger(__name__)
 
@@ -68,6 +70,7 @@ class BarkDetector:
     # Private state
     _model: torch.jit.ScriptModule | None = field(default=None, init=False)
     _clap_detector: CLAPDetector | None = field(default=None, init=False)
+    _vad_gate: VADGate | None = field(default=None, init=False)
     _feature_extractor: FeatureExtractor | None = field(default=None, init=False)
     _doa_estimator: DirectionEstimator | None = field(default=None, init=False)
     _audio_capture: AsyncAudioCapture | None = field(default=None, init=False)
@@ -81,6 +84,7 @@ class BarkDetector:
     _start_time: float = field(default=0.0, init=False)
     _total_barks: int = field(default=0, init=False)
     _inference_count: int = field(default=0, init=False)
+    _vad_skipped_count: int = field(default=0, init=False)
 
     def __post_init__(self) -> None:
         if self.settings.model.use_clap:
@@ -104,6 +108,17 @@ class BarkDetector:
             threshold=config.threshold,
             device=config.device,
         )
+
+        # Initialize VAD gate for fast rejection of silent frames
+        if self.settings.model.vad_enabled:
+            vad_config = VADConfig(
+                energy_threshold_db=self.settings.model.vad_threshold_db,
+            )
+            self._vad_gate = VADGate(vad_config)
+            logger.info(
+                "vad_gate_enabled",
+                threshold_db=self.settings.model.vad_threshold_db,
+            )
 
         # Still set up DOA estimator for direction detection
         if self.settings.doa.enabled:
@@ -237,12 +252,29 @@ class BarkDetector:
         channels = self.settings.audio.channels
         audio_array = audio_array.reshape((channels, -1), order="F")
 
+        # Get metrics registry
+        metrics = get_metrics()
+
+        # VAD gate: skip CLAP inference on silent audio
+        if self._vad_gate and not self._vad_gate.is_active(audio_array):
+            self._vad_skipped_count += 1
+            metrics.inc_vad_skipped()
+            # Log VAD skip rate periodically
+            if self._vad_skipped_count % 50 == 0:
+                logger.debug(
+                    "vad_skipping_silent_frames",
+                    skipped=self._vad_skipped_count,
+                    vad_stats=self._vad_gate.stats,
+                )
+            return
+
         # Extract DOA if enabled
         doa_bartlett, doa_capon, doa_mem = None, None, None
         if self._doa_estimator and channels >= 2:
             doa_bartlett, doa_capon, doa_mem = self._doa_estimator.estimate(audio_array)
 
-        # Run CLAP detection
+        # Run CLAP detection with latency tracking
+        inference_start = time.perf_counter()
         try:
             probability, is_barking, label_scores = self._clap_detector.detect(
                 audio_array,
@@ -251,6 +283,10 @@ class BarkDetector:
         except Exception as e:
             logger.warning("clap_inference_error", error=str(e), error_type=type(e).__name__)
             return
+        finally:
+            inference_latency = time.perf_counter() - inference_start
+            metrics.observe_latency(inference_latency, model_type="clap")
+            metrics.inc_inference(model_type="clap")
 
         # Create event
         event = BarkEvent(
@@ -276,9 +312,13 @@ class BarkDetector:
                 total_barks=self._total_barks,
             )
 
+        # Record probability in histogram
+        metrics.observe_probability(probability)
+
         # Track barks
         if is_barking:
             self._total_barks += 1
+            metrics.inc_bark_detection()
             # Log all scores for debugging speech veto effectiveness
             logger.info(
                 "bark_detected",
@@ -288,6 +328,7 @@ class BarkDetector:
             )
         elif probability >= self.settings.model.clap_threshold:
             # Bark was above threshold but vetoed (likely by speech detection)
+            metrics.inc_speech_vetoed()
             logger.info(
                 "bark_vetoed",
                 probability=f"{probability:.3f}",
@@ -327,7 +368,11 @@ class BarkDetector:
         if self._doa_estimator and channels >= 2:
             doa_bartlett, doa_capon, doa_mem = self._doa_estimator.estimate(audio_array)
 
-        # Extract features
+        # Get metrics registry
+        metrics = get_metrics()
+
+        # Extract features and run inference with latency tracking
+        inference_start = time.perf_counter()
         try:
             features = self._feature_extractor.extract_from_int16(audio_array)
 
@@ -348,6 +393,10 @@ class BarkDetector:
         except Exception as e:
             logger.debug("feature_extraction_error", error=str(e))
             return
+        finally:
+            inference_latency = time.perf_counter() - inference_start
+            metrics.observe_latency(inference_latency, model_type="legacy")
+            metrics.inc_inference(model_type="legacy")
 
         # Create event
         is_barking = probability >= self.settings.model.threshold
@@ -362,9 +411,13 @@ class BarkDetector:
 
         self._last_event = event
 
+        # Record probability in histogram
+        metrics.observe_probability(probability)
+
         # Track barks
         if is_barking:
             self._total_barks += 1
+            metrics.inc_bark_detection()
             logger.info(
                 "bark_detected",
                 probability=f"{probability:.3f}",
@@ -417,7 +470,7 @@ class BarkDetector:
 
     def get_status(self) -> dict:
         """Get detector status as dictionary."""
-        return {
+        status = {
             "running": self._running,
             "uptime_seconds": self.uptime_seconds,
             "total_barks": self._total_barks,
@@ -428,3 +481,9 @@ class BarkDetector:
                 else None
             ),
         }
+
+        # Include VAD stats if enabled
+        if self._vad_gate:
+            status["vad_stats"] = self._vad_gate.stats
+
+        return status

@@ -81,6 +81,9 @@ class CLAPDetector:
 
     CLAP computes similarity between audio and text descriptions,
     enabling classification without any training on bark data.
+
+    Text embeddings are pre-computed and cached on load() to avoid
+    redundant computation on every detect() call.
     """
 
     def __init__(self, config: CLAPConfig | None = None) -> None:
@@ -90,7 +93,9 @@ class CLAPDetector:
             config: Configuration for the detector. Uses defaults if None.
         """
         self.config = config or CLAPConfig()
-        self._pipeline: Any = None
+        self._model: Any = None
+        self._processor: Any = None
+        self._device: Any = None
         self._all_labels: list[str] = []
         self._positive_indices: set[int] = set()
         self._speech_indices: set[int] = set()
@@ -100,12 +105,18 @@ class CLAPDetector:
             maxlen=self.config.rolling_window_size
         )
 
+        # Cached text embeddings - computed once on load()
+        self._cached_text_embeddings: Any = None
+
     def load(self) -> None:
-        """Load the CLAP model.
+        """Load the CLAP model and pre-compute text embeddings.
 
         This is separate from __init__ to allow lazy loading.
+        Text embeddings are computed once and cached for all future
+        detect() calls, significantly reducing inference time.
         """
-        from transformers import pipeline
+        import torch
+        from transformers import ClapModel, ClapProcessor
 
         logger.info(
             "loading_clap_model",
@@ -113,11 +124,17 @@ class CLAPDetector:
             device=self.config.device,
         )
 
-        self._pipeline = pipeline(
-            "zero-shot-audio-classification",
-            model=self.config.model_name,
-            device=self.config.device,
-        )
+        # Determine device
+        if self.config.device == "cuda" and torch.cuda.is_available():
+            self._device = torch.device("cuda")
+        else:
+            self._device = torch.device("cpu")
+
+        # Load model and processor directly (not pipeline) for embedding caching
+        self._processor = ClapProcessor.from_pretrained(self.config.model_name)
+        self._model = ClapModel.from_pretrained(self.config.model_name)
+        self._model.to(self._device)
+        self._model.eval()
 
         # Combine all labels: positive, speech (for veto), percussive (for veto), and other
         self._all_labels = (
@@ -138,6 +155,9 @@ class CLAPDetector:
         percussive_end = percussive_start + len(self.config.percussive_labels)
         self._percussive_indices = set(range(percussive_start, percussive_end))
 
+        # Pre-compute and cache text embeddings for all labels
+        self._cache_text_embeddings()
+
         logger.info(
             "clap_model_loaded",
             positive_labels=self.config.positive_labels,
@@ -146,19 +166,56 @@ class CLAPDetector:
             other_labels=self.config.other_labels,
             speech_veto_threshold=self.config.speech_veto_threshold,
             percussive_veto_threshold=self.config.percussive_veto_threshold,
+            text_embeddings_cached=True,
+            num_cached_labels=len(self._all_labels),
+        )
+
+    def _cache_text_embeddings(self) -> None:
+        """Pre-compute and cache text embeddings for all labels.
+
+        This is called once during load() and the embeddings are reused
+        for every detect() call, avoiding redundant computation.
+        """
+        import torch
+
+        if not self._model or not self._processor:
+            raise RuntimeError("Model not loaded. Call load() first.")
+
+        logger.debug("caching_text_embeddings", labels=self._all_labels)
+
+        # Tokenize all labels
+        text_inputs = self._processor(
+            text=self._all_labels,
+            return_tensors="pt",
+            padding=True,
+        )
+        text_inputs = {k: v.to(self._device) for k, v in text_inputs.items()}
+
+        # Compute text embeddings once
+        with torch.no_grad():
+            text_features = self._model.get_text_features(**text_inputs)
+            # Normalize for cosine similarity
+            self._cached_text_embeddings = text_features / text_features.norm(
+                p=2, dim=-1, keepdim=True
+            )
+
+        logger.info(
+            "text_embeddings_cached",
+            shape=list(self._cached_text_embeddings.shape),
+            num_labels=len(self._all_labels),
         )
 
     @property
     def is_loaded(self) -> bool:
         """Check if the model is loaded."""
-        return self._pipeline is not None
+        return self._model is not None and self._cached_text_embeddings is not None
 
     def detect(
         self,
         audio: np.ndarray,
         sample_rate: int = 48000,
     ) -> tuple[float, bool, dict[str, float]]:
-        """Run bark detection on audio.
+        """Run bark detection on audio using cached text embeddings.
 
         Args:
             audio: Audio array of shape (samples,) or (channels, samples).
@@ -171,6 +228,8 @@ class CLAPDetector:
             - is_barking: Whether bark probability exceeds threshold
             - label_scores: Dictionary of all label scores for debugging
         """
+        import torch
+
         if not self.is_loaded:
             self.load()
 
@@ -182,19 +241,36 @@ class CLAPDetector:
         if audio.dtype == np.int16:
             audio = audio.astype(np.float32) / 32768.0
 
-        # Ensure float32, 1D, and contiguous (required by transformers pipeline)
-        # The pipeline expects shape (n,) with float32 values
+        # Ensure float32, 1D, and contiguous
         audio = np.ascontiguousarray(audio.flatten(), dtype=np.float32)
 
-        # Run classification - pass audio array directly as shown in HF docs example:
-        # classifier(audio, candidate_labels=["Sound of a dog", ...])
-        results = self._pipeline(
-            audio,
-            candidate_labels=self._all_labels,
+        # Process audio to get audio embeddings
+        audio_inputs = self._processor(
+            audios=audio,
+            sampling_rate=sample_rate,
+            return_tensors="pt",
         )
+        audio_inputs = {k: v.to(self._device) for k, v in audio_inputs.items()}
 
-        # Parse results - pipeline returns list of {score, label} dicts
-        label_scores = {r["label"]: r["score"] for r in results}
+        # Compute audio embeddings (text embeddings are cached)
+        with torch.no_grad():
+            audio_features = self._model.get_audio_features(**audio_inputs)
+            # Normalize for cosine similarity
+            audio_features = audio_features / audio_features.norm(p=2, dim=-1, keepdim=True)
+
+            # Compute similarity with cached text embeddings
+            # audio_features: (1, D), cached_text_embeddings: (N, D)
+            logits = (audio_features @ self._cached_text_embeddings.T).squeeze(0)
+
+            # Convert to probabilities via softmax
+            probs = torch.softmax(logits * 100.0, dim=-1)  # Scale like CLAP does
+            probs = probs.cpu().numpy()
+
+        # Build label scores dictionary
+        label_scores = {
+            label: float(probs[i])
+            for i, label in enumerate(self._all_labels)
+        }
 
         # Sum probabilities for positive labels (bark-related)
         bark_prob = sum(
