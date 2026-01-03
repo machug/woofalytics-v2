@@ -6,11 +6,763 @@
     <title>Dog Management - Woofalytics</title>
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-    <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700&display=swap" rel="stylesheet">
+    <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
     <link rel="stylesheet" href="/static/styles.css">
     <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🐕</text></svg>">
+    <style>
+        /* ===== Dog Management Page - Refined Design ===== */
+
+        /* Page-specific overrides */
+        .dogs-page {
+            --card-bg: rgba(22, 27, 34, 0.6);
+            --card-bg-hover: rgba(28, 33, 40, 0.8);
+            --badge-success-bg: rgba(16, 185, 129, 0.12);
+            --badge-success-border: rgba(16, 185, 129, 0.25);
+            --badge-success-text: #10b981;
+            --badge-warning-bg: rgba(245, 158, 11, 0.12);
+            --badge-warning-border: rgba(245, 158, 11, 0.25);
+            --badge-warning-text: #f59e0b;
+            --badge-muted-bg: rgba(100, 116, 139, 0.12);
+            --badge-muted-border: rgba(100, 116, 139, 0.25);
+            --badge-muted-text: #64748b;
+        }
+
+        /* Stats Row - Horizontal compact layout */
+        .stats-row {
+            display: flex;
+            gap: var(--space-md);
+            margin-bottom: var(--space-lg);
+            padding: var(--space-md) var(--space-lg);
+            background: var(--card-bg);
+            border: 1px solid var(--border-default);
+            border-radius: var(--radius-lg);
+            backdrop-filter: blur(20px);
+        }
+
+        .stat-pill {
+            display: flex;
+            align-items: center;
+            gap: var(--space-sm);
+            padding: var(--space-xs) var(--space-md);
+            background: var(--bg-overlay);
+            border-radius: var(--radius-full);
+        }
+
+        .stat-pill-value {
+            font-size: 1.25rem;
+            font-weight: 700;
+            font-family: 'JetBrains Mono', monospace;
+            color: var(--text-primary);
+        }
+
+        .stat-pill-label {
+            font-size: 0.75rem;
+            font-weight: 500;
+            color: var(--text-muted);
+            text-transform: uppercase;
+            letter-spacing: 0.03em;
+        }
+
+        .stat-pill--dogs .stat-pill-value { color: var(--accent-amber); }
+        .stat-pill--untagged .stat-pill-value { color: var(--accent-coral); }
+        .stat-pill--total .stat-pill-value { color: var(--accent-teal); }
+
+        /* Main Layout - Two Column with Priority */
+        .dogs-layout {
+            display: grid;
+            grid-template-columns: 1.2fr 1fr;
+            gap: var(--space-lg);
+            flex: 1;
+        }
+
+        @media (max-width: 1100px) {
+            .dogs-layout {
+                grid-template-columns: 1fr;
+            }
+        }
+
+        /* Section Panels */
+        .dogs-section {
+            display: flex;
+            flex-direction: column;
+            background: var(--card-bg);
+            border: 1px solid var(--border-default);
+            border-radius: var(--radius-lg);
+            backdrop-filter: blur(20px);
+            overflow: hidden;
+        }
+
+        .dogs-section-header {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            padding: var(--space-md) var(--space-lg);
+            border-bottom: 1px solid var(--border-muted);
+            background: rgba(0, 0, 0, 0.2);
+        }
+
+        .dogs-section-title {
+            display: flex;
+            align-items: center;
+            gap: var(--space-sm);
+            font-size: 0.875rem;
+            font-weight: 600;
+            color: var(--text-primary);
+        }
+
+        .dogs-section-title svg {
+            width: 18px;
+            height: 18px;
+            color: var(--accent-amber);
+        }
+
+        .dogs-section-count {
+            font-size: 0.7rem;
+            font-weight: 600;
+            padding: 2px 8px;
+            background: var(--bg-overlay);
+            border-radius: var(--radius-full);
+            color: var(--text-muted);
+        }
+
+        .dogs-section-body {
+            flex: 1;
+            padding: var(--space-md);
+            overflow-y: auto;
+            max-height: 600px;
+        }
+
+        /* Add Dog Form - Compact Inline */
+        .add-dog-form {
+            display: flex;
+            gap: var(--space-sm);
+            padding: var(--space-sm) var(--space-md);
+            margin: var(--space-sm);
+            background: var(--bg-overlay);
+            border-radius: var(--radius-md);
+            border: 1px dashed var(--border-default);
+        }
+
+        .add-dog-form .form-input {
+            flex: 1;
+            padding: var(--space-sm) var(--space-md);
+            background: var(--bg-surface);
+            border: 1px solid var(--border-default);
+            border-radius: var(--radius-sm);
+            color: var(--text-primary);
+            font-size: 0.875rem;
+            min-width: 0;
+        }
+
+        .add-dog-form .form-input:focus {
+            outline: none;
+            border-color: var(--accent-amber);
+        }
+
+        .add-dog-form .form-input::placeholder {
+            color: var(--text-muted);
+        }
+
+        .add-dog-form .btn-add {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            width: 36px;
+            height: 36px;
+            background: var(--accent-amber);
+            border: none;
+            border-radius: var(--radius-sm);
+            color: var(--bg-base);
+            cursor: pointer;
+            transition: all var(--transition-fast);
+            flex-shrink: 0;
+        }
+
+        .add-dog-form .btn-add:hover {
+            background: #fbbf24;
+            transform: scale(1.05);
+        }
+
+        .add-dog-form .btn-add svg {
+            width: 18px;
+            height: 18px;
+        }
+
+        /* Dog Card - Refined */
+        .dog-card-v2 {
+            display: flex;
+            align-items: center;
+            gap: var(--space-md);
+            padding: var(--space-md);
+            background: transparent;
+            border-radius: var(--radius-md);
+            border: 1px solid transparent;
+            transition: all var(--transition-fast);
+            margin-bottom: var(--space-xs);
+        }
+
+        .dog-card-v2:hover {
+            background: var(--card-bg-hover);
+            border-color: var(--border-default);
+        }
+
+        .dog-card-avatar {
+            width: 44px;
+            height: 44px;
+            border-radius: 50%;
+            background: linear-gradient(135deg, var(--accent-amber-dim), rgba(245, 158, 11, 0.25));
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 1.25rem;
+            flex-shrink: 0;
+            border: 2px solid var(--accent-amber-dim);
+        }
+
+        .dog-card-content {
+            flex: 1;
+            min-width: 0;
+        }
+
+        .dog-card-header {
+            display: flex;
+            align-items: center;
+            gap: var(--space-sm);
+            margin-bottom: 2px;
+        }
+
+        .dog-card-name {
+            font-size: 0.95rem;
+            font-weight: 600;
+            color: var(--text-primary);
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
+        }
+
+        .dog-card-notes {
+            font-size: 0.75rem;
+            color: var(--text-muted);
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
+        }
+
+        /* Status Badge V2 */
+        .status-chip {
+            display: inline-flex;
+            align-items: center;
+            gap: 4px;
+            padding: 2px 8px;
+            font-size: 0.625rem;
+            font-weight: 600;
+            text-transform: uppercase;
+            letter-spacing: 0.04em;
+            border-radius: var(--radius-full);
+            border: 1px solid;
+            white-space: nowrap;
+        }
+
+        .status-chip svg {
+            width: 10px;
+            height: 10px;
+        }
+
+        .status-chip--active {
+            background: var(--badge-success-bg);
+            border-color: var(--badge-success-border);
+            color: var(--badge-success-text);
+        }
+
+        .status-chip--pending {
+            background: var(--badge-warning-bg);
+            border-color: var(--badge-warning-border);
+            color: var(--badge-warning-text);
+        }
+
+        .status-chip--inactive {
+            background: var(--badge-muted-bg);
+            border-color: var(--badge-muted-border);
+            color: var(--badge-muted-text);
+        }
+
+        /* Dog Stats Row */
+        .dog-card-stats {
+            display: flex;
+            align-items: center;
+            gap: var(--space-md);
+            margin-top: 4px;
+        }
+
+        .dog-stat {
+            display: flex;
+            align-items: center;
+            gap: 4px;
+            font-size: 0.7rem;
+            color: var(--text-muted);
+        }
+
+        .dog-stat strong {
+            font-weight: 600;
+            color: var(--text-secondary);
+            font-family: 'JetBrains Mono', monospace;
+        }
+
+        .dog-stat svg {
+            width: 12px;
+            height: 12px;
+            opacity: 0.6;
+        }
+
+        /* Dog Card Actions */
+        .dog-card-actions {
+            display: flex;
+            align-items: center;
+            gap: var(--space-xs);
+            flex-shrink: 0;
+        }
+
+        .btn-action {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 4px;
+            padding: var(--space-xs) var(--space-sm);
+            font-size: 0.7rem;
+            font-weight: 600;
+            border: 1px solid var(--border-default);
+            border-radius: var(--radius-sm);
+            background: transparent;
+            color: var(--text-secondary);
+            cursor: pointer;
+            transition: all var(--transition-fast);
+            white-space: nowrap;
+        }
+
+        .btn-action svg {
+            width: 12px;
+            height: 12px;
+        }
+
+        .btn-action:hover {
+            background: var(--bg-overlay);
+            color: var(--text-primary);
+            border-color: var(--text-muted);
+        }
+
+        .btn-action--primary {
+            background: var(--accent-amber);
+            border-color: var(--accent-amber);
+            color: var(--bg-base);
+        }
+
+        .btn-action--primary:hover {
+            background: #fbbf24;
+            border-color: #fbbf24;
+        }
+
+        .btn-action--teal {
+            background: var(--accent-teal-dim);
+            border-color: var(--accent-teal);
+            color: var(--accent-teal);
+        }
+
+        .btn-action--teal:hover {
+            background: var(--accent-teal);
+            color: var(--bg-base);
+        }
+
+        .btn-action--danger {
+            color: var(--accent-coral);
+            border-color: var(--accent-coral-dim);
+        }
+
+        .btn-action--danger:hover {
+            background: var(--accent-coral-dim);
+            border-color: var(--accent-coral);
+        }
+
+        /* More Actions Dropdown */
+        .actions-menu {
+            position: relative;
+        }
+
+        .actions-dropdown {
+            position: absolute;
+            top: 100%;
+            right: 0;
+            min-width: 140px;
+            margin-top: 4px;
+            padding: var(--space-xs);
+            background: var(--bg-surface);
+            border: 1px solid var(--border-default);
+            border-radius: var(--radius-md);
+            box-shadow: var(--shadow-lg);
+            z-index: 100;
+            opacity: 0;
+            visibility: hidden;
+            transform: translateY(-8px);
+            transition: all var(--transition-fast);
+        }
+
+        .actions-menu.open .actions-dropdown {
+            opacity: 1;
+            visibility: visible;
+            transform: translateY(0);
+        }
+
+        .dropdown-item {
+            display: flex;
+            align-items: center;
+            gap: var(--space-sm);
+            width: 100%;
+            padding: var(--space-sm) var(--space-md);
+            font-size: 0.75rem;
+            font-weight: 500;
+            color: var(--text-secondary);
+            background: transparent;
+            border: none;
+            border-radius: var(--radius-sm);
+            cursor: pointer;
+            transition: all var(--transition-fast);
+            text-align: left;
+        }
+
+        .dropdown-item svg {
+            width: 14px;
+            height: 14px;
+        }
+
+        .dropdown-item:hover {
+            background: var(--bg-overlay);
+            color: var(--text-primary);
+        }
+
+        .dropdown-item--danger:hover {
+            background: var(--accent-coral-dim);
+            color: var(--accent-coral);
+        }
+
+        .dropdown-divider {
+            height: 1px;
+            background: var(--border-muted);
+            margin: var(--space-xs) 0;
+        }
+
+        /* Bark Card V2 */
+        .bark-card-v2 {
+            display: flex;
+            align-items: flex-start;
+            gap: var(--space-md);
+            padding: var(--space-md);
+            background: var(--bg-overlay);
+            border-radius: var(--radius-md);
+            border-left: 3px solid var(--accent-coral);
+            margin-bottom: var(--space-sm);
+            transition: all var(--transition-fast);
+        }
+
+        .bark-card-v2:hover {
+            background: var(--card-bg-hover);
+        }
+
+        .bark-icon {
+            width: 32px;
+            height: 32px;
+            border-radius: var(--radius-sm);
+            background: var(--accent-coral-dim);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            flex-shrink: 0;
+        }
+
+        .bark-icon svg {
+            width: 16px;
+            height: 16px;
+            color: var(--accent-coral);
+        }
+
+        .bark-content {
+            flex: 1;
+            min-width: 0;
+        }
+
+        .bark-header {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            gap: var(--space-sm);
+            margin-bottom: 4px;
+        }
+
+        .bark-time {
+            font-size: 0.8rem;
+            font-weight: 600;
+            color: var(--text-primary);
+            font-family: 'JetBrains Mono', monospace;
+        }
+
+        .bark-prob {
+            font-size: 0.65rem;
+            font-weight: 600;
+            padding: 2px 6px;
+            background: var(--accent-teal-dim);
+            color: var(--accent-teal);
+            border-radius: var(--radius-full);
+        }
+
+        .bark-meta {
+            display: flex;
+            gap: var(--space-md);
+            font-size: 0.7rem;
+            color: var(--text-muted);
+            margin-bottom: var(--space-sm);
+        }
+
+        .bark-meta a {
+            color: var(--accent-blue);
+            text-decoration: none;
+        }
+
+        .bark-meta a:hover {
+            text-decoration: underline;
+        }
+
+        /* Tag Select Dropdown */
+        .tag-select {
+            position: relative;
+            min-width: 140px;
+            flex-shrink: 0;
+        }
+
+        .tag-select-trigger {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            gap: var(--space-sm);
+            width: 100%;
+            padding: var(--space-sm) var(--space-md);
+            font-size: 0.75rem;
+            font-weight: 500;
+            color: var(--text-secondary);
+            background: var(--bg-surface);
+            border: 1px solid var(--border-default);
+            border-radius: var(--radius-sm);
+            cursor: pointer;
+            transition: all var(--transition-fast);
+        }
+
+        .tag-select-trigger:hover {
+            border-color: var(--accent-amber);
+            color: var(--text-primary);
+        }
+
+        .tag-select-trigger svg {
+            width: 12px;
+            height: 12px;
+            transition: transform var(--transition-fast);
+        }
+
+        .tag-select.open .tag-select-trigger svg {
+            transform: rotate(180deg);
+        }
+
+        .tag-select-menu {
+            position: absolute;
+            top: 100%;
+            left: 0;
+            right: 0;
+            margin-top: 4px;
+            padding: var(--space-xs);
+            background: var(--bg-surface);
+            border: 1px solid var(--border-default);
+            border-radius: var(--radius-md);
+            box-shadow: var(--shadow-lg);
+            z-index: 100;
+            opacity: 0;
+            visibility: hidden;
+            transform: translateY(-8px);
+            transition: all var(--transition-fast);
+            max-height: 200px;
+            overflow-y: auto;
+        }
+
+        .tag-select.open .tag-select-menu {
+            opacity: 1;
+            visibility: visible;
+            transform: translateY(0);
+        }
+
+        .tag-option {
+            display: flex;
+            align-items: center;
+            gap: var(--space-sm);
+            width: 100%;
+            padding: var(--space-sm) var(--space-md);
+            font-size: 0.75rem;
+            font-weight: 500;
+            color: var(--text-secondary);
+            background: transparent;
+            border: none;
+            border-radius: var(--radius-sm);
+            cursor: pointer;
+            transition: all var(--transition-fast);
+            text-align: left;
+        }
+
+        .tag-option:hover {
+            background: var(--accent-amber-dim);
+            color: var(--accent-amber);
+        }
+
+        /* Modal V2 */
+        .modal-v2 {
+            max-width: 640px;
+            width: 95%;
+            max-height: 85vh;
+            background: var(--bg-surface);
+            border: 1px solid var(--border-default);
+            border-radius: var(--radius-lg);
+            box-shadow: var(--shadow-lg), 0 0 0 1px rgba(20, 184, 166, 0.1);
+            display: flex;
+            flex-direction: column;
+            overflow: hidden;
+        }
+
+        .modal-header {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            padding: var(--space-md) var(--space-lg);
+            border-bottom: 1px solid var(--border-muted);
+            background: rgba(0, 0, 0, 0.3);
+        }
+
+        .modal-title-v2 {
+            display: flex;
+            align-items: center;
+            gap: var(--space-sm);
+            font-size: 1rem;
+            font-weight: 600;
+            color: var(--text-primary);
+        }
+
+        .modal-title-v2 svg {
+            width: 20px;
+            height: 20px;
+            color: var(--accent-teal);
+        }
+
+        .modal-close {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            width: 28px;
+            height: 28px;
+            background: transparent;
+            border: 1px solid var(--border-default);
+            border-radius: var(--radius-sm);
+            color: var(--text-muted);
+            cursor: pointer;
+            transition: all var(--transition-fast);
+        }
+
+        .modal-close:hover {
+            background: var(--bg-overlay);
+            color: var(--text-primary);
+        }
+
+        .modal-close svg {
+            width: 14px;
+            height: 14px;
+        }
+
+        .modal-body {
+            flex: 1;
+            padding: var(--space-md) var(--space-lg);
+            overflow-y: auto;
+        }
+
+        .modal-footer {
+            padding: var(--space-md) var(--space-lg);
+            border-top: 1px solid var(--border-muted);
+            background: rgba(0, 0, 0, 0.2);
+            display: flex;
+            justify-content: flex-end;
+            gap: var(--space-sm);
+        }
+
+        /* Empty States */
+        .empty-state {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            padding: var(--space-2xl) var(--space-lg);
+            text-align: center;
+        }
+
+        .empty-state-icon {
+            width: 48px;
+            height: 48px;
+            margin-bottom: var(--space-md);
+            color: var(--text-muted);
+            opacity: 0.4;
+        }
+
+        .empty-state-text {
+            font-size: 0.875rem;
+            color: var(--text-muted);
+            line-height: 1.5;
+        }
+
+        /* Loading State */
+        .loading-state {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: var(--space-sm);
+            padding: var(--space-xl);
+            color: var(--text-muted);
+            font-size: 0.875rem;
+        }
+
+        .spinner {
+            width: 16px;
+            height: 16px;
+            border: 2px solid var(--border-default);
+            border-top-color: var(--accent-teal);
+            border-radius: 50%;
+            animation: spin 0.8s linear infinite;
+        }
+
+        @keyframes spin {
+            to { transform: rotate(360deg); }
+        }
+
+        /* Responsive */
+        @media (max-width: 768px) {
+            .stats-row {
+                flex-wrap: wrap;
+                gap: var(--space-sm);
+            }
+
+            .dog-card-v2 {
+                flex-wrap: wrap;
+            }
+
+            .dog-card-actions {
+                width: 100%;
+                justify-content: flex-start;
+                margin-top: var(--space-sm);
+                padding-top: var(--space-sm);
+                border-top: 1px solid var(--border-muted);
+            }
+        }
+    </style>
 </head>
-<body>
+<body class="dogs-page">
     <!-- Telemetry Strip -->
     <div class="telemetry-strip">
         <div class="telemetry-mission">
@@ -40,83 +792,83 @@
             </div>
         </header>
 
-        <!-- Stats Summary -->
-        <div class="stats-grid">
-            <div class="stat-card">
-                <div class="stat-card-value" id="stat-dogs">0</div>
-                <div class="stat-card-label">Known Dogs</div>
+        <!-- Stats Row -->
+        <div class="stats-row">
+            <div class="stat-pill stat-pill--dogs">
+                <span class="stat-pill-value" id="stat-dogs">0</span>
+                <span class="stat-pill-label">Dogs</span>
             </div>
-            <div class="stat-card">
-                <div class="stat-card-value" id="stat-untagged">0</div>
-                <div class="stat-card-label">Untagged Barks</div>
+            <div class="stat-pill stat-pill--untagged">
+                <span class="stat-pill-value" id="stat-untagged">0</span>
+                <span class="stat-pill-label">Untagged</span>
             </div>
-            <div class="stat-card">
-                <div class="stat-card-value" id="stat-total">0</div>
-                <div class="stat-card-label">Total Fingerprints</div>
+            <div class="stat-pill stat-pill--total">
+                <span class="stat-pill-value" id="stat-total">0</span>
+                <span class="stat-pill-label">Fingerprints</span>
             </div>
         </div>
 
-        <main class="admin-layout">
+        <main class="dogs-layout">
             <!-- Dog Profiles Section -->
-            <section class="admin-section">
-                <h2 class="admin-section-title">
-                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                        <circle cx="12" cy="12" r="10"/>
-                        <path d="M8 14s1.5 2 4 2 4-2 4-2"/>
-                        <line x1="9" y1="9" x2="9.01" y2="9"/>
-                        <line x1="15" y1="9" x2="15.01" y2="9"/>
-                    </svg>
-                    Dog Profiles
-                </h2>
+            <section class="dogs-section">
+                <div class="dogs-section-header">
+                    <h2 class="dogs-section-title">
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                            <circle cx="12" cy="12" r="10"/>
+                            <path d="M8 14s1.5 2 4 2 4-2 4-2"/>
+                            <line x1="9" y1="9" x2="9.01" y2="9"/>
+                            <line x1="15" y1="9" x2="15.01" y2="9"/>
+                        </svg>
+                        Dog Profiles
+                    </h2>
+                    <span class="dogs-section-count" id="dogs-count">0</span>
+                </div>
 
                 <!-- Add Dog Form -->
-                <form id="add-dog-form" class="dog-card" style="margin-bottom: var(--space-md);">
-                    <div class="form-group">
-                        <label class="form-label">Dog Name</label>
-                        <input type="text" class="form-input" id="new-dog-name" placeholder="e.g., Max, Bella..." required>
-                    </div>
-                    <div class="form-group">
-                        <label class="form-label">Notes (optional)</label>
-                        <input type="text" class="form-input" id="new-dog-notes" placeholder="e.g., Neighbor's golden retriever">
-                    </div>
-                    <button type="submit" class="btn btn-amber">
-                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <form id="add-dog-form" class="add-dog-form">
+                    <input type="text" class="form-input" id="new-dog-name" placeholder="Dog name..." required>
+                    <input type="text" class="form-input" id="new-dog-notes" placeholder="Notes (optional)" style="flex: 0.8;">
+                    <button type="submit" class="btn-add" title="Add Dog">
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
                             <line x1="12" y1="5" x2="12" y2="19"/>
                             <line x1="5" y1="12" x2="19" y2="12"/>
                         </svg>
-                        Add Dog
                     </button>
                 </form>
 
-                <!-- Dogs List -->
-                <div class="dogs-admin-list" id="dogs-admin-list">
-                    <div class="admin-empty">
-                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
+                <div class="dogs-section-body" id="dogs-list">
+                    <div class="empty-state">
+                        <svg class="empty-state-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
                             <circle cx="12" cy="12" r="10"/>
                             <path d="M8 14s1.5 2 4 2 4-2 4-2"/>
+                            <line x1="9" y1="9" x2="9.01" y2="9"/>
+                            <line x1="15" y1="9" x2="15.01" y2="9"/>
                         </svg>
-                        <span class="admin-empty-text">No dogs registered yet.<br>Add your first dog above!</span>
+                        <span class="empty-state-text">No dogs registered yet.<br>Add your first dog above!</span>
                     </div>
                 </div>
             </section>
 
             <!-- Untagged Barks Section -->
-            <section class="admin-section">
-                <h2 class="admin-section-title">
-                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                        <path d="M11 5L6 9H2v6h4l5 4V5z"/>
-                        <path d="M15.54 8.46a5 5 0 010 7.07"/>
-                    </svg>
-                    Untagged Barks
-                </h2>
+            <section class="dogs-section">
+                <div class="dogs-section-header">
+                    <h2 class="dogs-section-title">
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                            <path d="M11 5L6 9H2v6h4l5 4V5z"/>
+                            <path d="M15.54 8.46a5 5 0 010 7.07"/>
+                        </svg>
+                        Untagged Barks
+                    </h2>
+                    <span class="dogs-section-count" id="barks-count">0</span>
+                </div>
 
-                <div class="barks-review-list" id="barks-review-list">
-                    <div class="admin-empty">
-                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
+                <div class="dogs-section-body" id="barks-list">
+                    <div class="empty-state">
+                        <svg class="empty-state-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
                             <path d="M22 11.08V12a10 10 0 11-5.93-9.14"/>
                             <polyline points="22 4 12 14.01 9 11.01"/>
                         </svg>
-                        <span class="admin-empty-text">All barks have been reviewed!</span>
+                        <span class="empty-state-text">All barks have been reviewed!</span>
                     </div>
                 </div>
             </section>
@@ -133,12 +885,26 @@
 
     <!-- View Barks Modal -->
     <div class="modal-backdrop" id="barks-modal">
-        <div class="modal" style="max-width: 600px; max-height: 80vh; overflow: hidden; display: flex; flex-direction: column;">
-            <h3 class="modal-title" id="barks-modal-title">Dog Barks</h3>
-            <div id="barks-modal-content" style="overflow-y: auto; flex: 1; margin: var(--space-md) 0;">
+        <div class="modal-v2">
+            <div class="modal-header">
+                <h3 class="modal-title-v2">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                        <path d="M11 5L6 9H2v6h4l5 4V5z"/>
+                        <path d="M15.54 8.46a5 5 0 010 7.07"/>
+                    </svg>
+                    <span id="barks-modal-title">Dog Barks</span>
+                </h3>
+                <button type="button" class="modal-close" onclick="closeBarkModal()">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                        <line x1="18" y1="6" x2="6" y2="18"/>
+                        <line x1="6" y1="6" x2="18" y2="18"/>
+                    </svg>
+                </button>
+            </div>
+            <div class="modal-body" id="barks-modal-content">
                 <!-- Barks will be rendered here -->
             </div>
-            <div class="modal-actions">
+            <div class="modal-footer">
                 <button type="button" class="btn btn-outline" onclick="closeBarkModal()">Close</button>
             </div>
         </div>
@@ -146,19 +912,35 @@
 
     <!-- Edit Dog Modal -->
     <div class="modal-backdrop" id="edit-modal">
-        <div class="modal">
-            <h3 class="modal-title">Edit Dog Profile</h3>
+        <div class="modal-v2" style="max-width: 420px;">
+            <div class="modal-header">
+                <h3 class="modal-title-v2">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                        <path d="M11 4H4a2 2 0 00-2 2v14a2 2 0 002 2h14a2 2 0 002-2v-7"/>
+                        <path d="M18.5 2.5a2.12 2.12 0 013 3L12 15l-4 1 1-4 9.5-9.5z"/>
+                    </svg>
+                    Edit Dog Profile
+                </h3>
+                <button type="button" class="modal-close" onclick="closeEditModal()">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                        <line x1="18" y1="6" x2="6" y2="18"/>
+                        <line x1="6" y1="6" x2="18" y2="18"/>
+                    </svg>
+                </button>
+            </div>
             <form id="edit-dog-form">
-                <input type="hidden" id="edit-dog-id">
-                <div class="form-group">
-                    <label class="form-label">Dog Name</label>
-                    <input type="text" class="form-input" id="edit-dog-name" required>
+                <div class="modal-body">
+                    <input type="hidden" id="edit-dog-id">
+                    <div class="form-group">
+                        <label class="form-label">Dog Name</label>
+                        <input type="text" class="form-input" id="edit-dog-name" required>
+                    </div>
+                    <div class="form-group">
+                        <label class="form-label">Notes</label>
+                        <textarea class="form-input form-textarea" id="edit-dog-notes" rows="3"></textarea>
+                    </div>
                 </div>
-                <div class="form-group">
-                    <label class="form-label">Notes</label>
-                    <textarea class="form-input form-textarea" id="edit-dog-notes"></textarea>
-                </div>
-                <div class="modal-actions">
+                <div class="modal-footer">
                     <button type="button" class="btn btn-outline" onclick="closeEditModal()">Cancel</button>
                     <button type="submit" class="btn btn-amber">Save Changes</button>
                 </div>
@@ -168,12 +950,13 @@
 
     <script>
     /**
-     * Dog Management Admin Page
+     * Dog Management Admin - Refined UI
      */
     class DogsAdmin {
         constructor() {
             this.dogs = [];
             this.untaggedBarks = [];
+            this.openDropdowns = new Set();
             this.init();
         }
 
@@ -204,12 +987,37 @@
                 this.saveDogEdit();
             });
 
-            // Close modal on backdrop click
+            // Close modals on backdrop click
             document.getElementById('edit-modal').addEventListener('click', (e) => {
-                if (e.target.id === 'edit-modal') {
-                    closeEditModal();
+                if (e.target.id === 'edit-modal') closeEditModal();
+            });
+
+            document.getElementById('barks-modal').addEventListener('click', (e) => {
+                if (e.target.id === 'barks-modal') closeBarkModal();
+            });
+
+            // Close dropdowns when clicking outside
+            document.addEventListener('click', (e) => {
+                if (!e.target.closest('.actions-menu') && !e.target.closest('.tag-select')) {
+                    this.closeAllDropdowns();
                 }
             });
+        }
+
+        closeAllDropdowns() {
+            document.querySelectorAll('.actions-menu.open, .tag-select.open').forEach(el => {
+                el.classList.remove('open');
+            });
+            this.openDropdowns.clear();
+        }
+
+        toggleDropdown(element, id) {
+            const isOpen = element.classList.contains('open');
+            this.closeAllDropdowns();
+            if (!isOpen) {
+                element.classList.add('open');
+                this.openDropdowns.add(id);
+            }
         }
 
         async loadStats() {
@@ -232,8 +1040,8 @@
                 if (!response.ok) return;
                 const data = await response.json();
 
-                // API returns array directly
                 this.dogs = Array.isArray(data) ? data : (data.dogs || []);
+                document.getElementById('dogs-count').textContent = this.dogs.length;
                 this.renderDogs();
             } catch (error) {
                 console.error('Error loading dogs:', error);
@@ -241,16 +1049,16 @@
         }
 
         renderDogs() {
-            const container = document.getElementById('dogs-admin-list');
+            const container = document.getElementById('dogs-list');
 
             if (this.dogs.length === 0) {
                 container.innerHTML = `
-                    <div class="admin-empty">
-                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
+                    <div class="empty-state">
+                        <svg class="empty-state-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
                             <circle cx="12" cy="12" r="10"/>
                             <path d="M8 14s1.5 2 4 2 4-2 4-2"/>
                         </svg>
-                        <span class="admin-empty-text">No dogs registered yet.<br>Add your first dog above!</span>
+                        <span class="empty-state-text">No dogs registered yet.<br>Add your first dog above!</span>
                     </div>
                 `;
                 return;
@@ -258,35 +1066,42 @@
 
             const html = this.dogs.map(dog => {
                 const lastSeen = dog.last_seen
-                    ? new Date(dog.last_seen).toLocaleDateString()
+                    ? this.formatRelativeTime(new Date(dog.last_seen))
                     : 'Never';
 
-                // Status badge based on confirmation and auto-tag status
-                let statusBadge = '';
-                let statusClass = '';
+                // Status chip
+                let statusChip = '';
                 if (dog.can_auto_tag) {
-                    statusBadge = 'AUTO-TAG ON';
-                    statusClass = 'status-active';
+                    statusChip = `<span class="status-chip status-chip--active">
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                            <path d="M22 11.08V12a10 10 0 11-5.93-9.14"/>
+                            <polyline points="22 4 12 14.01 9 11.01"/>
+                        </svg>
+                        Auto-Tag
+                    </span>`;
                 } else if (dog.confirmed) {
-                    statusBadge = `CONFIRMED (${dog.sample_count}/${dog.min_samples_for_auto_tag} samples)`;
-                    statusClass = 'status-pending';
+                    const progress = `${dog.sample_count}/${dog.min_samples_for_auto_tag}`;
+                    statusChip = `<span class="status-chip status-chip--pending">
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                            <circle cx="12" cy="12" r="10"/>
+                            <polyline points="12 6 12 12 16 14"/>
+                        </svg>
+                        ${progress}
+                    </span>`;
                 } else {
-                    statusBadge = 'NOT CONFIRMED';
-                    statusClass = 'status-inactive';
+                    statusChip = `<span class="status-chip status-chip--inactive">Unconfirmed</span>`;
                 }
 
-                // Confirm/Unconfirm button
-                const confirmBtn = dog.confirmed
-                    ? `<button class="btn btn-outline btn-sm" onclick="admin.unconfirmDog('${dog.id}')" style="color: var(--accent-coral);">
-                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="width:14px;height:14px">
-                            <circle cx="12" cy="12" r="10"/>
-                            <line x1="15" y1="9" x2="9" y2="15"/>
-                            <line x1="9" y1="9" x2="15" y2="15"/>
+                // Primary action
+                const primaryBtn = dog.confirmed
+                    ? `<button class="btn-action btn-action--teal" onclick="admin.viewBarks('${dog.id}')">
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                            <path d="M11 5L6 9H2v6h4l5 4V5z"/>
                         </svg>
-                        Unconfirm
+                        Barks (${dog.total_barks || 0})
                     </button>`
-                    : `<button class="btn btn-amber btn-sm" onclick="admin.confirmDog('${dog.id}')">
-                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="width:14px;height:14px">
+                    : `<button class="btn-action btn-action--primary" onclick="admin.confirmDog('${dog.id}')">
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                             <path d="M22 11.08V12a10 10 0 11-5.93-9.14"/>
                             <polyline points="22 4 12 14.01 9 11.01"/>
                         </svg>
@@ -294,51 +1109,83 @@
                     </button>`;
 
                 return `
-                    <div class="dog-card" data-dog-id="${dog.id}">
-                        <div class="dog-card-header">
-                            <div class="dog-card-avatar">🐕</div>
-                            <div class="dog-card-info">
-                                <div class="dog-card-name">
-                                    ${this.escapeHtml(dog.name)}
-                                    <span class="status-badge ${statusClass}">${statusBadge}</span>
+                    <div class="dog-card-v2" data-dog-id="${dog.id}">
+                        <div class="dog-card-avatar">🐕</div>
+                        <div class="dog-card-content">
+                            <div class="dog-card-header">
+                                <span class="dog-card-name">${this.escapeHtml(dog.name)}</span>
+                                ${statusChip}
+                            </div>
+                            ${dog.notes ? `<div class="dog-card-notes">${this.escapeHtml(dog.notes)}</div>` : ''}
+                            <div class="dog-card-stats">
+                                <div class="dog-stat">
+                                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                        <path d="M11 5L6 9H2v6h4l5 4V5z"/>
+                                    </svg>
+                                    <strong>${dog.total_barks || 0}</strong> barks
                                 </div>
-                                ${dog.notes ? `<div class="dog-card-notes">${this.escapeHtml(dog.notes)}</div>` : ''}
-                            </div>
-                        </div>
-                        <div class="dog-card-stats">
-                            <div class="dog-card-stat">
-                                <strong>${dog.total_barks || 0}</strong> barks
-                            </div>
-                            <div class="dog-card-stat">
-                                <strong>${dog.sample_count || 0}</strong> samples
-                            </div>
-                            <div class="dog-card-stat">
-                                Last seen: <strong>${lastSeen}</strong>
+                                <div class="dog-stat">
+                                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                        <circle cx="12" cy="12" r="10"/>
+                                        <polyline points="12 6 12 12 16 14"/>
+                                    </svg>
+                                    ${lastSeen}
+                                </div>
                             </div>
                         </div>
                         <div class="dog-card-actions">
-                            ${confirmBtn}
-                            <button class="btn btn-teal btn-sm" onclick="admin.viewBarks('${dog.id}')">
-                                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="width:14px;height:14px">
-                                    <path d="M11 5L6 9H2v6h4l5 4V5z"/>
-                                    <path d="M15.54 8.46a5 5 0 010 7.07"/>
-                                </svg>
-                                View Barks (${dog.total_barks || 0})
-                            </button>
-                            <button class="btn btn-outline btn-sm" onclick="admin.editDog('${dog.id}')">
-                                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="width:14px;height:14px">
-                                    <path d="M11 4H4a2 2 0 00-2 2v14a2 2 0 002 2h14a2 2 0 002-2v-7"/>
-                                    <path d="M18.5 2.5a2.12 2.12 0 013 3L12 15l-4 1 1-4 9.5-9.5z"/>
-                                </svg>
-                                Edit
-                            </button>
-                            <button class="btn btn-outline btn-sm" onclick="admin.deleteDog('${dog.id}')" style="color: var(--accent-coral);">
-                                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="width:14px;height:14px">
-                                    <polyline points="3 6 5 6 21 6"/>
-                                    <path d="M19 6v14a2 2 0 01-2 2H7a2 2 0 01-2-2V6m3 0V4a2 2 0 012-2h4a2 2 0 012 2v2"/>
-                                </svg>
-                                Delete
-                            </button>
+                            ${primaryBtn}
+                            ${dog.confirmed ? `
+                                <button class="btn-action" onclick="admin.viewBarks('${dog.id}')" style="display:none;"></button>
+                            ` : `
+                                <button class="btn-action btn-action--teal" onclick="admin.viewBarks('${dog.id}')">
+                                    Barks
+                                </button>
+                            `}
+                            <div class="actions-menu">
+                                <button class="btn-action" onclick="admin.toggleDropdown(this.parentElement, '${dog.id}'); event.stopPropagation();">
+                                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                        <circle cx="12" cy="12" r="1"/>
+                                        <circle cx="12" cy="5" r="1"/>
+                                        <circle cx="12" cy="19" r="1"/>
+                                    </svg>
+                                </button>
+                                <div class="actions-dropdown">
+                                    <button class="dropdown-item" onclick="admin.editDog('${dog.id}')">
+                                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                            <path d="M11 4H4a2 2 0 00-2 2v14a2 2 0 002 2h14a2 2 0 002-2v-7"/>
+                                            <path d="M18.5 2.5a2.12 2.12 0 013 3L12 15l-4 1 1-4 9.5-9.5z"/>
+                                        </svg>
+                                        Edit Profile
+                                    </button>
+                                    ${dog.confirmed ? `
+                                        <button class="dropdown-item" onclick="admin.unconfirmDog('${dog.id}')">
+                                            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                                <circle cx="12" cy="12" r="10"/>
+                                                <line x1="15" y1="9" x2="9" y2="15"/>
+                                                <line x1="9" y1="9" x2="15" y2="15"/>
+                                            </svg>
+                                            Remove Confirmation
+                                        </button>
+                                    ` : `
+                                        <button class="dropdown-item" onclick="admin.confirmDog('${dog.id}')">
+                                            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                                <path d="M22 11.08V12a10 10 0 11-5.93-9.14"/>
+                                                <polyline points="22 4 12 14.01 9 11.01"/>
+                                            </svg>
+                                            Confirm Dog
+                                        </button>
+                                    `}
+                                    <div class="dropdown-divider"></div>
+                                    <button class="dropdown-item dropdown-item--danger" onclick="admin.deleteDog('${dog.id}')">
+                                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                            <polyline points="3 6 5 6 21 6"/>
+                                            <path d="M19 6v14a2 2 0 01-2 2H7a2 2 0 01-2-2V6m3 0V4a2 2 0 012-2h4a2 2 0 012 2v2"/>
+                                        </svg>
+                                        Delete Dog
+                                    </button>
+                                </div>
+                            </div>
                         </div>
                     </div>
                 `;
@@ -354,6 +1201,7 @@
                 const data = await response.json();
 
                 this.untaggedBarks = data.barks || [];
+                document.getElementById('barks-count').textContent = this.untaggedBarks.length;
                 this.renderUntaggedBarks();
             } catch (error) {
                 console.error('Error loading untagged barks:', error);
@@ -361,63 +1209,100 @@
         }
 
         renderUntaggedBarks() {
-            const container = document.getElementById('barks-review-list');
+            const container = document.getElementById('barks-list');
 
             if (this.untaggedBarks.length === 0) {
                 container.innerHTML = `
-                    <div class="admin-empty">
-                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
+                    <div class="empty-state">
+                        <svg class="empty-state-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
                             <path d="M22 11.08V12a10 10 0 11-5.93-9.14"/>
                             <polyline points="22 4 12 14.01 9 11.01"/>
                         </svg>
-                        <span class="admin-empty-text">All barks have been reviewed!</span>
+                        <span class="empty-state-text">All barks have been reviewed!</span>
                     </div>
                 `;
                 return;
             }
 
             const html = this.untaggedBarks.map(bark => {
-                const time = new Date(bark.timestamp).toLocaleString();
+                const time = this.formatTime(new Date(bark.timestamp));
                 const prob = bark.detection_probability
                     ? (bark.detection_probability * 100).toFixed(0) + '%'
                     : '--';
 
-                // Dog selection buttons
-                const dogButtons = this.dogs.map(dog => `
-                    <button class="dog-select-btn" onclick="admin.tagBark('${bark.id}', '${dog.id}')">
-                        ${this.escapeHtml(dog.name)}
+                // Dog dropdown options
+                const dogOptions = this.dogs.map(dog => `
+                    <button class="tag-option" onclick="admin.tagBark('${bark.id}', '${dog.id}'); event.stopPropagation();">
+                        🐕 ${this.escapeHtml(dog.name)}
                     </button>
                 `).join('');
 
                 return `
-                    <div class="bark-card" data-bark-id="${bark.id}">
-                        <div class="bark-card-header">
-                            <span class="bark-card-time">${time}</span>
-                            <span class="bark-card-confidence">${prob}</span>
+                    <div class="bark-card-v2" data-bark-id="${bark.id}">
+                        <div class="bark-icon">
+                            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                <path d="M11 5L6 9H2v6h4l5 4V5z"/>
+                                <path d="M15.54 8.46a5 5 0 010 7.07"/>
+                            </svg>
                         </div>
-                        ${bark.evidence_filename ? `
-                            <div class="bark-card-meta">
-                                <a href="/api/evidence/${bark.evidence_filename}" target="_blank">
-                                    Play recording
-                                </a>
+                        <div class="bark-content">
+                            <div class="bark-header">
+                                <span class="bark-time">${time}</span>
+                                <span class="bark-prob">${prob}</span>
                             </div>
-                        ` : ''}
-                        <div class="bark-card-actions">
-                            ${this.dogs.length > 0 ? `
-                                <div class="dog-select">
-                                    ${dogButtons}
-                                </div>
-                            ` : `
-                                <span style="color: var(--text-muted); font-size: 0.8rem;">
-                                    Add a dog first to tag barks
-                                </span>
-                            `}
+                            <div class="bark-meta">
+                                ${bark.evidence_filename ? `
+                                    <a href="/api/evidence/${bark.evidence_filename}" target="_blank">
+                                        Play recording
+                                    </a>
+                                ` : ''}
+                                ${bark.doa_degrees !== null ? `<span>Direction: ${bark.doa_degrees}°</span>` : ''}
+                            </div>
                         </div>
+                        ${this.dogs.length > 0 ? `
+                            <div class="tag-select">
+                                <button class="tag-select-trigger" onclick="admin.toggleDropdown(this.parentElement, 'bark-${bark.id}'); event.stopPropagation();">
+                                    Assign to dog
+                                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                        <polyline points="6 9 12 15 18 9"/>
+                                    </svg>
+                                </button>
+                                <div class="tag-select-menu">
+                                    ${dogOptions}
+                                </div>
+                            </div>
+                        ` : `
+                            <span style="font-size: 0.75rem; color: var(--text-muted);">Add dogs first</span>
+                        `}
                     </div>
                 `;
             }).join('');
 
             container.innerHTML = html;
+        }
+
+        formatTime(date) {
+            return date.toLocaleString('en-US', {
+                month: 'short',
+                day: 'numeric',
+                hour: 'numeric',
+                minute: '2-digit',
+                hour12: true
+            });
+        }
+
+        formatRelativeTime(date) {
+            const now = new Date();
+            const diff = now - date;
+            const minutes = Math.floor(diff / 60000);
+            const hours = Math.floor(diff / 3600000);
+            const days = Math.floor(diff / 86400000);
+
+            if (minutes < 1) return 'Just now';
+            if (minutes < 60) return `${minutes}m ago`;
+            if (hours < 24) return `${hours}h ago`;
+            if (days < 7) return `${days}d ago`;
+            return date.toLocaleDateString();
         }
 
         async addDog() {
@@ -441,7 +1326,7 @@
                     notesInput.value = '';
                     await this.loadDogs();
                     await this.loadStats();
-                    this.renderUntaggedBarks(); // Re-render to show new dog in buttons
+                    this.renderUntaggedBarks();
                 } else {
                     const error = await response.json();
                     alert('Error: ' + (error.detail || 'Failed to add dog'));
@@ -453,6 +1338,7 @@
         }
 
         editDog(dogId) {
+            this.closeAllDropdowns();
             const dog = this.dogs.find(d => d.id === dogId);
             if (!dog) return;
 
@@ -491,6 +1377,7 @@
         }
 
         async deleteDog(dogId) {
+            this.closeAllDropdowns();
             const dog = this.dogs.find(d => d.id === dogId);
             if (!dog) return;
 
@@ -518,6 +1405,7 @@
         }
 
         async confirmDog(dogId) {
+            this.closeAllDropdowns();
             const dog = this.dogs.find(d => d.id === dogId);
             if (!dog) return;
 
@@ -547,6 +1435,7 @@
         }
 
         async unconfirmDog(dogId) {
+            this.closeAllDropdowns();
             const dog = this.dogs.find(d => d.id === dogId);
             if (!dog) return;
 
@@ -572,6 +1461,7 @@
         }
 
         async tagBark(barkId, dogId) {
+            this.closeAllDropdowns();
             try {
                 const response = await fetch(`/api/barks/${barkId}/tag`, {
                     method: 'POST',
@@ -581,7 +1471,7 @@
 
                 if (response.ok) {
                     await this.loadUntaggedBarks();
-                    await this.loadDogs(); // Refresh dog stats
+                    await this.loadDogs();
                     await this.loadStats();
                 } else {
                     const error = await response.json();
@@ -594,13 +1484,15 @@
         }
 
         async viewBarks(dogId) {
+            this.closeAllDropdowns();
             const dog = this.dogs.find(d => d.id === dogId);
             if (!dog) return;
 
             document.getElementById('barks-modal-title').textContent = `${dog.name}'s Barks (${dog.total_barks || 0})`;
             document.getElementById('barks-modal-content').innerHTML = `
-                <div style="text-align: center; padding: var(--space-lg); color: var(--text-muted);">
-                    Loading barks...
+                <div class="loading-state">
+                    <div class="spinner"></div>
+                    <span>Loading barks...</span>
                 </div>
             `;
             document.getElementById('barks-modal').classList.add('active');
@@ -614,8 +1506,13 @@
             } catch (error) {
                 console.error('Error loading dog barks:', error);
                 document.getElementById('barks-modal-content').innerHTML = `
-                    <div style="text-align: center; padding: var(--space-lg); color: var(--accent-coral);">
-                        Error loading barks: ${error.message}
+                    <div class="empty-state">
+                        <svg class="empty-state-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" style="color: var(--accent-coral);">
+                            <circle cx="12" cy="12" r="10"/>
+                            <line x1="15" y1="9" x2="9" y2="15"/>
+                            <line x1="9" y1="9" x2="15" y2="15"/>
+                        </svg>
+                        <span class="empty-state-text">Error loading barks: ${error.message}</span>
                     </div>
                 `;
             }
@@ -626,15 +1523,18 @@
 
             if (barks.length === 0) {
                 container.innerHTML = `
-                    <div style="text-align: center; padding: var(--space-lg); color: var(--text-muted);">
-                        No barks recorded for this dog yet.
+                    <div class="empty-state">
+                        <svg class="empty-state-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
+                            <path d="M11 5L6 9H2v6h4l5 4V5z"/>
+                        </svg>
+                        <span class="empty-state-text">No barks recorded for this dog yet.</span>
                     </div>
                 `;
                 return;
             }
 
             const html = barks.map(bark => {
-                const time = new Date(bark.timestamp).toLocaleString();
+                const time = this.formatTime(new Date(bark.timestamp));
                 const confidence = bark.match_confidence
                     ? (bark.match_confidence * 100).toFixed(0) + '%'
                     : '--';
@@ -644,26 +1544,30 @@
                 const doa = bark.doa_degrees !== null ? `${bark.doa_degrees}°` : '--';
 
                 return `
-                    <div class="bark-card" data-bark-id="${bark.id}" style="margin-bottom: var(--space-sm);">
-                        <div class="bark-card-header">
-                            <span class="bark-card-time">${time}</span>
-                            <span class="bark-card-confidence" title="Match confidence">${confidence}</span>
+                    <div class="bark-card-v2" data-bark-id="${bark.id}">
+                        <div class="bark-icon">
+                            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                <path d="M11 5L6 9H2v6h4l5 4V5z"/>
+                            </svg>
                         </div>
-                        <div class="bark-card-meta" style="display: flex; gap: var(--space-md); margin-bottom: var(--space-sm);">
-                            <span>Detection: <strong>${detection}</strong></span>
-                            <span>Direction: <strong>${doa}</strong></span>
-                            <span>ID: <code style="font-size: 0.7rem;">${bark.id}</code></span>
+                        <div class="bark-content" style="flex: 1;">
+                            <div class="bark-header">
+                                <span class="bark-time">${time}</span>
+                                <span class="bark-prob" title="Match confidence">${confidence}</span>
+                            </div>
+                            <div class="bark-meta">
+                                <span>Detection: <strong>${detection}</strong></span>
+                                <span>Direction: <strong>${doa}</strong></span>
+                            </div>
                         </div>
-                        <div class="bark-card-actions">
-                            <button class="btn btn-outline btn-sm" onclick="admin.untagBark('${bark.id}', '${dog.id}')" style="color: var(--accent-coral);">
-                                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="width:14px;height:14px">
-                                    <circle cx="12" cy="12" r="10"/>
-                                    <line x1="15" y1="9" x2="9" y2="15"/>
-                                    <line x1="9" y1="9" x2="15" y2="15"/>
-                                </svg>
-                                Untag
-                            </button>
-                        </div>
+                        <button class="btn-action btn-action--danger" onclick="admin.untagBark('${bark.id}', '${dog.id}')">
+                            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                <circle cx="12" cy="12" r="10"/>
+                                <line x1="15" y1="9" x2="9" y2="15"/>
+                                <line x1="9" y1="9" x2="15" y2="15"/>
+                            </svg>
+                            Untag
+                        </button>
                     </div>
                 `;
             }).join('');
@@ -682,9 +1586,7 @@
                 });
 
                 if (response.ok) {
-                    // Refresh the modal content
                     await this.viewBarks(dogId);
-                    // Refresh stats and dogs
                     await this.loadDogs();
                     await this.loadStats();
                     await this.loadUntaggedBarks();
@@ -716,11 +1618,6 @@
 
     // Initialize
     const admin = new DogsAdmin();
-
-    // Close modals on backdrop click
-    document.getElementById('barks-modal').addEventListener('click', (e) => {
-        if (e.target.id === 'barks-modal') closeBarkModal();
-    });
     </script>
 </body>
 </html>
