@@ -217,6 +217,14 @@ def create_app() -> FastAPI:
             return FileResponse(dogs_path)
         return {"error": "Dogs page not found"}
 
+    # Fingerprints explorer page
+    @app.get("/fingerprints.html", include_in_schema=False, response_model=None)
+    async def fingerprints_page():
+        fingerprints_path = static_path / "fingerprints.html"
+        if fingerprints_path.exists():
+            return FileResponse(fingerprints_path)
+        return {"error": "Fingerprints page not found"}
+
     return app
 
 
