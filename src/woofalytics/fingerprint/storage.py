@@ -525,6 +525,30 @@ class FingerprintStore:
 
         return updated
 
+    def untag_fingerprint(self, fingerprint_id: str) -> bool:
+        """Remove dog association from a fingerprint.
+
+        Args:
+            fingerprint_id: The fingerprint to untag.
+
+        Returns:
+            True if updated, False if fingerprint not found.
+        """
+        with self._get_connection() as conn:
+            cursor = conn.cursor()
+            cursor.execute(
+                """
+                UPDATE bark_fingerprints
+                SET dog_id = NULL, match_confidence = NULL
+                WHERE id = ?
+                """,
+                (fingerprint_id,),
+            )
+            updated = cursor.rowcount > 0
+            conn.commit()
+
+        return updated
+
     def get_fingerprints_for_dog(self, dog_id: str, limit: int = 100) -> list[BarkFingerprint]:
         """Get all fingerprints for a specific dog.
 

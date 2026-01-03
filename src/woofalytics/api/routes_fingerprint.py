@@ -410,6 +410,40 @@ async def correct_bark(
     return _fingerprint_to_schema(updated, new_dog.name)
 
 
+@router.post(
+    "/barks/{bark_id}/untag",
+    response_model=BarkFingerprintSchema,
+    summary="Untag bark",
+    description="Removes the dog association from a bark, making it untagged again.",
+)
+async def untag_bark(
+    bark_id: str,
+    store: Annotated[FingerprintStore, Depends(get_fingerprint_store)],
+) -> BarkFingerprintSchema:
+    """Remove dog association from a bark."""
+    # Verify the bark exists
+    fingerprint = store.get_fingerprint(bark_id)
+    if not fingerprint:
+        logger.warning("bark_not_found_for_untag", bark_id=bark_id)
+        raise HTTPException(status_code=404, detail="Bark fingerprint not found")
+
+    old_dog_id = fingerprint.dog_id
+
+    # Remove the dog association
+    success = store.untag_fingerprint(bark_id)
+    if not success:
+        raise HTTPException(status_code=500, detail="Failed to untag bark")
+
+    # Get the updated fingerprint
+    updated = store.get_fingerprint(bark_id)
+    logger.info(
+        "bark_untagged",
+        bark_id=bark_id,
+        old_dog_id=old_dog_id,
+    )
+    return _fingerprint_to_schema(updated)
+
+
 # --- Stats Endpoints ---
 
 
