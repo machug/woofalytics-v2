@@ -202,10 +202,37 @@
                     </div>
                 </div>
             </section>
+
+            <!-- Known Dogs Panel -->
+            <section class="panel panel-dogs">
+                <div class="panel-header">
+                    <h2 class="panel-title">Known Dogs</h2>
+                    <a href="/dogs.html" class="btn-icon" title="Manage Dogs">
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                            <path d="M12 20h9"/>
+                            <path d="M16.5 3.5a2.12 2.12 0 013 3L7 19l-4 1 1-4L16.5 3.5z"/>
+                        </svg>
+                    </a>
+                </div>
+                <div class="dogs-list" id="dogs-list">
+                    <div class="dogs-empty">
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
+                            <circle cx="12" cy="12" r="10"/>
+                            <path d="M8 14s1.5 2 4 2 4-2 4-2"/>
+                            <line x1="9" y1="9" x2="9.01" y2="9"/>
+                            <line x1="15" y1="9" x2="15.01" y2="9"/>
+                        </svg>
+                        <span>No dogs registered</span>
+                        <a href="/dogs.html" class="btn-sm btn-primary">Add a Dog</a>
+                    </div>
+                </div>
+            </section>
         </main>
 
         <footer class="footer">
             <span>Woofalytics v2.0.0</span>
+            <span class="footer-divider">·</span>
+            <a href="/dogs.html">Manage Dogs</a>
             <span class="footer-divider">·</span>
             <a href="/api/docs">API Documentation</a>
         </footer>

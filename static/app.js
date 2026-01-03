@@ -27,6 +27,10 @@ class WoofalyticsApp {
         // Particle system
         this.particleSystem = null;
 
+        // Known dogs cache
+        this.dogs = [];
+        this.dogsById = {};
+
         this.init();
     }
 
@@ -35,6 +39,7 @@ class WoofalyticsApp {
         this.connectAudioWebSocket();
         this.loadStatus();
         this.loadEvidence();
+        this.loadDogs();
         this.initMissionClock();
         this.initGeolocation();
         this.initWaveformVisualizer();
@@ -42,6 +47,8 @@ class WoofalyticsApp {
 
         // Refresh status every 30 seconds
         setInterval(() => this.loadStatus(), 30000);
+        // Refresh dogs every 60 seconds
+        setInterval(() => this.loadDogs(), 60000);
     }
 
     initWaveformVisualizer() {
@@ -320,10 +327,21 @@ class WoofalyticsApp {
                 ? '<svg viewBox="0 0 24 24" fill="currentColor"><circle cx="12" cy="12" r="6"/></svg>'
                 : '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="4"/></svg>';
 
+            // Dog identification
+            let dogTag = '';
+            if (event.is_barking && event.dog_id && this.dogsById[event.dog_id]) {
+                const dog = this.dogsById[event.dog_id];
+                const confidence = event.match_confidence ? (event.match_confidence * 100).toFixed(0) : '';
+                dogTag = `<span class="event-dog">🐕 ${this.escapeHtml(dog.name)}${confidence ? ` ${confidence}%` : ''}</span>`;
+            } else if (event.is_barking && this.dogs.length > 0) {
+                dogTag = `<span class="event-dog event-dog-unknown">?</span>`;
+            }
+
             return `
                 <div class="event-item ${barking}">
                     <span class="event-icon">${icon}</span>
                     <span class="event-time">${time}</span>
+                    ${dogTag}
                     <span class="event-prob">${prob}%</span>
                 </div>
             `;
@@ -397,6 +415,61 @@ class WoofalyticsApp {
         } catch (error) {
             console.error('Error loading status:', error);
         }
+    }
+
+    async loadDogs() {
+        try {
+            const response = await fetch('/api/dogs');
+            if (!response.ok) return;
+            const data = await response.json();
+
+            this.dogs = data.dogs || [];
+            this.dogsById = {};
+            this.dogs.forEach(dog => {
+                this.dogsById[dog.id] = dog;
+            });
+
+            this.renderDogsList();
+        } catch (error) {
+            console.error('Error loading dogs:', error);
+        }
+    }
+
+    renderDogsList() {
+        const container = document.getElementById('dogs-list');
+        if (!container) return;
+
+        if (this.dogs.length === 0) {
+            container.innerHTML = `
+                <div class="dogs-empty">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
+                        <circle cx="12" cy="12" r="10"/>
+                        <path d="M8 14s1.5 2 4 2 4-2 4-2"/>
+                        <line x1="9" y1="9" x2="9.01" y2="9"/>
+                        <line x1="15" y1="9" x2="15.01" y2="9"/>
+                    </svg>
+                    <span>No dogs registered</span>
+                    <a href="/dogs.html" class="btn-sm btn-primary">Add a Dog</a>
+                </div>
+            `;
+            return;
+        }
+
+        const html = this.dogs.map(dog => `
+            <div class="dog-chip" data-dog-id="${dog.id}">
+                <span class="dog-avatar">🐕</span>
+                <span class="dog-name">${this.escapeHtml(dog.name)}</span>
+                <span class="dog-bark-count">${dog.total_barks || 0}</span>
+            </div>
+        `).join('');
+
+        container.innerHTML = html;
+    }
+
+    escapeHtml(text) {
+        const div = document.createElement('div');
+        div.textContent = text;
+        return div.innerHTML;
     }
 
     async loadEvidence() {

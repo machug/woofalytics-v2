@@ -1215,3 +1215,504 @@ body {
     pointer-events: none;
     z-index: 10;
 }
+
+/* =========================================
+   Dogs Panel (Dashboard)
+   ========================================= */
+
+.panel-dogs {
+    grid-column: 1 / 3;
+    grid-row: 4;
+    display: flex;
+    flex-direction: column;
+}
+
+.dogs-list {
+    display: flex;
+    flex-wrap: wrap;
+    gap: var(--space-sm);
+    max-height: 180px;
+    overflow-y: auto;
+}
+
+.dogs-empty {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: var(--space-sm);
+    padding: var(--space-lg);
+    color: var(--text-muted);
+    font-size: 0.875rem;
+    width: 100%;
+}
+
+.dogs-empty svg {
+    width: 32px;
+    height: 32px;
+    opacity: 0.5;
+}
+
+.dog-chip {
+    display: flex;
+    align-items: center;
+    gap: var(--space-sm);
+    padding: var(--space-sm) var(--space-md);
+    background: var(--bg-overlay);
+    border: 1px solid var(--border-default);
+    border-radius: var(--radius-full);
+    transition: all var(--transition-fast);
+}
+
+.dog-chip:hover {
+    background: var(--bg-elevated);
+    border-color: var(--accent-amber);
+}
+
+.dog-avatar {
+    width: 24px;
+    height: 24px;
+    border-radius: 50%;
+    background: var(--accent-amber-dim);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 0.75rem;
+}
+
+.dog-name {
+    font-size: 0.875rem;
+    font-weight: 600;
+    color: var(--text-primary);
+}
+
+.dog-bark-count {
+    font-size: 0.7rem;
+    font-weight: 500;
+    color: var(--text-muted);
+    padding: 2px 6px;
+    background: var(--bg-surface);
+    border-radius: var(--radius-full);
+}
+
+/* Dog identification on events */
+.event-dog {
+    display: flex;
+    align-items: center;
+    gap: 4px;
+    padding: 2px 8px;
+    background: var(--accent-amber-dim);
+    border-radius: var(--radius-full);
+    font-size: 0.7rem;
+    font-weight: 600;
+    color: var(--accent-amber);
+    margin-left: var(--space-sm);
+}
+
+.event-dog-unknown {
+    background: var(--bg-overlay);
+    color: var(--text-muted);
+}
+
+/* =========================================
+   Dogs Admin Page Styles
+   ========================================= */
+
+.admin-layout {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: var(--space-lg);
+    flex: 1;
+}
+
+@media (max-width: 1024px) {
+    .admin-layout {
+        grid-template-columns: 1fr;
+    }
+}
+
+.admin-section {
+    background: rgba(22, 27, 34, 0.7);
+    border: 1px solid var(--border-default);
+    border-radius: var(--radius-lg);
+    padding: var(--space-lg);
+    display: flex;
+    flex-direction: column;
+}
+
+@supports (backdrop-filter: blur(20px)) {
+    .admin-section {
+        background: rgba(22, 27, 34, 0.6);
+        backdrop-filter: blur(20px) saturate(180%);
+    }
+}
+
+.admin-section-title {
+    font-size: 1rem;
+    font-weight: 600;
+    color: var(--text-primary);
+    margin-bottom: var(--space-md);
+    display: flex;
+    align-items: center;
+    gap: var(--space-sm);
+}
+
+.admin-section-title svg {
+    width: 20px;
+    height: 20px;
+    color: var(--accent-amber);
+}
+
+/* Dog Profile Card */
+.dog-card {
+    background: var(--bg-overlay);
+    border-radius: var(--radius-md);
+    padding: var(--space-md);
+    margin-bottom: var(--space-sm);
+    border: 1px solid transparent;
+    transition: all var(--transition-fast);
+}
+
+.dog-card:hover {
+    border-color: var(--accent-amber);
+    background: var(--bg-elevated);
+}
+
+.dog-card-header {
+    display: flex;
+    align-items: center;
+    gap: var(--space-md);
+    margin-bottom: var(--space-sm);
+}
+
+.dog-card-avatar {
+    width: 48px;
+    height: 48px;
+    border-radius: 50%;
+    background: var(--accent-amber-dim);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 1.5rem;
+}
+
+.dog-card-info {
+    flex: 1;
+}
+
+.dog-card-name {
+    font-size: 1.1rem;
+    font-weight: 600;
+    color: var(--text-primary);
+}
+
+.dog-card-notes {
+    font-size: 0.8rem;
+    color: var(--text-secondary);
+}
+
+.dog-card-stats {
+    display: flex;
+    gap: var(--space-md);
+    font-size: 0.75rem;
+    color: var(--text-muted);
+}
+
+.dog-card-stat {
+    display: flex;
+    align-items: center;
+    gap: 4px;
+}
+
+.dog-card-stat strong {
+    color: var(--text-secondary);
+}
+
+.dog-card-actions {
+    display: flex;
+    gap: var(--space-sm);
+    margin-top: var(--space-sm);
+    padding-top: var(--space-sm);
+    border-top: 1px solid var(--border-muted);
+}
+
+/* Bark Review Card */
+.bark-card {
+    background: var(--bg-overlay);
+    border-radius: var(--radius-md);
+    padding: var(--space-md);
+    margin-bottom: var(--space-sm);
+    border-left: 3px solid var(--accent-coral);
+}
+
+.bark-card-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: flex-start;
+    margin-bottom: var(--space-sm);
+}
+
+.bark-card-time {
+    font-size: 0.875rem;
+    font-weight: 600;
+    color: var(--text-primary);
+}
+
+.bark-card-confidence {
+    font-size: 0.75rem;
+    padding: 2px 8px;
+    background: var(--accent-teal-dim);
+    color: var(--accent-teal);
+    border-radius: var(--radius-full);
+}
+
+.bark-card-meta {
+    font-size: 0.75rem;
+    color: var(--text-muted);
+    margin-bottom: var(--space-sm);
+}
+
+.bark-card-actions {
+    display: flex;
+    gap: var(--space-sm);
+    flex-wrap: wrap;
+}
+
+/* Form Styles */
+.form-group {
+    margin-bottom: var(--space-md);
+}
+
+.form-label {
+    display: block;
+    font-size: 0.75rem;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+    color: var(--text-secondary);
+    margin-bottom: var(--space-xs);
+}
+
+.form-input {
+    width: 100%;
+    padding: var(--space-sm) var(--space-md);
+    background: var(--bg-overlay);
+    border: 1px solid var(--border-default);
+    border-radius: var(--radius-sm);
+    color: var(--text-primary);
+    font-size: 0.875rem;
+    transition: border-color var(--transition-fast);
+}
+
+.form-input:focus {
+    outline: none;
+    border-color: var(--accent-amber);
+}
+
+.form-input::placeholder {
+    color: var(--text-muted);
+}
+
+.form-textarea {
+    resize: vertical;
+    min-height: 80px;
+}
+
+/* Button Variants */
+.btn {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: var(--space-sm);
+    padding: var(--space-sm) var(--space-md);
+    font-size: 0.875rem;
+    font-weight: 600;
+    border: none;
+    border-radius: var(--radius-sm);
+    cursor: pointer;
+    transition: all var(--transition-fast);
+}
+
+.btn-amber {
+    background: var(--accent-amber);
+    color: var(--bg-base);
+}
+
+.btn-amber:hover {
+    background: #fbbf24;
+}
+
+.btn-teal {
+    background: var(--accent-teal);
+    color: var(--bg-base);
+}
+
+.btn-teal:hover {
+    background: #2dd4bf;
+}
+
+.btn-coral {
+    background: var(--accent-coral);
+    color: white;
+}
+
+.btn-coral:hover {
+    background: #ef4444;
+}
+
+.btn-outline {
+    background: transparent;
+    border: 1px solid var(--border-default);
+    color: var(--text-secondary);
+}
+
+.btn-outline:hover {
+    background: var(--bg-overlay);
+    color: var(--text-primary);
+    border-color: var(--text-muted);
+}
+
+.btn svg {
+    width: 16px;
+    height: 16px;
+}
+
+/* Stats Card */
+.stats-grid {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: var(--space-md);
+    margin-bottom: var(--space-lg);
+}
+
+.stat-card {
+    background: var(--bg-overlay);
+    border-radius: var(--radius-md);
+    padding: var(--space-md);
+    text-align: center;
+}
+
+.stat-card-value {
+    font-size: 2rem;
+    font-weight: 700;
+    color: var(--text-primary);
+    line-height: 1;
+}
+
+.stat-card-label {
+    font-size: 0.7rem;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+    color: var(--text-muted);
+    margin-top: var(--space-xs);
+}
+
+/* Dog Selector Dropdown */
+.dog-select {
+    display: flex;
+    gap: var(--space-xs);
+    flex-wrap: wrap;
+}
+
+.dog-select-btn {
+    padding: 4px 12px;
+    background: var(--bg-surface);
+    border: 1px solid var(--border-default);
+    border-radius: var(--radius-full);
+    font-size: 0.75rem;
+    font-weight: 500;
+    color: var(--text-secondary);
+    cursor: pointer;
+    transition: all var(--transition-fast);
+}
+
+.dog-select-btn:hover {
+    background: var(--accent-amber-dim);
+    border-color: var(--accent-amber);
+    color: var(--accent-amber);
+}
+
+.dog-select-btn.selected {
+    background: var(--accent-amber);
+    border-color: var(--accent-amber);
+    color: var(--bg-base);
+}
+
+/* Empty state */
+.admin-empty {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    padding: var(--space-xl);
+    color: var(--text-muted);
+    text-align: center;
+}
+
+.admin-empty svg {
+    width: 48px;
+    height: 48px;
+    opacity: 0.5;
+    margin-bottom: var(--space-md);
+}
+
+.admin-empty-text {
+    font-size: 0.875rem;
+    margin-bottom: var(--space-md);
+}
+
+/* List containers */
+.dogs-admin-list,
+.barks-review-list {
+    flex: 1;
+    overflow-y: auto;
+    max-height: 500px;
+}
+
+/* Modal */
+.modal-backdrop {
+    position: fixed;
+    inset: 0;
+    background: rgba(0, 0, 0, 0.7);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    z-index: 2000;
+    opacity: 0;
+    visibility: hidden;
+    transition: all var(--transition-base);
+}
+
+.modal-backdrop.active {
+    opacity: 1;
+    visibility: visible;
+}
+
+.modal {
+    background: var(--bg-surface);
+    border: 1px solid var(--border-default);
+    border-radius: var(--radius-lg);
+    padding: var(--space-lg);
+    max-width: 400px;
+    width: 90%;
+    transform: scale(0.9);
+    transition: transform var(--transition-base);
+}
+
+.modal-backdrop.active .modal {
+    transform: scale(1);
+}
+
+.modal-title {
+    font-size: 1.1rem;
+    font-weight: 600;
+    margin-bottom: var(--space-md);
+}
+
+.modal-actions {
+    display: flex;
+    gap: var(--space-sm);
+    justify-content: flex-end;
+    margin-top: var(--space-lg);
+}

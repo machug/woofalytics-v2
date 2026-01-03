@@ -1,0 +1,500 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Dog Management - Woofalytics</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="/static/styles.css">
+    <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🐕</text></svg>">
+</head>
+<body>
+    <!-- Telemetry Strip -->
+    <div class="telemetry-strip">
+        <div class="telemetry-mission">
+            <span class="mission-badge">WOOFALYTICS</span>
+            <span class="mission-callsign">DOG MANAGEMENT</span>
+        </div>
+        <div class="telemetry-status">
+            <a href="/" class="btn-sm btn-outline" style="text-decoration: none;">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="width:14px;height:14px">
+                    <path d="M19 12H5M12 19l-7-7 7-7"/>
+                </svg>
+                Dashboard
+            </a>
+        </div>
+    </div>
+
+    <div class="app">
+        <header class="header">
+            <div class="brand">
+                <svg class="brand-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <circle cx="12" cy="12" r="10"/>
+                    <path d="M8 14s1.5 2 4 2 4-2 4-2"/>
+                    <line x1="9" y1="9" x2="9.01" y2="9"/>
+                    <line x1="15" y1="9" x2="15.01" y2="9"/>
+                </svg>
+                <h1>Dog Management</h1>
+            </div>
+        </header>
+
+        <!-- Stats Summary -->
+        <div class="stats-grid">
+            <div class="stat-card">
+                <div class="stat-card-value" id="stat-dogs">0</div>
+                <div class="stat-card-label">Known Dogs</div>
+            </div>
+            <div class="stat-card">
+                <div class="stat-card-value" id="stat-untagged">0</div>
+                <div class="stat-card-label">Untagged Barks</div>
+            </div>
+            <div class="stat-card">
+                <div class="stat-card-value" id="stat-total">0</div>
+                <div class="stat-card-label">Total Fingerprints</div>
+            </div>
+        </div>
+
+        <main class="admin-layout">
+            <!-- Dog Profiles Section -->
+            <section class="admin-section">
+                <h2 class="admin-section-title">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                        <circle cx="12" cy="12" r="10"/>
+                        <path d="M8 14s1.5 2 4 2 4-2 4-2"/>
+                        <line x1="9" y1="9" x2="9.01" y2="9"/>
+                        <line x1="15" y1="9" x2="15.01" y2="9"/>
+                    </svg>
+                    Dog Profiles
+                </h2>
+
+                <!-- Add Dog Form -->
+                <form id="add-dog-form" class="dog-card" style="margin-bottom: var(--space-md);">
+                    <div class="form-group">
+                        <label class="form-label">Dog Name</label>
+                        <input type="text" class="form-input" id="new-dog-name" placeholder="e.g., Max, Bella..." required>
+                    </div>
+                    <div class="form-group">
+                        <label class="form-label">Notes (optional)</label>
+                        <input type="text" class="form-input" id="new-dog-notes" placeholder="e.g., Neighbor's golden retriever">
+                    </div>
+                    <button type="submit" class="btn btn-amber">
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                            <line x1="12" y1="5" x2="12" y2="19"/>
+                            <line x1="5" y1="12" x2="19" y2="12"/>
+                        </svg>
+                        Add Dog
+                    </button>
+                </form>
+
+                <!-- Dogs List -->
+                <div class="dogs-admin-list" id="dogs-admin-list">
+                    <div class="admin-empty">
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
+                            <circle cx="12" cy="12" r="10"/>
+                            <path d="M8 14s1.5 2 4 2 4-2 4-2"/>
+                        </svg>
+                        <span class="admin-empty-text">No dogs registered yet.<br>Add your first dog above!</span>
+                    </div>
+                </div>
+            </section>
+
+            <!-- Untagged Barks Section -->
+            <section class="admin-section">
+                <h2 class="admin-section-title">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                        <path d="M11 5L6 9H2v6h4l5 4V5z"/>
+                        <path d="M15.54 8.46a5 5 0 010 7.07"/>
+                    </svg>
+                    Untagged Barks
+                </h2>
+
+                <div class="barks-review-list" id="barks-review-list">
+                    <div class="admin-empty">
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
+                            <path d="M22 11.08V12a10 10 0 11-5.93-9.14"/>
+                            <polyline points="22 4 12 14.01 9 11.01"/>
+                        </svg>
+                        <span class="admin-empty-text">All barks have been reviewed!</span>
+                    </div>
+                </div>
+            </section>
+        </main>
+
+        <footer class="footer">
+            <span>Woofalytics v2.0.0</span>
+            <span class="footer-divider">·</span>
+            <a href="/">Dashboard</a>
+            <span class="footer-divider">·</span>
+            <a href="/api/docs">API Documentation</a>
+        </footer>
+    </div>
+
+    <!-- Edit Dog Modal -->
+    <div class="modal-backdrop" id="edit-modal">
+        <div class="modal">
+            <h3 class="modal-title">Edit Dog Profile</h3>
+            <form id="edit-dog-form">
+                <input type="hidden" id="edit-dog-id">
+                <div class="form-group">
+                    <label class="form-label">Dog Name</label>
+                    <input type="text" class="form-input" id="edit-dog-name" required>
+                </div>
+                <div class="form-group">
+                    <label class="form-label">Notes</label>
+                    <textarea class="form-input form-textarea" id="edit-dog-notes"></textarea>
+                </div>
+                <div class="modal-actions">
+                    <button type="button" class="btn btn-outline" onclick="closeEditModal()">Cancel</button>
+                    <button type="submit" class="btn btn-amber">Save Changes</button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <script>
+    /**
+     * Dog Management Admin Page
+     */
+    class DogsAdmin {
+        constructor() {
+            this.dogs = [];
+            this.untaggedBarks = [];
+            this.init();
+        }
+
+        init() {
+            this.loadDogs();
+            this.loadUntaggedBarks();
+            this.loadStats();
+            this.setupEventListeners();
+
+            // Refresh every 30 seconds
+            setInterval(() => {
+                this.loadDogs();
+                this.loadUntaggedBarks();
+                this.loadStats();
+            }, 30000);
+        }
+
+        setupEventListeners() {
+            // Add dog form
+            document.getElementById('add-dog-form').addEventListener('submit', (e) => {
+                e.preventDefault();
+                this.addDog();
+            });
+
+            // Edit dog form
+            document.getElementById('edit-dog-form').addEventListener('submit', (e) => {
+                e.preventDefault();
+                this.saveDogEdit();
+            });
+
+            // Close modal on backdrop click
+            document.getElementById('edit-modal').addEventListener('click', (e) => {
+                if (e.target.id === 'edit-modal') {
+                    closeEditModal();
+                }
+            });
+        }
+
+        async loadStats() {
+            try {
+                const response = await fetch('/api/fingerprints/stats');
+                if (!response.ok) return;
+                const data = await response.json();
+
+                document.getElementById('stat-dogs').textContent = data.total_dogs || 0;
+                document.getElementById('stat-untagged').textContent = data.untagged_barks || 0;
+                document.getElementById('stat-total').textContent = data.total_fingerprints || 0;
+            } catch (error) {
+                console.error('Error loading stats:', error);
+            }
+        }
+
+        async loadDogs() {
+            try {
+                const response = await fetch('/api/dogs');
+                if (!response.ok) return;
+                const data = await response.json();
+
+                this.dogs = data.dogs || [];
+                this.renderDogs();
+            } catch (error) {
+                console.error('Error loading dogs:', error);
+            }
+        }
+
+        renderDogs() {
+            const container = document.getElementById('dogs-admin-list');
+
+            if (this.dogs.length === 0) {
+                container.innerHTML = `
+                    <div class="admin-empty">
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
+                            <circle cx="12" cy="12" r="10"/>
+                            <path d="M8 14s1.5 2 4 2 4-2 4-2"/>
+                        </svg>
+                        <span class="admin-empty-text">No dogs registered yet.<br>Add your first dog above!</span>
+                    </div>
+                `;
+                return;
+            }
+
+            const html = this.dogs.map(dog => {
+                const lastSeen = dog.last_seen
+                    ? new Date(dog.last_seen).toLocaleDateString()
+                    : 'Never';
+                return `
+                    <div class="dog-card" data-dog-id="${dog.id}">
+                        <div class="dog-card-header">
+                            <div class="dog-card-avatar">🐕</div>
+                            <div class="dog-card-info">
+                                <div class="dog-card-name">${this.escapeHtml(dog.name)}</div>
+                                ${dog.notes ? `<div class="dog-card-notes">${this.escapeHtml(dog.notes)}</div>` : ''}
+                            </div>
+                        </div>
+                        <div class="dog-card-stats">
+                            <div class="dog-card-stat">
+                                <strong>${dog.total_barks || 0}</strong> barks
+                            </div>
+                            <div class="dog-card-stat">
+                                <strong>${dog.sample_count || 0}</strong> samples
+                            </div>
+                            <div class="dog-card-stat">
+                                Last seen: <strong>${lastSeen}</strong>
+                            </div>
+                        </div>
+                        <div class="dog-card-actions">
+                            <button class="btn btn-outline btn-sm" onclick="admin.editDog('${dog.id}')">
+                                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="width:14px;height:14px">
+                                    <path d="M11 4H4a2 2 0 00-2 2v14a2 2 0 002 2h14a2 2 0 002-2v-7"/>
+                                    <path d="M18.5 2.5a2.12 2.12 0 013 3L12 15l-4 1 1-4 9.5-9.5z"/>
+                                </svg>
+                                Edit
+                            </button>
+                            <button class="btn btn-outline btn-sm" onclick="admin.deleteDog('${dog.id}')" style="color: var(--accent-coral);">
+                                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="width:14px;height:14px">
+                                    <polyline points="3 6 5 6 21 6"/>
+                                    <path d="M19 6v14a2 2 0 01-2 2H7a2 2 0 01-2-2V6m3 0V4a2 2 0 012-2h4a2 2 0 012 2v2"/>
+                                </svg>
+                                Delete
+                            </button>
+                        </div>
+                    </div>
+                `;
+            }).join('');
+
+            container.innerHTML = html;
+        }
+
+        async loadUntaggedBarks() {
+            try {
+                const response = await fetch('/api/barks/untagged?limit=20');
+                if (!response.ok) return;
+                const data = await response.json();
+
+                this.untaggedBarks = data.barks || [];
+                this.renderUntaggedBarks();
+            } catch (error) {
+                console.error('Error loading untagged barks:', error);
+            }
+        }
+
+        renderUntaggedBarks() {
+            const container = document.getElementById('barks-review-list');
+
+            if (this.untaggedBarks.length === 0) {
+                container.innerHTML = `
+                    <div class="admin-empty">
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
+                            <path d="M22 11.08V12a10 10 0 11-5.93-9.14"/>
+                            <polyline points="22 4 12 14.01 9 11.01"/>
+                        </svg>
+                        <span class="admin-empty-text">All barks have been reviewed!</span>
+                    </div>
+                `;
+                return;
+            }
+
+            const html = this.untaggedBarks.map(bark => {
+                const time = new Date(bark.timestamp).toLocaleString();
+                const prob = bark.detection_probability
+                    ? (bark.detection_probability * 100).toFixed(0) + '%'
+                    : '--';
+
+                // Dog selection buttons
+                const dogButtons = this.dogs.map(dog => `
+                    <button class="dog-select-btn" onclick="admin.tagBark('${bark.id}', '${dog.id}')">
+                        ${this.escapeHtml(dog.name)}
+                    </button>
+                `).join('');
+
+                return `
+                    <div class="bark-card" data-bark-id="${bark.id}">
+                        <div class="bark-card-header">
+                            <span class="bark-card-time">${time}</span>
+                            <span class="bark-card-confidence">${prob}</span>
+                        </div>
+                        ${bark.evidence_filename ? `
+                            <div class="bark-card-meta">
+                                <a href="/api/evidence/${bark.evidence_filename}" target="_blank">
+                                    Play recording
+                                </a>
+                            </div>
+                        ` : ''}
+                        <div class="bark-card-actions">
+                            ${this.dogs.length > 0 ? `
+                                <div class="dog-select">
+                                    ${dogButtons}
+                                </div>
+                            ` : `
+                                <span style="color: var(--text-muted); font-size: 0.8rem;">
+                                    Add a dog first to tag barks
+                                </span>
+                            `}
+                        </div>
+                    </div>
+                `;
+            }).join('');
+
+            container.innerHTML = html;
+        }
+
+        async addDog() {
+            const nameInput = document.getElementById('new-dog-name');
+            const notesInput = document.getElementById('new-dog-notes');
+
+            const name = nameInput.value.trim();
+            const notes = notesInput.value.trim();
+
+            if (!name) return;
+
+            try {
+                const response = await fetch('/api/dogs', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ name, notes })
+                });
+
+                if (response.ok) {
+                    nameInput.value = '';
+                    notesInput.value = '';
+                    await this.loadDogs();
+                    await this.loadStats();
+                    this.renderUntaggedBarks(); // Re-render to show new dog in buttons
+                } else {
+                    const error = await response.json();
+                    alert('Error: ' + (error.detail || 'Failed to add dog'));
+                }
+            } catch (error) {
+                console.error('Error adding dog:', error);
+                alert('Error adding dog');
+            }
+        }
+
+        editDog(dogId) {
+            const dog = this.dogs.find(d => d.id === dogId);
+            if (!dog) return;
+
+            document.getElementById('edit-dog-id').value = dog.id;
+            document.getElementById('edit-dog-name').value = dog.name;
+            document.getElementById('edit-dog-notes').value = dog.notes || '';
+            document.getElementById('edit-modal').classList.add('active');
+        }
+
+        async saveDogEdit() {
+            const dogId = document.getElementById('edit-dog-id').value;
+            const name = document.getElementById('edit-dog-name').value.trim();
+            const notes = document.getElementById('edit-dog-notes').value.trim();
+
+            if (!name) return;
+
+            try {
+                const response = await fetch(`/api/dogs/${dogId}`, {
+                    method: 'PUT',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ name, notes })
+                });
+
+                if (response.ok) {
+                    closeEditModal();
+                    await this.loadDogs();
+                    this.renderUntaggedBarks();
+                } else {
+                    const error = await response.json();
+                    alert('Error: ' + (error.detail || 'Failed to update dog'));
+                }
+            } catch (error) {
+                console.error('Error updating dog:', error);
+                alert('Error updating dog');
+            }
+        }
+
+        async deleteDog(dogId) {
+            const dog = this.dogs.find(d => d.id === dogId);
+            if (!dog) return;
+
+            if (!confirm(`Delete "${dog.name}"? This will remove the dog profile but keep the bark recordings.`)) {
+                return;
+            }
+
+            try {
+                const response = await fetch(`/api/dogs/${dogId}`, {
+                    method: 'DELETE'
+                });
+
+                if (response.ok) {
+                    await this.loadDogs();
+                    await this.loadStats();
+                    await this.loadUntaggedBarks();
+                } else {
+                    const error = await response.json();
+                    alert('Error: ' + (error.detail || 'Failed to delete dog'));
+                }
+            } catch (error) {
+                console.error('Error deleting dog:', error);
+                alert('Error deleting dog');
+            }
+        }
+
+        async tagBark(barkId, dogId) {
+            try {
+                const response = await fetch(`/api/barks/${barkId}/tag`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ dog_id: dogId })
+                });
+
+                if (response.ok) {
+                    await this.loadUntaggedBarks();
+                    await this.loadDogs(); // Refresh dog stats
+                    await this.loadStats();
+                } else {
+                    const error = await response.json();
+                    alert('Error: ' + (error.detail || 'Failed to tag bark'));
+                }
+            } catch (error) {
+                console.error('Error tagging bark:', error);
+                alert('Error tagging bark');
+            }
+        }
+
+        escapeHtml(text) {
+            const div = document.createElement('div');
+            div.textContent = text;
+            return div.innerHTML;
+        }
+    }
+
+    // Global functions
+    function closeEditModal() {
+        document.getElementById('edit-modal').classList.remove('active');
+    }
+
+    // Initialize
+    const admin = new DogsAdmin();
+    </script>
+</body>
+</html>
