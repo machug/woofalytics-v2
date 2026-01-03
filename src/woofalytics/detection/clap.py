@@ -64,6 +64,9 @@ class CLAPConfig:
     # If any percussive label exceeds this, veto the bark detection
     percussive_veto_threshold: float = 0.20
 
+    # Bark score must beat best non-bark label by this margin
+    confidence_margin: float = 0.15
+
     # Device for inference
     device: str = "cpu"
 
@@ -209,11 +212,29 @@ class CLAPDetector:
         )
         percussive_detected = max_percussive_score >= self.config.percussive_veto_threshold
 
-        # Apply detection logic with speech and percussive veto
+        # Check confidence margin - bark must beat best non-bark by margin
+        non_bark_labels = (
+            self.config.speech_labels +
+            self.config.percussive_labels +
+            self.config.other_labels
+        )
+        best_non_bark_score = max(
+            label_scores.get(label, 0.0)
+            for label in non_bark_labels
+        )
+        # Get max individual positive label score for comparison
+        max_positive_score = max(
+            label_scores.get(label, 0.0)
+            for label in self.config.positive_labels
+        )
+        margin_met = (max_positive_score - best_non_bark_score) >= self.config.confidence_margin
+
+        # Apply detection logic with speech, percussive veto, and margin check
         is_barking = (
             bark_prob >= self.config.threshold
             and not speech_detected
             and not percussive_detected
+            and margin_met
         )
 
         # Log when speech veto is applied
@@ -242,6 +263,22 @@ class CLAPDetector:
                 percussive_label=top_percussive[0],
                 percussive_score=f"{top_percussive[1]:.3f}",
                 threshold=self.config.percussive_veto_threshold,
+            )
+
+        # Log when margin check fails
+        if (
+            bark_prob >= self.config.threshold
+            and not speech_detected
+            and not percussive_detected
+            and not margin_met
+        ):
+            logger.debug(
+                "bark_vetoed_by_margin",
+                bark_prob=f"{bark_prob:.3f}",
+                max_positive_score=f"{max_positive_score:.3f}",
+                best_non_bark_score=f"{best_non_bark_score:.3f}",
+                actual_margin=f"{max_positive_score - best_non_bark_score:.3f}",
+                required_margin=self.config.confidence_margin,
             )
 
         return bark_prob, is_barking, label_scores
