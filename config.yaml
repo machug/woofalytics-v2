@@ -26,14 +26,27 @@ audio:
 
 # ML model settings
 model:
-  # Path to TorchScript model
-  path: ./models/traced_model.pt
+  # Use CLAP zero-shot classifier (recommended)
+  use_clap: true
 
-  # Model's expected sample rate
-  target_sample_rate: 16000
-
-  # Bark detection threshold (0.0-1.0)
+  # CLAP bark detection threshold (0.0-1.0)
   # Higher = fewer false positives, lower = more sensitive
+  # Default: 0.6, try 0.7-0.8 if getting too many false positives
+  clap_threshold: 0.70
+
+  # Bird veto threshold - if bird sound probability exceeds this, reject the bark
+  # Lower = more aggressive bird rejection (default: 0.15)
+  # Try 0.10 if still getting bird false positives
+  clap_bird_veto_threshold: 0.10
+
+  # VAD energy threshold in dBFS (silence rejection)
+  # Audio below this level skips inference entirely
+  # Default: -40, lower = more sensitive (e.g., -50)
+  vad_threshold_db: -40.0
+
+  # Legacy MLP settings (only used if use_clap: false)
+  path: ./models/traced_model.pt
+  target_sample_rate: 16000
   threshold: 0.88
 
 # Direction of arrival estimation

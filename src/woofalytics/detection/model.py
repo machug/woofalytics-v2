@@ -100,6 +100,7 @@ class BarkDetector:
         config = CLAPConfig(
             model_name=self.settings.model.clap_model,
             threshold=self.settings.model.clap_threshold,
+            bird_veto_threshold=self.settings.model.clap_bird_veto_threshold,
             device=self.settings.model.clap_device,
         )
         self._clap_detector = CLAPDetector(config)
@@ -108,6 +109,7 @@ class BarkDetector:
             "clap_detector_configured",
             model=config.model_name,
             threshold=config.threshold,
+            bird_veto_threshold=config.bird_veto_threshold,
             device=config.device,
         )
 

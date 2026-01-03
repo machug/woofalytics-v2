@@ -82,6 +82,12 @@ class ModelConfig(BaseModel):
         le=1.0,
         description="CLAP bark detection threshold.",
     )
+    clap_bird_veto_threshold: float = Field(
+        default=0.15,
+        ge=0.0,
+        le=1.0,
+        description="Bird sound threshold for vetoing bark detections. Lower = more aggressive bird rejection.",
+    )
     clap_device: str = Field(
         default="cpu",
         description="Device for CLAP inference ('cpu' or 'cuda').",
