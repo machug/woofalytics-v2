@@ -13,6 +13,7 @@ from typing import TYPE_CHECKING
 import numpy as np
 import structlog
 
+from woofalytics.fingerprint.acoustic_features import AcousticFeatureExtractor
 from woofalytics.fingerprint.extractor import FingerprintExtractor
 from woofalytics.fingerprint.models import BarkFingerprint, FingerprintMatch
 from woofalytics.fingerprint.storage import FingerprintStore
@@ -41,6 +42,7 @@ class FingerprintMatcher:
         detector: CLAPDetector,
         store: FingerprintStore,
         threshold: float = DEFAULT_THRESHOLD,
+        sample_rate: int = 48000,
     ) -> None:
         """Initialize the matcher with detector and storage.
 
@@ -48,14 +50,18 @@ class FingerprintMatcher:
             detector: CLAP detector for embedding extraction.
             store: Fingerprint storage for profiles and matching.
             threshold: Minimum similarity to consider a match (0-1).
+            sample_rate: Audio sample rate for acoustic feature extraction.
         """
         self._extractor = FingerprintExtractor(detector)
+        self._acoustic_extractor = AcousticFeatureExtractor(sample_rate=sample_rate)
         self._store = store
         self._threshold = threshold
+        self._sample_rate = sample_rate
 
         logger.info(
             "fingerprint_matcher_initialized",
             threshold=threshold,
+            sample_rate=sample_rate,
             extractor_ready=self._extractor.is_ready,
         )
 
@@ -160,8 +166,11 @@ class FingerprintMatcher:
         """
         timestamp = datetime.now(timezone.utc)
 
-        # Extract embedding
+        # Extract CLAP embedding
         embedding = self._extractor.extract_embedding(audio, sample_rate)
+
+        # Extract acoustic features for secondary fingerprinting
+        acoustic_features = self._acoustic_extractor.extract(audio)
 
         # Find matches against confirmed dogs only (auto-tagging)
         # Dogs must be confirmed AND have sufficient samples to be matched
@@ -172,13 +181,17 @@ class FingerprintMatcher:
             only_auto_taggable=True,  # Only match confirmed dogs with enough samples
         )
 
-        # Create fingerprint record
+        # Create fingerprint record with acoustic features
         fingerprint = BarkFingerprint(
             timestamp=timestamp,
             embedding=embedding,
             detection_probability=detection_prob,
             doa_degrees=doa,
             evidence_filename=evidence_filename,
+            duration_ms=acoustic_features.duration_ms,
+            pitch_hz=acoustic_features.pitch_hz,
+            spectral_centroid_hz=acoustic_features.spectral_centroid_hz,
+            mfcc_mean=acoustic_features.mfcc_mean,
         )
 
         # If we have a match, link to the dog
@@ -267,6 +280,7 @@ def create_matcher(
     detector: CLAPDetector,
     store: FingerprintStore,
     threshold: float = DEFAULT_THRESHOLD,
+    sample_rate: int = 48000,
 ) -> FingerprintMatcher:
     """Create a fingerprint matcher from detector and storage.
 
@@ -276,8 +290,9 @@ def create_matcher(
         detector: CLAP detector (loaded or not).
         store: Fingerprint storage instance.
         threshold: Match similarity threshold.
+        sample_rate: Audio sample rate for acoustic feature extraction.
 
     Returns:
         FingerprintMatcher instance.
     """
-    return FingerprintMatcher(detector, store, threshold)
+    return FingerprintMatcher(detector, store, threshold, sample_rate)
