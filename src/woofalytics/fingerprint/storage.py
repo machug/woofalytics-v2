@@ -1,0 +1,711 @@
+"""SQLite storage for audio fingerprints and dog profiles.
+
+This module handles persistent storage of fingerprints using SQLite,
+with efficient binary storage for numpy embedding vectors.
+"""
+
+from __future__ import annotations
+
+import sqlite3
+from contextlib import contextmanager
+from datetime import datetime, timezone
+from pathlib import Path
+from typing import Iterator
+
+import numpy as np
+import structlog
+
+from woofalytics.fingerprint.models import (
+    BarkFingerprint,
+    ClusterInfo,
+    DogProfile,
+    FingerprintMatch,
+)
+
+logger = structlog.get_logger(__name__)
+
+# CLAP embedding dimension
+EMBEDDING_DIM = 512
+
+# Schema version for migrations
+SCHEMA_VERSION = 1
+
+
+def _serialize_embedding(arr: np.ndarray | None) -> bytes | None:
+    """Serialize numpy array to bytes for SQLite storage."""
+    if arr is None:
+        return None
+    return arr.astype(np.float32).tobytes()
+
+
+def _deserialize_embedding(data: bytes | None, shape: tuple[int, ...] = (EMBEDDING_DIM,)) -> np.ndarray | None:
+    """Deserialize bytes to numpy array."""
+    if data is None:
+        return None
+    return np.frombuffer(data, dtype=np.float32).reshape(shape)
+
+
+class FingerprintStore:
+    """SQLite-based storage for fingerprints and dog profiles.
+
+    Provides CRUD operations for dog profiles, bark fingerprints,
+    and cluster management with efficient embedding vector storage.
+    """
+
+    def __init__(self, db_path: Path | str) -> None:
+        """Initialize the fingerprint store.
+
+        Args:
+            db_path: Path to SQLite database file.
+        """
+        self.db_path = Path(db_path)
+        self.db_path.parent.mkdir(parents=True, exist_ok=True)
+        self._init_schema()
+
+    @contextmanager
+    def _get_connection(self) -> Iterator[sqlite3.Connection]:
+        """Get a database connection with proper cleanup."""
+        conn = sqlite3.connect(self.db_path)
+        conn.row_factory = sqlite3.Row
+        try:
+            yield conn
+        finally:
+            conn.close()
+
+    def _init_schema(self) -> None:
+        """Initialize database schema."""
+        with self._get_connection() as conn:
+            cursor = conn.cursor()
+
+            # Dog profiles table
+            cursor.execute("""
+                CREATE TABLE IF NOT EXISTS dog_profiles (
+                    id TEXT PRIMARY KEY,
+                    name TEXT NOT NULL DEFAULT '',
+                    notes TEXT NOT NULL DEFAULT '',
+                    created_at TEXT NOT NULL,
+                    updated_at TEXT NOT NULL,
+                    embedding BLOB,
+                    sample_count INTEGER NOT NULL DEFAULT 0,
+                    first_seen TEXT,
+                    last_seen TEXT,
+                    total_barks INTEGER NOT NULL DEFAULT 0,
+                    avg_duration_ms REAL,
+                    avg_pitch_hz REAL
+                )
+            """)
+
+            # Bark fingerprints table
+            cursor.execute("""
+                CREATE TABLE IF NOT EXISTS bark_fingerprints (
+                    id TEXT PRIMARY KEY,
+                    timestamp TEXT NOT NULL,
+                    embedding BLOB,
+                    dog_id TEXT,
+                    match_confidence REAL,
+                    cluster_id TEXT,
+                    evidence_filename TEXT,
+                    detection_probability REAL NOT NULL DEFAULT 0,
+                    doa_degrees INTEGER,
+                    duration_ms REAL,
+                    pitch_hz REAL,
+                    spectral_centroid_hz REAL,
+                    mfcc_mean BLOB,
+                    FOREIGN KEY (dog_id) REFERENCES dog_profiles(id) ON DELETE SET NULL,
+                    FOREIGN KEY (cluster_id) REFERENCES clusters(id) ON DELETE SET NULL
+                )
+            """)
+
+            # Clusters table
+            cursor.execute("""
+                CREATE TABLE IF NOT EXISTS clusters (
+                    id TEXT PRIMARY KEY,
+                    created_at TEXT NOT NULL,
+                    centroid BLOB,
+                    bark_count INTEGER NOT NULL DEFAULT 0,
+                    first_seen TEXT,
+                    last_seen TEXT,
+                    suggested_name TEXT NOT NULL DEFAULT '',
+                    avg_pitch_hz REAL,
+                    avg_duration_ms REAL
+                )
+            """)
+
+            # Schema version table
+            cursor.execute("""
+                CREATE TABLE IF NOT EXISTS schema_version (
+                    version INTEGER PRIMARY KEY
+                )
+            """)
+
+            # Insert schema version if not exists
+            cursor.execute("INSERT OR IGNORE INTO schema_version (version) VALUES (?)", (SCHEMA_VERSION,))
+
+            # Indexes for common queries
+            cursor.execute("CREATE INDEX IF NOT EXISTS idx_fingerprints_dog_id ON bark_fingerprints(dog_id)")
+            cursor.execute("CREATE INDEX IF NOT EXISTS idx_fingerprints_cluster_id ON bark_fingerprints(cluster_id)")
+            cursor.execute("CREATE INDEX IF NOT EXISTS idx_fingerprints_timestamp ON bark_fingerprints(timestamp)")
+            cursor.execute("CREATE INDEX IF NOT EXISTS idx_fingerprints_untagged ON bark_fingerprints(dog_id) WHERE dog_id IS NULL")
+
+            conn.commit()
+
+        logger.info("fingerprint_store_initialized", db_path=str(self.db_path))
+
+    # --- Dog Profile Operations ---
+
+    def create_dog(self, name: str = "", notes: str = "") -> DogProfile:
+        """Create a new dog profile.
+
+        Args:
+            name: Name for the dog (can be empty initially).
+            notes: Optional notes about the dog.
+
+        Returns:
+            Created DogProfile.
+        """
+        profile = DogProfile(name=name, notes=notes)
+
+        with self._get_connection() as conn:
+            cursor = conn.cursor()
+            cursor.execute(
+                """
+                INSERT INTO dog_profiles
+                (id, name, notes, created_at, updated_at, sample_count, total_barks)
+                VALUES (?, ?, ?, ?, ?, ?, ?)
+                """,
+                (
+                    profile.id,
+                    profile.name,
+                    profile.notes,
+                    profile.created_at.isoformat(),
+                    profile.updated_at.isoformat(),
+                    0,
+                    0,
+                ),
+            )
+            conn.commit()
+
+        logger.info("dog_profile_created", dog_id=profile.id, name=name)
+        return profile
+
+    def get_dog(self, dog_id: str) -> DogProfile | None:
+        """Get a dog profile by ID.
+
+        Args:
+            dog_id: The dog's unique ID.
+
+        Returns:
+            DogProfile if found, None otherwise.
+        """
+        with self._get_connection() as conn:
+            cursor = conn.cursor()
+            cursor.execute("SELECT * FROM dog_profiles WHERE id = ?", (dog_id,))
+            row = cursor.fetchone()
+
+            if not row:
+                return None
+
+            return DogProfile(
+                id=row["id"],
+                name=row["name"],
+                notes=row["notes"],
+                created_at=datetime.fromisoformat(row["created_at"]),
+                updated_at=datetime.fromisoformat(row["updated_at"]),
+                embedding=_deserialize_embedding(row["embedding"]),
+                sample_count=row["sample_count"],
+                first_seen=datetime.fromisoformat(row["first_seen"]) if row["first_seen"] else None,
+                last_seen=datetime.fromisoformat(row["last_seen"]) if row["last_seen"] else None,
+                total_barks=row["total_barks"],
+                avg_duration_ms=row["avg_duration_ms"],
+                avg_pitch_hz=row["avg_pitch_hz"],
+            )
+
+    def list_dogs(self) -> list[DogProfile]:
+        """List all dog profiles.
+
+        Returns:
+            List of all DogProfiles.
+        """
+        dogs = []
+        with self._get_connection() as conn:
+            cursor = conn.cursor()
+            cursor.execute("SELECT * FROM dog_profiles ORDER BY name")
+
+            for row in cursor.fetchall():
+                dogs.append(
+                    DogProfile(
+                        id=row["id"],
+                        name=row["name"],
+                        notes=row["notes"],
+                        created_at=datetime.fromisoformat(row["created_at"]),
+                        updated_at=datetime.fromisoformat(row["updated_at"]),
+                        embedding=_deserialize_embedding(row["embedding"]),
+                        sample_count=row["sample_count"],
+                        first_seen=datetime.fromisoformat(row["first_seen"]) if row["first_seen"] else None,
+                        last_seen=datetime.fromisoformat(row["last_seen"]) if row["last_seen"] else None,
+                        total_barks=row["total_barks"],
+                        avg_duration_ms=row["avg_duration_ms"],
+                        avg_pitch_hz=row["avg_pitch_hz"],
+                    )
+                )
+
+        return dogs
+
+    def update_dog(
+        self,
+        dog_id: str,
+        name: str | None = None,
+        notes: str | None = None,
+        embedding: np.ndarray | None = None,
+    ) -> DogProfile | None:
+        """Update a dog profile.
+
+        Args:
+            dog_id: The dog's unique ID.
+            name: New name (if provided).
+            notes: New notes (if provided).
+            embedding: New embedding (if provided).
+
+        Returns:
+            Updated DogProfile if found, None otherwise.
+        """
+        profile = self.get_dog(dog_id)
+        if not profile:
+            return None
+
+        updates = []
+        params = []
+
+        if name is not None:
+            updates.append("name = ?")
+            params.append(name)
+            profile.name = name
+
+        if notes is not None:
+            updates.append("notes = ?")
+            params.append(notes)
+            profile.notes = notes
+
+        if embedding is not None:
+            updates.append("embedding = ?")
+            params.append(_serialize_embedding(embedding))
+            profile.embedding = embedding
+
+        if updates:
+            updates.append("updated_at = ?")
+            now = datetime.now(timezone.utc)
+            params.append(now.isoformat())
+            params.append(dog_id)
+            profile.updated_at = now
+
+            with self._get_connection() as conn:
+                cursor = conn.cursor()
+                cursor.execute(
+                    f"UPDATE dog_profiles SET {', '.join(updates)} WHERE id = ?",
+                    params,
+                )
+                conn.commit()
+
+            logger.info("dog_profile_updated", dog_id=dog_id)
+
+        return profile
+
+    def delete_dog(self, dog_id: str) -> bool:
+        """Delete a dog profile.
+
+        Fingerprints linked to this dog will have their dog_id set to NULL.
+
+        Args:
+            dog_id: The dog's unique ID.
+
+        Returns:
+            True if deleted, False if not found.
+        """
+        with self._get_connection() as conn:
+            cursor = conn.cursor()
+            cursor.execute("DELETE FROM dog_profiles WHERE id = ?", (dog_id,))
+            deleted = cursor.rowcount > 0
+            conn.commit()
+
+        if deleted:
+            logger.info("dog_profile_deleted", dog_id=dog_id)
+
+        return deleted
+
+    def update_dog_stats(
+        self,
+        dog_id: str,
+        embedding: np.ndarray,
+        timestamp: datetime,
+    ) -> None:
+        """Update dog profile with a new bark sample.
+
+        Incrementally updates the embedding and statistics.
+
+        Args:
+            dog_id: The dog's unique ID.
+            embedding: CLAP embedding from the new bark.
+            timestamp: When the bark was detected.
+        """
+        profile = self.get_dog(dog_id)
+        if not profile:
+            return
+
+        # Update embedding with weighted average
+        profile.update_embedding(embedding)
+
+        # Update timestamps
+        if profile.first_seen is None or timestamp < profile.first_seen:
+            profile.first_seen = timestamp
+        if profile.last_seen is None or timestamp > profile.last_seen:
+            profile.last_seen = timestamp
+
+        profile.total_barks += 1
+
+        with self._get_connection() as conn:
+            cursor = conn.cursor()
+            cursor.execute(
+                """
+                UPDATE dog_profiles SET
+                    embedding = ?,
+                    sample_count = ?,
+                    first_seen = ?,
+                    last_seen = ?,
+                    total_barks = ?,
+                    updated_at = ?
+                WHERE id = ?
+                """,
+                (
+                    _serialize_embedding(profile.embedding),
+                    profile.sample_count,
+                    profile.first_seen.isoformat() if profile.first_seen else None,
+                    profile.last_seen.isoformat() if profile.last_seen else None,
+                    profile.total_barks,
+                    datetime.now(timezone.utc).isoformat(),
+                    dog_id,
+                ),
+            )
+            conn.commit()
+
+    # --- Fingerprint Operations ---
+
+    def save_fingerprint(self, fingerprint: BarkFingerprint) -> None:
+        """Save a bark fingerprint.
+
+        Args:
+            fingerprint: The fingerprint to save.
+        """
+        with self._get_connection() as conn:
+            cursor = conn.cursor()
+            cursor.execute(
+                """
+                INSERT OR REPLACE INTO bark_fingerprints
+                (id, timestamp, embedding, dog_id, match_confidence, cluster_id,
+                 evidence_filename, detection_probability, doa_degrees,
+                 duration_ms, pitch_hz, spectral_centroid_hz, mfcc_mean)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                """,
+                (
+                    fingerprint.id,
+                    fingerprint.timestamp.isoformat(),
+                    _serialize_embedding(fingerprint.embedding),
+                    fingerprint.dog_id,
+                    fingerprint.match_confidence,
+                    fingerprint.cluster_id,
+                    fingerprint.evidence_filename,
+                    fingerprint.detection_probability,
+                    fingerprint.doa_degrees,
+                    fingerprint.duration_ms,
+                    fingerprint.pitch_hz,
+                    fingerprint.spectral_centroid_hz,
+                    _serialize_embedding(fingerprint.mfcc_mean) if fingerprint.mfcc_mean is not None else None,
+                ),
+            )
+            conn.commit()
+
+    def get_fingerprint(self, fingerprint_id: str) -> BarkFingerprint | None:
+        """Get a fingerprint by ID.
+
+        Args:
+            fingerprint_id: The fingerprint's unique ID.
+
+        Returns:
+            BarkFingerprint if found, None otherwise.
+        """
+        with self._get_connection() as conn:
+            cursor = conn.cursor()
+            cursor.execute("SELECT * FROM bark_fingerprints WHERE id = ?", (fingerprint_id,))
+            row = cursor.fetchone()
+
+            if not row:
+                return None
+
+            return BarkFingerprint(
+                id=row["id"],
+                timestamp=datetime.fromisoformat(row["timestamp"]),
+                embedding=_deserialize_embedding(row["embedding"]),
+                dog_id=row["dog_id"],
+                match_confidence=row["match_confidence"],
+                cluster_id=row["cluster_id"],
+                evidence_filename=row["evidence_filename"],
+                detection_probability=row["detection_probability"],
+                doa_degrees=row["doa_degrees"],
+                duration_ms=row["duration_ms"],
+                pitch_hz=row["pitch_hz"],
+                spectral_centroid_hz=row["spectral_centroid_hz"],
+                mfcc_mean=_deserialize_embedding(row["mfcc_mean"], (13,)) if row["mfcc_mean"] else None,
+            )
+
+    def get_untagged_fingerprints(self, limit: int = 100) -> list[BarkFingerprint]:
+        """Get fingerprints that haven't been tagged to a dog.
+
+        Args:
+            limit: Maximum number to return.
+
+        Returns:
+            List of untagged fingerprints.
+        """
+        fingerprints = []
+        with self._get_connection() as conn:
+            cursor = conn.cursor()
+            cursor.execute(
+                """
+                SELECT * FROM bark_fingerprints
+                WHERE dog_id IS NULL
+                ORDER BY timestamp DESC
+                LIMIT ?
+                """,
+                (limit,),
+            )
+
+            for row in cursor.fetchall():
+                fingerprints.append(
+                    BarkFingerprint(
+                        id=row["id"],
+                        timestamp=datetime.fromisoformat(row["timestamp"]),
+                        embedding=_deserialize_embedding(row["embedding"]),
+                        dog_id=row["dog_id"],
+                        match_confidence=row["match_confidence"],
+                        cluster_id=row["cluster_id"],
+                        evidence_filename=row["evidence_filename"],
+                        detection_probability=row["detection_probability"],
+                        doa_degrees=row["doa_degrees"],
+                        duration_ms=row["duration_ms"],
+                        pitch_hz=row["pitch_hz"],
+                        spectral_centroid_hz=row["spectral_centroid_hz"],
+                        mfcc_mean=_deserialize_embedding(row["mfcc_mean"], (13,)) if row["mfcc_mean"] else None,
+                    )
+                )
+
+        return fingerprints
+
+    def tag_fingerprint(self, fingerprint_id: str, dog_id: str, confidence: float) -> bool:
+        """Tag a fingerprint as belonging to a dog.
+
+        Args:
+            fingerprint_id: The fingerprint to tag.
+            dog_id: The dog to assign it to.
+            confidence: Match confidence (0-1).
+
+        Returns:
+            True if updated, False if fingerprint not found.
+        """
+        with self._get_connection() as conn:
+            cursor = conn.cursor()
+            cursor.execute(
+                """
+                UPDATE bark_fingerprints
+                SET dog_id = ?, match_confidence = ?, cluster_id = NULL
+                WHERE id = ?
+                """,
+                (dog_id, confidence, fingerprint_id),
+            )
+            updated = cursor.rowcount > 0
+            conn.commit()
+
+        return updated
+
+    def get_fingerprints_for_dog(self, dog_id: str, limit: int = 100) -> list[BarkFingerprint]:
+        """Get all fingerprints for a specific dog.
+
+        Args:
+            dog_id: The dog's unique ID.
+            limit: Maximum number to return.
+
+        Returns:
+            List of fingerprints for this dog.
+        """
+        fingerprints = []
+        with self._get_connection() as conn:
+            cursor = conn.cursor()
+            cursor.execute(
+                """
+                SELECT * FROM bark_fingerprints
+                WHERE dog_id = ?
+                ORDER BY timestamp DESC
+                LIMIT ?
+                """,
+                (dog_id, limit),
+            )
+
+            for row in cursor.fetchall():
+                fingerprints.append(
+                    BarkFingerprint(
+                        id=row["id"],
+                        timestamp=datetime.fromisoformat(row["timestamp"]),
+                        embedding=_deserialize_embedding(row["embedding"]),
+                        dog_id=row["dog_id"],
+                        match_confidence=row["match_confidence"],
+                        cluster_id=row["cluster_id"],
+                        evidence_filename=row["evidence_filename"],
+                        detection_probability=row["detection_probability"],
+                        doa_degrees=row["doa_degrees"],
+                        duration_ms=row["duration_ms"],
+                        pitch_hz=row["pitch_hz"],
+                        spectral_centroid_hz=row["spectral_centroid_hz"],
+                        mfcc_mean=_deserialize_embedding(row["mfcc_mean"], (13,)) if row["mfcc_mean"] else None,
+                    )
+                )
+
+        return fingerprints
+
+    # --- Matching Operations ---
+
+    def find_matches(
+        self,
+        embedding: np.ndarray,
+        threshold: float = 0.75,
+        top_k: int = 3,
+    ) -> list[FingerprintMatch]:
+        """Find matching dogs for a given embedding.
+
+        Uses cosine similarity to compare against all known dog profiles.
+
+        Args:
+            embedding: CLAP embedding to match.
+            threshold: Minimum similarity to consider a match.
+            top_k: Maximum number of matches to return.
+
+        Returns:
+            List of matches sorted by confidence (highest first).
+        """
+        dogs = self.list_dogs()
+        matches = []
+
+        # Normalize query embedding
+        query_norm = embedding / np.linalg.norm(embedding)
+
+        for dog in dogs:
+            if dog.embedding is None:
+                continue
+
+            # Cosine similarity
+            similarity = float(np.dot(query_norm, dog.embedding))
+
+            if similarity >= threshold:
+                matches.append(
+                    FingerprintMatch(
+                        dog_id=dog.id,
+                        dog_name=dog.name,
+                        confidence=similarity,
+                        sample_count=dog.sample_count,
+                    )
+                )
+
+        # Sort by confidence descending
+        matches.sort(key=lambda m: m.confidence, reverse=True)
+        return matches[:top_k]
+
+    def merge_dogs(self, source_id: str, target_id: str) -> bool:
+        """Merge two dog profiles.
+
+        All fingerprints from source are reassigned to target,
+        and source is deleted.
+
+        Args:
+            source_id: Dog to merge from (will be deleted).
+            target_id: Dog to merge into.
+
+        Returns:
+            True if merged successfully.
+        """
+        source = self.get_dog(source_id)
+        target = self.get_dog(target_id)
+
+        if not source or not target:
+            return False
+
+        with self._get_connection() as conn:
+            cursor = conn.cursor()
+
+            # Move all fingerprints to target
+            cursor.execute(
+                "UPDATE bark_fingerprints SET dog_id = ? WHERE dog_id = ?",
+                (target_id, source_id),
+            )
+
+            # Merge embeddings if both have them
+            if source.embedding is not None and target.embedding is not None:
+                # Weighted average based on sample counts
+                total = source.sample_count + target.sample_count
+                if total > 0:
+                    merged_embedding = (
+                        source.embedding * source.sample_count +
+                        target.embedding * target.sample_count
+                    ) / total
+                    merged_embedding = merged_embedding / np.linalg.norm(merged_embedding)
+
+                    cursor.execute(
+                        """
+                        UPDATE dog_profiles SET
+                            embedding = ?,
+                            sample_count = ?,
+                            total_barks = total_barks + ?,
+                            updated_at = ?
+                        WHERE id = ?
+                        """,
+                        (
+                            _serialize_embedding(merged_embedding),
+                            total,
+                            source.total_barks,
+                            datetime.now(timezone.utc).isoformat(),
+                            target_id,
+                        ),
+                    )
+
+            # Delete source
+            cursor.execute("DELETE FROM dog_profiles WHERE id = ?", (source_id,))
+            conn.commit()
+
+        logger.info("dogs_merged", source_id=source_id, target_id=target_id)
+        return True
+
+    # --- Stats ---
+
+    def get_stats(self) -> dict[str, int]:
+        """Get summary statistics.
+
+        Returns:
+            Dictionary with counts of dogs, fingerprints, untagged, etc.
+        """
+        with self._get_connection() as conn:
+            cursor = conn.cursor()
+
+            cursor.execute("SELECT COUNT(*) FROM dog_profiles")
+            dog_count = cursor.fetchone()[0]
+
+            cursor.execute("SELECT COUNT(*) FROM bark_fingerprints")
+            fingerprint_count = cursor.fetchone()[0]
+
+            cursor.execute("SELECT COUNT(*) FROM bark_fingerprints WHERE dog_id IS NULL")
+            untagged_count = cursor.fetchone()[0]
+
+            cursor.execute("SELECT COUNT(*) FROM clusters")
+            cluster_count = cursor.fetchone()[0]
+
+            return {
+                "dogs": dog_count,
+                "fingerprints": fingerprint_count,
+                "untagged": untagged_count,
+                "clusters": cluster_count,
+            }
