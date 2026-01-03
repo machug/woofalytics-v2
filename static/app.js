@@ -21,6 +21,9 @@ class WoofalyticsApp {
         this.isBarkActive = false;
         this.barkTimeout = null;
 
+        // Waveform visualizer
+        this.waveformVisualizer = null;
+
         this.init();
     }
 
@@ -31,9 +34,14 @@ class WoofalyticsApp {
         this.loadEvidence();
         this.initMissionClock();
         this.initGeolocation();
+        this.initWaveformVisualizer();
 
         // Refresh status every 30 seconds
         setInterval(() => this.loadStatus(), 30000);
+    }
+
+    initWaveformVisualizer() {
+        this.waveformVisualizer = new WaveformVisualizer('waveform-canvas');
     }
 
     // =========================================
@@ -139,6 +147,10 @@ class WoofalyticsApp {
                 // Update MIC LED based on audio level
                 if (data.data.level > 0.01) {
                     this.updateLedStatus('led-mic', 'active');
+                }
+                // Feed sample to waveform visualizer
+                if (this.waveformVisualizer) {
+                    this.waveformVisualizer.addSample(data.data.level);
                 }
             }
         };
@@ -440,6 +452,167 @@ class WoofalyticsApp {
 // Global function for refresh button
 function loadEvidence() {
     window.app.loadEvidence();
+}
+
+// =========================================
+// Waveform Visualizer Class
+// =========================================
+
+class WaveformVisualizer {
+    constructor(canvasId) {
+        this.canvas = document.getElementById(canvasId);
+        if (!this.canvas) return;
+
+        this.ctx = this.canvas.getContext('2d');
+        this.samples = [];
+        this.maxSamples = 200;  // Number of samples to display
+        this.phosphorTrails = [];  // For persistence effect
+        this.maxTrails = 3;
+
+        // Colors for gradient based on amplitude
+        this.colorLow = { r: 20, g: 184, b: 166 };      // Teal
+        this.colorHigh = { r: 248, g: 81, b: 73 };      // Coral
+
+        this.resize();
+        window.addEventListener('resize', () => this.resize());
+
+        // Start animation loop
+        this.animate();
+    }
+
+    resize() {
+        if (!this.canvas) return;
+        const rect = this.canvas.parentElement.getBoundingClientRect();
+        this.canvas.width = rect.width * window.devicePixelRatio;
+        this.canvas.height = rect.height * window.devicePixelRatio;
+        this.ctx.scale(window.devicePixelRatio, window.devicePixelRatio);
+        this.width = rect.width;
+        this.height = rect.height;
+    }
+
+    addSample(level) {
+        this.samples.push(level);
+        if (this.samples.length > this.maxSamples) {
+            this.samples.shift();
+        }
+    }
+
+    interpolateColor(t) {
+        // t is 0-1, interpolate between teal and coral
+        const r = Math.round(this.colorLow.r + (this.colorHigh.r - this.colorLow.r) * t);
+        const g = Math.round(this.colorLow.g + (this.colorHigh.g - this.colorLow.g) * t);
+        const b = Math.round(this.colorLow.b + (this.colorHigh.b - this.colorLow.b) * t);
+        return `rgb(${r}, ${g}, ${b})`;
+    }
+
+    animate() {
+        if (!this.canvas) return;
+
+        // Clear with slight fade for phosphor persistence effect
+        this.ctx.fillStyle = 'rgba(33, 38, 45, 0.3)';
+        this.ctx.fillRect(0, 0, this.width, this.height);
+
+        // Draw grid lines
+        this.ctx.strokeStyle = 'rgba(125, 133, 144, 0.1)';
+        this.ctx.lineWidth = 1;
+
+        // Horizontal center line
+        this.ctx.beginPath();
+        this.ctx.moveTo(0, this.height / 2);
+        this.ctx.lineTo(this.width, this.height / 2);
+        this.ctx.stroke();
+
+        // Vertical grid lines
+        const gridSpacing = this.width / 10;
+        for (let x = gridSpacing; x < this.width; x += gridSpacing) {
+            this.ctx.beginPath();
+            this.ctx.moveTo(x, 0);
+            this.ctx.lineTo(x, this.height);
+            this.ctx.stroke();
+        }
+
+        if (this.samples.length < 2) {
+            requestAnimationFrame(() => this.animate());
+            return;
+        }
+
+        // Draw waveform with glow effect
+        const stepX = this.width / (this.maxSamples - 1);
+        const centerY = this.height / 2;
+        const amplitude = this.height * 0.4;
+
+        // Draw glow layer
+        this.ctx.lineWidth = 6;
+        this.ctx.lineCap = 'round';
+        this.ctx.lineJoin = 'round';
+
+        this.ctx.beginPath();
+        for (let i = 0; i < this.samples.length; i++) {
+            const x = i * stepX;
+            const level = this.samples[i];
+            const y = centerY - (level * amplitude * 2 - amplitude);
+
+            if (i === 0) {
+                this.ctx.moveTo(x, y);
+            } else {
+                this.ctx.lineTo(x, y);
+            }
+        }
+
+        // Glow effect
+        const avgLevel = this.samples.reduce((a, b) => a + b, 0) / this.samples.length;
+        const glowColor = this.interpolateColor(avgLevel);
+        this.ctx.strokeStyle = glowColor.replace('rgb', 'rgba').replace(')', ', 0.3)');
+        this.ctx.stroke();
+
+        // Draw main waveform line
+        this.ctx.lineWidth = 2;
+        this.ctx.beginPath();
+
+        for (let i = 0; i < this.samples.length; i++) {
+            const x = i * stepX;
+            const level = this.samples[i];
+            const y = centerY - (level * amplitude * 2 - amplitude);
+
+            if (i === 0) {
+                this.ctx.moveTo(x, y);
+            } else {
+                this.ctx.lineTo(x, y);
+            }
+        }
+
+        // Create gradient based on average level
+        const gradient = this.ctx.createLinearGradient(0, 0, this.width, 0);
+        gradient.addColorStop(0, this.interpolateColor(0.2));
+        gradient.addColorStop(0.5, this.interpolateColor(avgLevel));
+        gradient.addColorStop(1, this.interpolateColor(Math.min(avgLevel * 1.5, 1)));
+
+        this.ctx.strokeStyle = gradient;
+        this.ctx.stroke();
+
+        // Draw leading edge dot
+        if (this.samples.length > 0) {
+            const lastX = (this.samples.length - 1) * stepX;
+            const lastLevel = this.samples[this.samples.length - 1];
+            const lastY = centerY - (lastLevel * amplitude * 2 - amplitude);
+
+            this.ctx.beginPath();
+            this.ctx.arc(lastX, lastY, 4, 0, Math.PI * 2);
+            this.ctx.fillStyle = this.interpolateColor(lastLevel);
+            this.ctx.fill();
+
+            // Add glow to the dot
+            this.ctx.beginPath();
+            this.ctx.arc(lastX, lastY, 8, 0, Math.PI * 2);
+            const dotGlow = this.ctx.createRadialGradient(lastX, lastY, 0, lastX, lastY, 8);
+            dotGlow.addColorStop(0, this.interpolateColor(lastLevel).replace('rgb', 'rgba').replace(')', ', 0.5)'));
+            dotGlow.addColorStop(1, 'transparent');
+            this.ctx.fillStyle = dotGlow;
+            this.ctx.fill();
+        }
+
+        requestAnimationFrame(() => this.animate());
+    }
 }
 
 // Initialize app when DOM is ready
