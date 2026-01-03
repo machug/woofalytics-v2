@@ -25,6 +25,9 @@ class DogProfile:
 
     Represents a recognized dog with its name, cumulative fingerprint,
     and statistics about bark history.
+
+    A dog must be "confirmed" before auto-tagging is enabled. This requires
+    manually tagging a minimum number of barks to build a reliable fingerprint.
     """
 
     id: str = field(default_factory=_generate_id)
@@ -32,6 +35,13 @@ class DogProfile:
     notes: str = ""
     created_at: datetime = field(default_factory=lambda: datetime.now(timezone.utc))
     updated_at: datetime = field(default_factory=lambda: datetime.now(timezone.utc))
+
+    # Confirmation status - dog must be confirmed before auto-tagging
+    confirmed: bool = False
+    confirmed_at: datetime | None = None
+
+    # Minimum samples required before auto-tagging (user-configurable per dog)
+    min_samples_for_auto_tag: int = 5
 
     # Cumulative embedding: weighted average of all fingerprints for this dog
     # Shape: (512,) - CLAP embedding dimension
@@ -49,6 +59,15 @@ class DogProfile:
     avg_duration_ms: float | None = None
     avg_pitch_hz: float | None = None
 
+    def can_auto_tag(self) -> bool:
+        """Check if this dog is eligible for auto-tagging.
+
+        Returns True only if:
+        1. Dog is confirmed
+        2. Has enough samples (>= min_samples_for_auto_tag)
+        """
+        return self.confirmed and self.sample_count >= self.min_samples_for_auto_tag
+
     def to_dict(self) -> dict[str, Any]:
         """Convert to dictionary for JSON serialization."""
         return {
@@ -57,6 +76,9 @@ class DogProfile:
             "notes": self.notes,
             "created_at": self.created_at.isoformat(),
             "updated_at": self.updated_at.isoformat(),
+            "confirmed": self.confirmed,
+            "confirmed_at": self.confirmed_at.isoformat() if self.confirmed_at else None,
+            "min_samples_for_auto_tag": self.min_samples_for_auto_tag,
             "sample_count": self.sample_count,
             "first_seen": self.first_seen.isoformat() if self.first_seen else None,
             "last_seen": self.last_seen.isoformat() if self.last_seen else None,
@@ -75,6 +97,9 @@ class DogProfile:
             notes=data.get("notes", ""),
             created_at=datetime.fromisoformat(data["created_at"]),
             updated_at=datetime.fromisoformat(data["updated_at"]),
+            confirmed=data.get("confirmed", False),
+            confirmed_at=datetime.fromisoformat(data["confirmed_at"]) if data.get("confirmed_at") else None,
+            min_samples_for_auto_tag=data.get("min_samples_for_auto_tag", 5),
             embedding=embedding,
             sample_count=data.get("sample_count", 0),
             first_seen=datetime.fromisoformat(data["first_seen"]) if data.get("first_seen") else None,

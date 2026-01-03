@@ -19,6 +19,10 @@ class DogProfileSchema(BaseModel):
     notes: str = Field(default="", description="Optional notes about the dog")
     created_at: datetime = Field(description="When the profile was created")
     updated_at: datetime = Field(description="When the profile was last updated")
+    confirmed: bool = Field(default=False, description="Whether the dog is confirmed for auto-tagging")
+    confirmed_at: datetime | None = Field(default=None, description="When the dog was confirmed")
+    min_samples_for_auto_tag: int = Field(default=5, description="Minimum samples required before auto-tagging")
+    can_auto_tag: bool = Field(default=False, description="Whether this dog is eligible for auto-tagging")
     sample_count: int = Field(default=0, description="Number of bark samples used to build this profile")
     first_seen: datetime | None = Field(default=None, description="First time this dog was detected")
     last_seen: datetime | None = Field(default=None, description="Most recent detection of this dog")
@@ -141,3 +145,14 @@ class DogBarksListSchema(BaseModel):
     count: int = Field(description="Number of barks returned")
     total_barks: int = Field(description="Total number of barks for this dog")
     barks: list[BarkFingerprintSchema] = Field(description="List of bark fingerprints")
+
+
+class ConfirmDogRequestSchema(BaseModel):
+    """Request to confirm a dog for auto-tagging."""
+
+    min_samples: int | None = Field(
+        default=None,
+        ge=1,
+        le=100,
+        description="Override minimum samples required before auto-tagging (default: 5)",
+    )

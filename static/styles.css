@@ -1436,6 +1436,37 @@ body {
     border-top: 1px solid var(--border-muted);
 }
 
+/* Dog Status Badges */
+.status-badge {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    font-size: 0.625rem;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+    padding: 2px 8px;
+    border-radius: var(--radius-full);
+}
+
+.status-active {
+    background: rgba(52, 211, 153, 0.15);
+    color: #34d399;
+    border: 1px solid rgba(52, 211, 153, 0.3);
+}
+
+.status-pending {
+    background: rgba(251, 191, 36, 0.15);
+    color: #fbbf24;
+    border: 1px solid rgba(251, 191, 36, 0.3);
+}
+
+.status-inactive {
+    background: rgba(148, 163, 184, 0.15);
+    color: #94a3b8;
+    border: 1px solid rgba(148, 163, 184, 0.3);
+}
+
 /* Bark Review Card */
 .bark-card {
     background: var(--bg-overlay);

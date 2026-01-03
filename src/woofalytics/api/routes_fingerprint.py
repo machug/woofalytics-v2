@@ -18,6 +18,7 @@ from woofalytics.api.schemas_fingerprint import (
     BarkFingerprintSchema,
     BulkTagRequestSchema,
     BulkTagResultSchema,
+    ConfirmDogRequestSchema,
     CorrectBarkRequestSchema,
     DogBarksListSchema,
     DogProfileCreateSchema,
@@ -63,6 +64,10 @@ def _dog_to_schema(dog: DogProfile) -> DogProfileSchema:
         notes=dog.notes,
         created_at=dog.created_at,
         updated_at=dog.updated_at,
+        confirmed=dog.confirmed,
+        confirmed_at=dog.confirmed_at,
+        min_samples_for_auto_tag=dog.min_samples_for_auto_tag,
+        can_auto_tag=dog.can_auto_tag(),
         sample_count=dog.sample_count,
         first_seen=dog.first_seen,
         last_seen=dog.last_seen,
@@ -249,6 +254,57 @@ async def get_dog_barks(
         total_barks=dog.total_barks,
         barks=[_fingerprint_to_schema(fp, dog.name) for fp in fingerprints],
     )
+
+
+@router.post(
+    "/dogs/{dog_id}/confirm",
+    response_model=DogProfileSchema,
+    summary="Confirm dog for auto-tagging",
+    description="Confirms a dog so that new barks can be auto-tagged to it "
+    "(once it has sufficient samples). The dog must be manually confirmed after "
+    "enough barks have been manually tagged to build a reliable fingerprint.",
+)
+async def confirm_dog(
+    dog_id: str,
+    data: ConfirmDogRequestSchema,
+    store: Annotated[FingerprintStore, Depends(get_fingerprint_store)],
+) -> DogProfileSchema:
+    """Confirm a dog for auto-tagging."""
+    dog = store.confirm_dog(dog_id, min_samples=data.min_samples)
+    if not dog:
+        logger.warning("dog_not_found_for_confirm", dog_id=dog_id)
+        raise HTTPException(status_code=404, detail="Dog not found")
+
+    logger.info(
+        "dog_confirmed",
+        dog_id=dog_id,
+        name=dog.name,
+        min_samples=dog.min_samples_for_auto_tag,
+        sample_count=dog.sample_count,
+        can_auto_tag=dog.can_auto_tag(),
+    )
+    return _dog_to_schema(dog)
+
+
+@router.post(
+    "/dogs/{dog_id}/unconfirm",
+    response_model=DogProfileSchema,
+    summary="Remove confirmation from dog",
+    description="Removes confirmation from a dog, disabling auto-tagging. "
+    "Existing tagged barks are not affected.",
+)
+async def unconfirm_dog(
+    dog_id: str,
+    store: Annotated[FingerprintStore, Depends(get_fingerprint_store)],
+) -> DogProfileSchema:
+    """Remove confirmation from a dog."""
+    dog = store.unconfirm_dog(dog_id)
+    if not dog:
+        logger.warning("dog_not_found_for_unconfirm", dog_id=dog_id)
+        raise HTTPException(status_code=404, detail="Dog not found")
+
+    logger.info("dog_unconfirmed", dog_id=dog_id, name=dog.name)
+    return _dog_to_schema(dog)
 
 
 # --- Bark Tagging Endpoints ---

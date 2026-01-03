@@ -82,6 +82,7 @@ class FingerprintMatcher:
         sample_rate: int = 48000,
         threshold: float | None = None,
         top_k: int = 3,
+        only_auto_taggable: bool = False,
     ) -> list[FingerprintMatch]:
         """Match audio against known dog profiles.
 
@@ -93,6 +94,8 @@ class FingerprintMatcher:
             sample_rate: Sample rate of the audio.
             threshold: Override the default threshold for this match.
             top_k: Maximum number of matches to return.
+            only_auto_taggable: If True, only match against confirmed dogs
+                with sufficient samples. Default False for manual matching.
 
         Returns:
             List of matches sorted by confidence (highest first).
@@ -103,11 +106,12 @@ class FingerprintMatcher:
         # Extract embedding from audio
         embedding = self._extractor.extract_embedding(audio, sample_rate)
 
-        # Find matches in storage
+        # Find matches in storage (include all dogs for manual matching)
         matches = self._store.find_matches(
             embedding=embedding,
             threshold=threshold,
             top_k=top_k,
+            only_auto_taggable=only_auto_taggable,
         )
 
         if matches:
@@ -159,11 +163,13 @@ class FingerprintMatcher:
         # Extract embedding
         embedding = self._extractor.extract_embedding(audio, sample_rate)
 
-        # Find matches
+        # Find matches against confirmed dogs only (auto-tagging)
+        # Dogs must be confirmed AND have sufficient samples to be matched
         matches = self._store.find_matches(
             embedding=embedding,
             threshold=self._threshold,
             top_k=3,
+            only_auto_taggable=True,  # Only match confirmed dogs with enough samples
         )
 
         # Create fingerprint record
@@ -182,7 +188,7 @@ class FingerprintMatcher:
             fingerprint.match_confidence = best_match.confidence
 
             logger.info(
-                "bark_matched",
+                "bark_auto_tagged",
                 fingerprint_id=fingerprint.id,
                 dog_id=best_match.dog_id,
                 dog_name=best_match.dog_name,
@@ -197,11 +203,29 @@ class FingerprintMatcher:
                 timestamp=timestamp,
             )
         else:
-            logger.info(
-                "bark_unmatched",
-                fingerprint_id=fingerprint.id,
-                detection_prob=f"{detection_prob:.3f}",
+            # No auto-taggable match found - bark will be untagged
+            # Check if there are any potential matches (for logging)
+            potential_matches = self._store.find_matches(
+                embedding=embedding,
+                threshold=self._threshold,
+                top_k=1,
+                only_auto_taggable=False,
             )
+            if potential_matches:
+                logger.info(
+                    "bark_awaiting_confirmation",
+                    fingerprint_id=fingerprint.id,
+                    potential_dog=potential_matches[0].dog_name,
+                    potential_confidence=f"{potential_matches[0].confidence:.3f}",
+                    detection_prob=f"{detection_prob:.3f}",
+                    reason="Dog not confirmed or insufficient samples",
+                )
+            else:
+                logger.info(
+                    "bark_unmatched",
+                    fingerprint_id=fingerprint.id,
+                    detection_prob=f"{detection_prob:.3f}",
+                )
 
         # Save fingerprint
         self._store.save_fingerprint(fingerprint)

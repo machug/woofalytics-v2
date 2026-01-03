@@ -205,9 +205,9 @@
                 if (!response.ok) return;
                 const data = await response.json();
 
-                document.getElementById('stat-dogs').textContent = data.total_dogs || 0;
-                document.getElementById('stat-untagged').textContent = data.untagged_barks || 0;
-                document.getElementById('stat-total').textContent = data.total_fingerprints || 0;
+                document.getElementById('stat-dogs').textContent = data.dogs || 0;
+                document.getElementById('stat-untagged').textContent = data.untagged || 0;
+                document.getElementById('stat-total').textContent = data.fingerprints || 0;
             } catch (error) {
                 console.error('Error loading stats:', error);
             }
@@ -247,12 +247,48 @@
                 const lastSeen = dog.last_seen
                     ? new Date(dog.last_seen).toLocaleDateString()
                     : 'Never';
+
+                // Status badge based on confirmation and auto-tag status
+                let statusBadge = '';
+                let statusClass = '';
+                if (dog.can_auto_tag) {
+                    statusBadge = 'AUTO-TAG ON';
+                    statusClass = 'status-active';
+                } else if (dog.confirmed) {
+                    statusBadge = `CONFIRMED (${dog.sample_count}/${dog.min_samples_for_auto_tag} samples)`;
+                    statusClass = 'status-pending';
+                } else {
+                    statusBadge = 'NOT CONFIRMED';
+                    statusClass = 'status-inactive';
+                }
+
+                // Confirm/Unconfirm button
+                const confirmBtn = dog.confirmed
+                    ? `<button class="btn btn-outline btn-sm" onclick="admin.unconfirmDog('${dog.id}')" style="color: var(--accent-coral);">
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="width:14px;height:14px">
+                            <circle cx="12" cy="12" r="10"/>
+                            <line x1="15" y1="9" x2="9" y2="15"/>
+                            <line x1="9" y1="9" x2="15" y2="15"/>
+                        </svg>
+                        Unconfirm
+                    </button>`
+                    : `<button class="btn btn-amber btn-sm" onclick="admin.confirmDog('${dog.id}')">
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="width:14px;height:14px">
+                            <path d="M22 11.08V12a10 10 0 11-5.93-9.14"/>
+                            <polyline points="22 4 12 14.01 9 11.01"/>
+                        </svg>
+                        Confirm
+                    </button>`;
+
                 return `
                     <div class="dog-card" data-dog-id="${dog.id}">
                         <div class="dog-card-header">
                             <div class="dog-card-avatar">🐕</div>
                             <div class="dog-card-info">
-                                <div class="dog-card-name">${this.escapeHtml(dog.name)}</div>
+                                <div class="dog-card-name">
+                                    ${this.escapeHtml(dog.name)}
+                                    <span class="status-badge ${statusClass}">${statusBadge}</span>
+                                </div>
                                 ${dog.notes ? `<div class="dog-card-notes">${this.escapeHtml(dog.notes)}</div>` : ''}
                             </div>
                         </div>
@@ -268,6 +304,7 @@
                             </div>
                         </div>
                         <div class="dog-card-actions">
+                            ${confirmBtn}
                             <button class="btn btn-outline btn-sm" onclick="admin.editDog('${dog.id}')">
                                 <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="width:14px;height:14px">
                                     <path d="M11 4H4a2 2 0 00-2 2v14a2 2 0 002 2h14a2 2 0 002-2v-7"/>
@@ -457,6 +494,60 @@
             } catch (error) {
                 console.error('Error deleting dog:', error);
                 alert('Error deleting dog');
+            }
+        }
+
+        async confirmDog(dogId) {
+            const dog = this.dogs.find(d => d.id === dogId);
+            if (!dog) return;
+
+            const minSamples = dog.sample_count < 5
+                ? prompt(`Confirm "${dog.name}" for auto-tagging?\n\nThis dog has ${dog.sample_count} samples. How many samples should be required before auto-tagging? (default: 5)`, '5')
+                : null;
+
+            if (minSamples === null && dog.sample_count < 5) return;
+
+            try {
+                const response = await fetch(`/api/dogs/${dogId}/confirm`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ min_samples: minSamples ? parseInt(minSamples) : null })
+                });
+
+                if (response.ok) {
+                    await this.loadDogs();
+                } else {
+                    const error = await response.json();
+                    alert('Error: ' + (error.detail || 'Failed to confirm dog'));
+                }
+            } catch (error) {
+                console.error('Error confirming dog:', error);
+                alert('Error confirming dog');
+            }
+        }
+
+        async unconfirmDog(dogId) {
+            const dog = this.dogs.find(d => d.id === dogId);
+            if (!dog) return;
+
+            if (!confirm(`Remove confirmation from "${dog.name}"? This will disable auto-tagging for this dog.`)) {
+                return;
+            }
+
+            try {
+                const response = await fetch(`/api/dogs/${dogId}/unconfirm`, {
+                    method: 'POST'
+                });
+
+                if (response.ok) {
+                    await this.loadDogs();
+                } else {
+                    const error = await response.json();
+                    alert('Error: ' + (error.detail || 'Failed to unconfirm dog'));
+                }
+            } catch (error) {
+                console.error('Error unconfirming dog:', error);
+                alert('Error unconfirming dog');
             }
         }
 

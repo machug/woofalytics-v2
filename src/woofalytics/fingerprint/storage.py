@@ -28,7 +28,7 @@ logger = structlog.get_logger(__name__)
 EMBEDDING_DIM = 512
 
 # Schema version for migrations
-SCHEMA_VERSION = 1
+SCHEMA_VERSION = 2
 
 
 def _serialize_embedding(arr: np.ndarray | None) -> bytes | None:
@@ -85,6 +85,9 @@ class FingerprintStore:
                     notes TEXT NOT NULL DEFAULT '',
                     created_at TEXT NOT NULL,
                     updated_at TEXT NOT NULL,
+                    confirmed INTEGER NOT NULL DEFAULT 0,
+                    confirmed_at TEXT,
+                    min_samples_for_auto_tag INTEGER NOT NULL DEFAULT 5,
                     embedding BLOB,
                     sample_count INTEGER NOT NULL DEFAULT 0,
                     first_seen TEXT,
@@ -140,6 +143,27 @@ class FingerprintStore:
 
             # Insert schema version if not exists
             cursor.execute("INSERT OR IGNORE INTO schema_version (version) VALUES (?)", (SCHEMA_VERSION,))
+
+            # Run migrations for existing databases
+            cursor.execute("SELECT version FROM schema_version")
+            current_version = cursor.fetchone()[0]
+
+            if current_version < 2:
+                # Migration: Add confirmation columns to dog_profiles
+                try:
+                    cursor.execute("ALTER TABLE dog_profiles ADD COLUMN confirmed INTEGER NOT NULL DEFAULT 0")
+                except sqlite3.OperationalError:
+                    pass  # Column already exists
+                try:
+                    cursor.execute("ALTER TABLE dog_profiles ADD COLUMN confirmed_at TEXT")
+                except sqlite3.OperationalError:
+                    pass
+                try:
+                    cursor.execute("ALTER TABLE dog_profiles ADD COLUMN min_samples_for_auto_tag INTEGER NOT NULL DEFAULT 5")
+                except sqlite3.OperationalError:
+                    pass
+                cursor.execute("UPDATE schema_version SET version = 2")
+                logger.info("schema_migrated", from_version=current_version, to_version=2)
 
             # Indexes for common queries
             cursor.execute("CREATE INDEX IF NOT EXISTS idx_fingerprints_dog_id ON bark_fingerprints(dog_id)")
@@ -211,6 +235,9 @@ class FingerprintStore:
                 notes=row["notes"],
                 created_at=datetime.fromisoformat(row["created_at"]),
                 updated_at=datetime.fromisoformat(row["updated_at"]),
+                confirmed=bool(row["confirmed"]),
+                confirmed_at=datetime.fromisoformat(row["confirmed_at"]) if row["confirmed_at"] else None,
+                min_samples_for_auto_tag=row["min_samples_for_auto_tag"],
                 embedding=_deserialize_embedding(row["embedding"]),
                 sample_count=row["sample_count"],
                 first_seen=datetime.fromisoformat(row["first_seen"]) if row["first_seen"] else None,
@@ -239,6 +266,9 @@ class FingerprintStore:
                         notes=row["notes"],
                         created_at=datetime.fromisoformat(row["created_at"]),
                         updated_at=datetime.fromisoformat(row["updated_at"]),
+                        confirmed=bool(row["confirmed"]),
+                        confirmed_at=datetime.fromisoformat(row["confirmed_at"]) if row["confirmed_at"] else None,
+                        min_samples_for_auto_tag=row["min_samples_for_auto_tag"],
                         embedding=_deserialize_embedding(row["embedding"]),
                         sample_count=row["sample_count"],
                         first_seen=datetime.fromisoformat(row["first_seen"]) if row["first_seen"] else None,
@@ -386,6 +416,87 @@ class FingerprintStore:
                 ),
             )
             conn.commit()
+
+    def confirm_dog(self, dog_id: str, min_samples: int | None = None) -> DogProfile | None:
+        """Confirm a dog for auto-tagging.
+
+        A confirmed dog can have new barks auto-tagged to it once
+        it has sufficient samples.
+
+        Args:
+            dog_id: The dog's unique ID.
+            min_samples: Override the minimum samples required for auto-tag.
+
+        Returns:
+            Updated DogProfile if found, None otherwise.
+        """
+        profile = self.get_dog(dog_id)
+        if not profile:
+            return None
+
+        now = datetime.now(timezone.utc)
+
+        with self._get_connection() as conn:
+            cursor = conn.cursor()
+            if min_samples is not None:
+                cursor.execute(
+                    """
+                    UPDATE dog_profiles SET
+                        confirmed = 1,
+                        confirmed_at = ?,
+                        min_samples_for_auto_tag = ?,
+                        updated_at = ?
+                    WHERE id = ?
+                    """,
+                    (now.isoformat(), min_samples, now.isoformat(), dog_id),
+                )
+            else:
+                cursor.execute(
+                    """
+                    UPDATE dog_profiles SET
+                        confirmed = 1,
+                        confirmed_at = ?,
+                        updated_at = ?
+                    WHERE id = ?
+                    """,
+                    (now.isoformat(), now.isoformat(), dog_id),
+                )
+            conn.commit()
+
+        logger.info("dog_confirmed", dog_id=dog_id, min_samples=min_samples)
+        return self.get_dog(dog_id)
+
+    def unconfirm_dog(self, dog_id: str) -> DogProfile | None:
+        """Remove confirmation from a dog (disable auto-tagging).
+
+        Args:
+            dog_id: The dog's unique ID.
+
+        Returns:
+            Updated DogProfile if found, None otherwise.
+        """
+        profile = self.get_dog(dog_id)
+        if not profile:
+            return None
+
+        now = datetime.now(timezone.utc)
+
+        with self._get_connection() as conn:
+            cursor = conn.cursor()
+            cursor.execute(
+                """
+                UPDATE dog_profiles SET
+                    confirmed = 0,
+                    confirmed_at = NULL,
+                    updated_at = ?
+                WHERE id = ?
+                """,
+                (now.isoformat(), dog_id),
+            )
+            conn.commit()
+
+        logger.info("dog_unconfirmed", dog_id=dog_id)
+        return self.get_dog(dog_id)
 
     # --- Fingerprint Operations ---
 
@@ -600,15 +711,19 @@ class FingerprintStore:
         embedding: np.ndarray,
         threshold: float = 0.75,
         top_k: int = 3,
+        only_auto_taggable: bool = True,
     ) -> list[FingerprintMatch]:
         """Find matching dogs for a given embedding.
 
-        Uses cosine similarity to compare against all known dog profiles.
+        Uses cosine similarity to compare against known dog profiles.
 
         Args:
             embedding: CLAP embedding to match.
             threshold: Minimum similarity to consider a match.
             top_k: Maximum number of matches to return.
+            only_auto_taggable: If True, only match against dogs that are
+                confirmed and have sufficient samples for auto-tagging.
+                Set to False for manual matching/suggestion.
 
         Returns:
             List of matches sorted by confidence (highest first).
@@ -621,6 +736,10 @@ class FingerprintStore:
 
         for dog in dogs:
             if dog.embedding is None:
+                continue
+
+            # Filter by auto-tag eligibility if requested
+            if only_auto_taggable and not dog.can_auto_tag():
                 continue
 
             # Cosine similarity
