@@ -65,15 +65,22 @@ This project was created with specific intentions:
 │  ┌─────────────────────────────────────────────────────────┐   │
 │  │                    BarkDetector                          │   │
 │  │  - Coordinates audio capture, inference, callbacks       │   │
-│  │  - Runs inference loop every 80ms                        │   │
+│  │  - Runs inference loop every 500ms (CLAP) or 80ms (MLP)  │   │
 │  │  - Produces BarkEvent objects                            │   │
 │  └─────────────────────────────────────────────────────────┘   │
 │         │                 │                    │                 │
 │         ▼                 ▼                    ▼                 │
 │  ┌─────────────┐  ┌─────────────┐  ┌───────────────────────┐   │
-│  │ AudioCapture│  │  Features   │  │   DOA Estimator       │   │
-│  │ Ring Buffer │  │  Extractor  │  │   (Bartlett/Capon/MEM)│   │
-│  └─────────────┘  └─────────────┘  └───────────────────────┘   │
+│  │ AudioCapture│  │  VAD Gate   │  │   DOA Estimator       │   │
+│  │ Ring Buffer │  │ (fast skip) │  │   (Bartlett/Capon/MEM)│   │
+│  └─────────────┘  └──────┬──────┘  └───────────────────────┘   │
+│                          ▼                                       │
+│  ┌─────────────────────────────────────────────────────────┐   │
+│  │                    CLAP Detector                         │   │
+│  │  - Zero-shot audio classification (laion/clap-htsat)     │   │
+│  │  - Multi-label veto (speech, percussion, birds)          │   │
+│  │  - Rolling window + high-confidence bypass               │   │
+│  └─────────────────────────────────────────────────────────┘   │
 │         │                                                        │
 │         ▼                                                        │
 │  ┌─────────────────────────────────────────────────────────┐   │
