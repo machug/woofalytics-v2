@@ -175,6 +175,14 @@ def create_app() -> FastAPI:
         # Fallback when static files not found
         return {"message": "Woofalytics API running", "docs": "/api/docs"}
 
+    # Dogs admin page
+    @app.get("/dogs.html", include_in_schema=False, response_model=None)
+    async def dogs_page():
+        dogs_path = static_path / "dogs.html"
+        if dogs_path.exists():
+            return FileResponse(dogs_path)
+        return {"error": "Dogs page not found"}
+
     return app
 
 
