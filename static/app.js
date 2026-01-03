@@ -423,7 +423,8 @@ class WoofalyticsApp {
             if (!response.ok) return;
             const data = await response.json();
 
-            this.dogs = data.dogs || [];
+            // API returns array directly
+            this.dogs = Array.isArray(data) ? data : (data.dogs || []);
             this.dogsById = {};
             this.dogs.forEach(dog => {
                 this.dogsById[dog.id] = dog;
