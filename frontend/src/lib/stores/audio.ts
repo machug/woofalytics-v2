@@ -87,7 +87,8 @@ export function startAudioListener() {
 			const data = JSON.parse(event.data);
 
 			if (data.type === 'audio_level') {
-				audioStore.setLevel(data.level || 0);
+				// Backend sends {type: "audio_level", data: {level, peak}}
+				audioStore.setLevel(data.data?.level || 0);
 			}
 		} catch {
 			// Ignore non-JSON messages or parsing errors
