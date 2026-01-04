@@ -11,12 +11,19 @@
 
 	const isEditMode = $derived(!!dog);
 
-	let name = $state(dog?.name ?? '');
-	let notes = $state(dog?.notes ?? '');
-	let emoji = $state(dog?.emoji ?? '🐕');
+	let name = $state('');
+	let notes = $state('');
+	let emoji = $state('🐕');
 	let error = $state('');
 
 	const commonEmojis = ['🐕', '🐶', '🐩', '🦮', '🐕‍🦺', '🐾', '🦴', '🎾'];
+
+	$effect(() => {
+		name = dog?.name ?? '';
+		notes = dog?.notes ?? '';
+		emoji = dog?.emoji ?? '🐕';
+		error = '';
+	});
 
 	function handleSubmit(event: SubmitEvent) {
 		event.preventDefault();

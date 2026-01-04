@@ -137,6 +137,12 @@
 		isConfirming = false;
 	}
 
+	function handleModalKeydown(event: KeyboardEvent) {
+		if (event.key !== 'Escape') return;
+		event.preventDefault();
+		closeModal();
+	}
+
 	async function confirmAction() {
 		if (!pendingAction || !pendingData) return;
 
@@ -426,11 +432,20 @@
 
 	<!-- Confirmation Modal -->
 	{#if showModal}
-		<!-- svelte-ignore a11y_click_events_have_key_events a11y_no_static_element_interactions -->
-		<div class="modal-overlay" onclick={closeModal}>
-			<!-- svelte-ignore a11y_click_events_have_key_events a11y_no_static_element_interactions -->
-			<div class="modal" onclick={(e) => e.stopPropagation()}>
-				<h3>
+		<div
+			class="modal-overlay"
+			role="presentation"
+			onclick={(event) => event.target === event.currentTarget && closeModal()}
+			onkeydown={handleModalKeydown}
+		>
+			<div
+				class="modal"
+				role="dialog"
+				aria-modal="true"
+				aria-labelledby="settings-modal-title"
+				aria-describedby="settings-modal-description"
+			>
+				<h3 id="settings-modal-title">
 					<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
 						<path
 							d="M10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0z"
@@ -440,7 +455,7 @@
 					</svg>
 					<span>{modalTitle}</span>
 				</h3>
-				<p>{modalMessage}</p>
+				<p id="settings-modal-description">{modalMessage}</p>
 				<div class="modal-stats">
 					{#each modalStats as stat}
 						<div class="modal-stats-row">

@@ -129,6 +129,21 @@
 		editingDog = null;
 	}
 
+	function handleEditBackdropKeydown(event: KeyboardEvent) {
+		if (event.key === 'Escape') {
+			event.preventDefault();
+			handleCancelEdit();
+			return;
+		}
+
+		if (event.target !== event.currentTarget) return;
+
+		if (event.key === 'Enter' || event.key === ' ') {
+			event.preventDefault();
+			handleCancelEdit();
+		}
+	}
+
 	async function handleDeleteDog(dog: Dog) {
 		if (!confirm(`Delete "${dog.name}"? This will remove the dog profile but keep the bark recordings.`)) {
 			return;
@@ -371,7 +386,12 @@
 
 <!-- Edit Dog Modal -->
 {#if editModalOpen && editingDog}
-	<div class="modal-backdrop active" onclick={(e) => e.target === e.currentTarget && handleCancelEdit()}>
+	<div
+		class="modal-backdrop active"
+		role="presentation"
+		onclick={(event) => event.target === event.currentTarget && handleCancelEdit()}
+		onkeydown={handleEditBackdropKeydown}
+	>
 		<div class="modal">
 			<h3 class="modal-title">
 				<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
