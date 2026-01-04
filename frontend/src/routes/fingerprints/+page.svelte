@@ -5,7 +5,6 @@
 	 */
 
 	import { page } from '$app/stores';
-	import { goto } from '$app/navigation';
 	import { browser } from '$app/environment';
 	import { api, fetchApi } from '$lib/api/client';
 	import type { Dog, Fingerprint, PaginatedFingerprints, FingerprintStats } from '$lib/api/types';
@@ -38,14 +37,16 @@
 	// Debounce timer for filter application
 	let filterDebounceTimer: ReturnType<typeof setTimeout> | null = null;
 
-	// Initialize from URL params on mount
+	// Initialize from URL params on mount (runs once)
+	let initialized = false;
 	$effect(() => {
-		if (browser) {
+		if (browser && !initialized) {
+			initialized = true;
 			initFromUrl();
 		}
 	});
 
-	// Sync URL when filters/pagination change
+	// Sync URL when filters/pagination change - use history API directly to avoid SvelteKit navigation issues
 	const syncUrl = () => {
 		if (!browser) return;
 
@@ -61,10 +62,10 @@
 		if (sortOrder !== 'desc') params.set('sort_order', sortOrder);
 
 		const queryString = params.toString();
-		const newUrl = queryString ? `?${queryString}` : '/fingerprints';
+		const newUrl = queryString ? `/fingerprints?${queryString}` : '/fingerprints';
 
-		// Use replaceState to avoid polluting history
-		goto(newUrl, { replaceState: true, keepFocus: true });
+		// Use history.replaceState directly to avoid interfering with SvelteKit navigation
+		history.replaceState(history.state, '', newUrl);
 	};
 
 	// Initialize state from URL
