@@ -200,6 +200,49 @@ async def websocket_bark_endpoint(websocket: WebSocket) -> None:
         await manager.disconnect(websocket)
 
 
+@router.websocket("/ws/pipeline")
+async def websocket_pipeline_endpoint(websocket: WebSocket) -> None:
+    """WebSocket endpoint for real-time detection pipeline monitoring.
+
+    Streams live detection pipeline state at ~10Hz for debugging visualization.
+    Format:
+    {
+        "type": "pipeline_state",
+        "data": {
+            "stage": "bark_detected" | "clap_rejected" | "yamnet_rejected" | "vad_rejected",
+            "vad": {"passed": true, "level_db": -25.3, "threshold_db": -40.0},
+            "yamnet": {"passed": true, "dog_probability": 0.42, "threshold": 0.05},
+            "clap": {"probability": 0.85, "is_barking": true, "top_label": "dog barking loudly", "top_scores": {...}},
+            "stats": {"vad_skipped": 100, "yamnet_skipped": 50, "clap_inferences": 200, "total_barks": 5}
+        }
+    }
+    """
+    manager = websocket.app.state.ws_manager
+    await manager.connect(websocket)
+
+    detector = websocket.app.state.detector
+
+    try:
+        while True:
+            # Get current pipeline state
+            state = detector.get_pipeline_state()
+
+            success = await manager.send_personal(websocket, {
+                "type": "pipeline_state",
+                "data": state,
+            })
+            if not success:
+                break
+
+            await asyncio.sleep(0.1)  # 10Hz update rate
+
+    except WebSocketDisconnect:
+        await manager.disconnect(websocket)
+    except Exception as e:
+        logger.warning("websocket_pipeline_error", error=str(e), error_type=type(e).__name__)
+        await manager.disconnect(websocket)
+
+
 @router.websocket("/ws/audio")
 async def websocket_audio_endpoint(websocket: WebSocket) -> None:
     """WebSocket endpoint for real-time audio level monitoring.

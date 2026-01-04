@@ -1,6 +1,6 @@
 <script lang="ts">
 	import { onMount, onDestroy } from 'svelte';
-	import { WaveformVisualizer, BarkGauge, BarkTracker, RecentBarks } from '$lib/components/dashboard';
+	import { WaveformVisualizer, BarkGauge, BarkTracker, RecentBarks, DetectionPipeline } from '$lib/components/dashboard';
 	import { Card } from '$lib/components/ui';
 	import { api, fetchApi } from '$lib/api/client';
 	import type { Dog, FingerprintStats, EvidenceStats } from '$lib/api/types';
@@ -105,6 +105,8 @@
 		<!-- Left column: Real-time monitoring -->
 		<div class="monitoring-section">
 			<BarkGauge />
+
+			<DetectionPipeline />
 
 			<Card title="Audio Waveform">
 				<WaveformVisualizer height={120} />

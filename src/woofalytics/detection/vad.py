@@ -54,6 +54,7 @@ class VADGate:
         self._threshold_linear = self._db_to_linear(self.config.energy_threshold_db)
         self._skipped_count = 0
         self._passed_count = 0
+        self._last_rms = 0.0  # Last RMS level for monitoring
 
         logger.info(
             "vad_gate_initialized",
@@ -133,6 +134,7 @@ class VADGate:
             return False
 
         rms = self.compute_rms_energy(audio)
+        self._last_rms = rms  # Store for monitoring
         is_active = rms >= self._threshold_linear
 
         if is_active:
@@ -169,3 +171,13 @@ class VADGate:
             "total_count": total,
             "skip_rate": self._skipped_count / total if total > 0 else 0.0,
         }
+
+    @property
+    def last_level_db(self) -> float:
+        """Get last measured RMS level in dB."""
+        return self._linear_to_db(self._last_rms)
+
+    @property
+    def threshold_db(self) -> float:
+        """Get threshold in dB."""
+        return self.config.energy_threshold_db

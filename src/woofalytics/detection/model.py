@@ -91,6 +91,9 @@ class BarkDetector:
     _vad_skipped_count: int = field(default=0, init=False)
     _yamnet_skipped_count: int = field(default=0, init=False)
 
+    # Live pipeline state for real-time monitoring
+    _pipeline_state: dict = field(default_factory=dict, init=False)
+
     def __post_init__(self) -> None:
         if self.settings.model.use_clap:
             self._load_clap_model()
@@ -280,17 +283,25 @@ class BarkDetector:
         metrics = get_metrics()
 
         # VAD gate: skip CLAP inference on silent audio
-        if self._vad_gate and not self._vad_gate.is_active(audio_array):
-            self._vad_skipped_count += 1
-            metrics.inc_vad_skipped()
-            # Log VAD skip rate periodically
-            if self._vad_skipped_count % 50 == 0:
-                logger.debug(
-                    "vad_skipping_silent_frames",
-                    skipped=self._vad_skipped_count,
-                    vad_stats=self._vad_gate.stats,
-                )
-            return
+        if self._vad_gate:
+            vad_passed = self._vad_gate.is_active(audio_array)
+            self._pipeline_state["vad"] = {
+                "passed": vad_passed,
+                "level_db": self._vad_gate.last_level_db,
+                "threshold_db": self._vad_gate.threshold_db,
+            }
+            if not vad_passed:
+                self._vad_skipped_count += 1
+                metrics.inc_vad_skipped()
+                self._pipeline_state["stage"] = "vad_rejected"
+                # Log VAD skip rate periodically
+                if self._vad_skipped_count % 50 == 0:
+                    logger.debug(
+                        "vad_skipping_silent_frames",
+                        skipped=self._vad_skipped_count,
+                        vad_stats=self._vad_gate.stats,
+                    )
+                return
 
         # YAMNet gate: skip CLAP inference on non-dog audio
         if self._yamnet_gate:
@@ -309,9 +320,17 @@ class BarkDetector:
                 if yamnet_success:
                     metrics.observe_yamnet_latency(time.perf_counter() - yamnet_start)
 
+            self._pipeline_state["yamnet"] = {
+                "passed": is_dog,
+                "dog_probability": self._yamnet_gate.last_dog_probability,
+                "threshold": self._yamnet_gate.threshold,
+            }
+
             if not is_dog:
                 self._yamnet_skipped_count += 1
                 metrics.inc_yamnet_skipped()
+                self._pipeline_state["stage"] = "yamnet_rejected"
+                self._pipeline_state["clap"] = None  # Clear CLAP state
                 # Log YAMNet filtering stats periodically
                 if self._yamnet_skipped_count % 20 == 0:
                     logger.debug(
@@ -340,6 +359,17 @@ class BarkDetector:
             inference_latency = time.perf_counter() - inference_start
             metrics.observe_latency(inference_latency, model_type="clap")
             metrics.inc_inference(model_type="clap")
+
+        # Update pipeline state with CLAP results
+        top_label = max(label_scores, key=label_scores.get) if label_scores else "unknown"
+        self._pipeline_state["clap"] = {
+            "probability": probability,
+            "is_barking": is_barking,
+            "top_label": top_label,
+            "threshold": self.settings.model.clap_threshold,
+            "top_scores": {k: round(v, 3) for k, v in sorted(label_scores.items(), key=lambda x: -x[1])[:5]} if label_scores else {},
+        }
+        self._pipeline_state["stage"] = "bark_detected" if is_barking else "clap_rejected"
 
         # Create event - include audio for fingerprint extraction when barking
         event = BarkEvent(
@@ -546,3 +576,23 @@ class BarkDetector:
             status["yamnet_stats"] = self._yamnet_gate.stats
 
         return status
+
+    def get_pipeline_state(self) -> dict:
+        """Get live pipeline state for real-time monitoring.
+
+        Returns:
+            Dictionary containing current state of each pipeline stage:
+            - stage: Current pipeline stage (vad_rejected, yamnet_rejected, clap_rejected, bark_detected)
+            - vad: VAD gate state (passed, level_db, threshold_db)
+            - yamnet: YAMNet gate state (passed, dog_probability, threshold)
+            - clap: CLAP detector state (probability, is_barking, top_label, top_scores)
+            - stats: Aggregate statistics (vad_skipped, yamnet_skipped, clap_inferences, total_barks)
+        """
+        state = dict(self._pipeline_state)
+        state["stats"] = {
+            "vad_skipped": self._vad_skipped_count,
+            "yamnet_skipped": self._yamnet_skipped_count,
+            "clap_inferences": self._inference_count,
+            "total_barks": self._total_barks,
+        }
+        return state

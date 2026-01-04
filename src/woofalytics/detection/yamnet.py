@@ -72,6 +72,7 @@ class YAMNetGate:
         self._loaded = False
         self._skipped_count = 0
         self._passed_count = 0
+        self._last_dog_prob = 0.0  # Last dog probability for monitoring
 
     def load(self) -> bool:
         """Load YAMNet from TensorFlow Hub.
@@ -119,6 +120,7 @@ class YAMNetGate:
             audio_16k = self._preprocess(audio, sample_rate)
             scores, _, _ = self._model(audio_16k)
             dog_prob = self._get_dog_probability(scores.numpy())
+            self._last_dog_prob = dog_prob  # Store for monitoring
 
             is_dog = dog_prob >= self.config.threshold
             if is_dog:
@@ -198,3 +200,13 @@ class YAMNetGate:
             "total": total,
             "skip_rate": self._skipped_count / total if total > 0 else 0.0,
         }
+
+    @property
+    def last_dog_probability(self) -> float:
+        """Get last measured dog probability."""
+        return self._last_dog_prob
+
+    @property
+    def threshold(self) -> float:
+        """Get dog probability threshold."""
+        return self.config.threshold
