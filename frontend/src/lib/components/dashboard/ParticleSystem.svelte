@@ -10,7 +10,8 @@
 
 	let canvas: HTMLCanvasElement;
 	let ctx: CanvasRenderingContext2D | null = null;
-	let animationFrame: number;
+	let animationFrame: number | null = null;
+	let isAnimating = false;
 
 	interface Particle {
 		x: number;
@@ -34,11 +35,16 @@
 
 	// Bone emoji for special particles
 	const BONE_EMOJI = '🦴';
+	const MAX_PARTICLES = 160;
 
 	function createParticles(x: number, y: number, count: number, isSpecial: boolean) {
+		const available = MAX_PARTICLES - particles.length;
+		if (available <= 0) return;
+
+		const spawnCount = Math.min(Math.floor(count), available);
 		const newParticles: Particle[] = [];
-		for (let i = 0; i < count; i++) {
-			const angle = (Math.PI * 2 * i) / count + Math.random() * 0.5;
+		for (let i = 0; i < spawnCount; i++) {
+			const angle = (Math.PI * 2 * i) / spawnCount + Math.random() * 0.5;
 			const speed = 2 + Math.random() * 4;
 			const isBone = isSpecial && i % 5 === 0; // Every 5th particle is a bone in special mode
 
@@ -68,7 +74,10 @@
 		const gravity = 0.08;
 		const friction = 0.98;
 
-		particles = particles.filter((p) => {
+		let writeIndex = 0;
+		for (let i = 0; i < particles.length; i++) {
+			const p = particles[i];
+
 			// Update physics
 			p.vy += gravity;
 			p.vx *= friction;
@@ -84,8 +93,15 @@
 				p.rotation += p.rotationSpeed;
 			}
 
-			return p.life > 0;
-		});
+			if (p.life > 0) {
+				particles[writeIndex] = p;
+				writeIndex += 1;
+			}
+		}
+
+		if (writeIndex < particles.length) {
+			particles.length = writeIndex;
+		}
 		if (particles.length === 0 && hasParticles) {
 			hasParticles = false;
 		}
@@ -94,12 +110,14 @@
 	function drawParticles() {
 		if (!ctx) return;
 
+		const useShadows = particles.length < 80;
 		for (const p of particles) {
-			ctx.save();
-
 			if (p.type === 'bone') {
+				ctx.save();
 				// Draw bone emoji
 				ctx.globalAlpha = p.life;
+				ctx.shadowBlur = 0;
+				ctx.shadowColor = 'transparent';
 				ctx.translate(p.x, p.y);
 				if (p.rotation !== undefined) {
 					ctx.rotate(p.rotation);
@@ -108,22 +126,26 @@
 				ctx.textAlign = 'center';
 				ctx.textBaseline = 'middle';
 				ctx.fillText(BONE_EMOJI, 0, 0);
+				ctx.restore();
 			} else {
 				// Draw spark particle
 				const alpha = p.life * 0.8;
 				ctx.globalAlpha = alpha;
 
 				// Glow effect
-				ctx.shadowColor = `hsla(${p.hue}, ${p.saturation}%, ${p.lightness}%, 0.8)`;
-				ctx.shadowBlur = 10;
+				if (useShadows) {
+					ctx.shadowColor = `hsla(${p.hue}, ${p.saturation}%, ${p.lightness}%, 0.8)`;
+					ctx.shadowBlur = 10;
+				} else {
+					ctx.shadowBlur = 0;
+					ctx.shadowColor = 'transparent';
+				}
 
 				ctx.fillStyle = `hsla(${p.hue}, ${p.saturation}%, ${p.lightness}%, ${alpha})`;
 				ctx.beginPath();
 				ctx.arc(p.x, p.y, p.size * p.life, 0, Math.PI * 2);
 				ctx.fill();
 			}
-
-			ctx.restore();
 		}
 	}
 
@@ -141,6 +163,17 @@
 		updateParticles();
 		drawParticles();
 
+		if (particles.length > 0) {
+			animationFrame = requestAnimationFrame(draw);
+		} else {
+			animationFrame = null;
+			isAnimating = false;
+		}
+	}
+
+	function startAnimation() {
+		if (isAnimating) return;
+		isAnimating = true;
 		animationFrame = requestAnimationFrame(draw);
 	}
 
@@ -171,6 +204,7 @@
 		const particleCount = Math.floor(20 + bark.confidence * 30);
 
 		createParticles(x, y, isSpecial ? particleCount * 1.5 : particleCount, isSpecial);
+		startAnimation();
 	}
 
 	// Derived bark count for display
@@ -180,12 +214,16 @@
 	$effect(() => {
 		if (canvas && width > 0 && height > 0) {
 			setupCanvas();
-			animationFrame = requestAnimationFrame(draw);
+			if (particles.length > 0) {
+				startAnimation();
+			}
 
 			return () => {
 				if (animationFrame) {
 					cancelAnimationFrame(animationFrame);
 				}
+				animationFrame = null;
+				isAnimating = false;
 			};
 		}
 	});
