@@ -1,14 +1,11 @@
 <script lang="ts">
-	import { audioLevel, audioPeak, isClipping } from '$lib/stores/audio';
-	import { isDetecting, sessionBarkCount, lastBark, type BarkEvent } from '$lib/stores/bark';
+	import { isDetecting, sessionBarkCount, lastBark } from '$lib/stores/bark';
 
 	// Derived display values
-	let displayLevel = $derived(Math.round($audioLevel * 100));
-	let displayPeak = $derived(Math.round($audioPeak * 100));
 	let detecting = $derived($isDetecting);
-	let clipping = $derived($isClipping);
 	let barkCount = $derived($sessionBarkCount);
 	let recentBark = $derived($lastBark);
+	let displayConfidence = $derived(Math.round((recentBark?.confidence ?? 0) * 100));
 
 	// Format timestamp for display
 	function formatTime(date: Date | null): string {
@@ -21,11 +18,11 @@
 		});
 	}
 
-	// Get level class for styling
-	function getLevelClass(level: number): string {
-		if (level > 90) return 'critical';
-		if (level > 70) return 'high';
-		if (level > 40) return 'medium';
+	// Get confidence class for styling
+	function getConfidenceClass(confidence: number): string {
+		if (confidence > 90) return 'critical';
+		if (confidence > 70) return 'high';
+		if (confidence > 40) return 'medium';
 		return 'low';
 	}
 </script>
@@ -42,24 +39,19 @@
 		</div>
 	</div>
 
-	<div class="level-display">
-		<div class="level-bar-container">
-			<div class="level-bar {getLevelClass(displayLevel)}" style="width: {displayLevel}%"></div>
-			<div class="peak-marker" style="left: {displayPeak}%"></div>
+	<div class="confidence-display">
+		<div class="confidence-bar-container">
+			<div
+				class="confidence-bar {getConfidenceClass(displayConfidence)}"
+				style="width: {displayConfidence}%"
+			></div>
 		</div>
-		<div class="level-value" class:clipping>
-			{displayLevel}%
-			{#if clipping}
-				<span class="clip-warning">CLIP</span>
-			{/if}
+		<div class="confidence-value">
+			{recentBark ? displayConfidence + '%' : '--'}
 		</div>
 	</div>
 
 	<div class="telemetry-readouts">
-		<div class="readout">
-			<span class="readout-label">PEAK</span>
-			<span class="readout-value">{displayPeak}%</span>
-		</div>
 		<div class="readout">
 			<span class="readout-label">LAST BARK</span>
 			<span class="readout-value">{formatTime(recentBark?.timestamp ?? null)}</span>
@@ -161,13 +153,13 @@
 		color: var(--text-muted);
 	}
 
-	.level-display {
+	.confidence-display {
 		display: flex;
 		align-items: center;
 		gap: var(--space-md);
 	}
 
-	.level-bar-container {
+	.confidence-bar-container {
 		flex: 1;
 		height: 24px;
 		background: var(--bg-overlay);
@@ -177,25 +169,25 @@
 		overflow: hidden;
 	}
 
-	.level-bar {
+	.confidence-bar {
 		height: 100%;
 		transition: width 0.05s linear;
 		border-radius: var(--radius-sm);
 	}
 
-	.level-bar.low {
+	.confidence-bar.low {
 		background: linear-gradient(90deg, var(--accent-teal-dim), var(--accent-teal));
 	}
 
-	.level-bar.medium {
+	.confidence-bar.medium {
 		background: linear-gradient(90deg, var(--accent-teal), var(--accent-amber));
 	}
 
-	.level-bar.high {
+	.confidence-bar.high {
 		background: linear-gradient(90deg, var(--accent-amber), var(--accent-coral));
 	}
 
-	.level-bar.critical {
+	.confidence-bar.critical {
 		background: var(--accent-coral);
 		animation: critical-flash 0.3s ease-in-out infinite alternate;
 	}
@@ -209,16 +201,7 @@
 		}
 	}
 
-	.peak-marker {
-		position: absolute;
-		top: 0;
-		bottom: 0;
-		width: 2px;
-		background: var(--text-primary);
-		transition: left 0.1s ease-out;
-	}
-
-	.level-value {
+	.confidence-value {
 		font-family: 'JetBrains Mono', monospace;
 		font-size: 1.25rem;
 		font-weight: 600;
@@ -230,32 +213,9 @@
 		gap: var(--space-xs);
 	}
 
-	.level-value.clipping {
-		color: var(--accent-coral);
-	}
-
-	.clip-warning {
-		font-size: 0.65rem;
-		background: var(--accent-coral);
-		color: var(--bg-base);
-		padding: 2px 4px;
-		border-radius: var(--radius-sm);
-		animation: blink 0.5s ease-in-out infinite;
-	}
-
-	@keyframes blink {
-		0%,
-		100% {
-			opacity: 1;
-		}
-		50% {
-			opacity: 0.5;
-		}
-	}
-
 	.telemetry-readouts {
 		display: grid;
-		grid-template-columns: repeat(3, 1fr);
+		grid-template-columns: repeat(2, 1fr);
 		gap: var(--space-md);
 		padding-top: var(--space-sm);
 		border-top: 1px solid var(--border-subtle);
