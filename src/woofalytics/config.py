@@ -105,6 +105,22 @@ class ModelConfig(BaseModel):
         description="VAD energy threshold in dBFS. Audio below this is skipped.",
     )
 
+    # YAMNet pre-filter settings
+    yamnet_enabled: bool = Field(
+        default=True,
+        description="Enable YAMNet pre-filter to skip CLAP on non-dog audio.",
+    )
+    yamnet_threshold: float = Field(
+        default=0.05,
+        ge=0.0,
+        le=1.0,
+        description="YAMNet dog probability threshold for running CLAP.",
+    )
+    yamnet_fallback_to_clap: bool = Field(
+        default=True,
+        description="Fall back to CLAP-only if YAMNet fails to load.",
+    )
+
     # Legacy MLP model settings (used when use_clap=False)
     path: Path = Field(
         default=Path("./models/traced_model.pt"),

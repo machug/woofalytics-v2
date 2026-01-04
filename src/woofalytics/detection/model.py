@@ -25,6 +25,7 @@ from woofalytics.detection.clap import CLAPConfig, CLAPDetector
 from woofalytics.detection.doa import DirectionEstimator
 from woofalytics.detection.features import FeatureExtractor, create_default_extractor
 from woofalytics.detection.vad import VADConfig, VADGate
+from woofalytics.detection.yamnet import YAMNetConfig, YAMNetGate
 from woofalytics.observability.metrics import get_metrics
 
 logger = structlog.get_logger(__name__)
@@ -73,6 +74,7 @@ class BarkDetector:
     _model: torch.jit.ScriptModule | None = field(default=None, init=False)
     _clap_detector: CLAPDetector | None = field(default=None, init=False)
     _vad_gate: VADGate | None = field(default=None, init=False)
+    _yamnet_gate: YAMNetGate | None = field(default=None, init=False)
     _feature_extractor: FeatureExtractor | None = field(default=None, init=False)
     _doa_estimator: DirectionEstimator | None = field(default=None, init=False)
     _audio_capture: AsyncAudioCapture | None = field(default=None, init=False)
@@ -87,6 +89,7 @@ class BarkDetector:
     _total_barks: int = field(default=0, init=False)
     _inference_count: int = field(default=0, init=False)
     _vad_skipped_count: int = field(default=0, init=False)
+    _yamnet_skipped_count: int = field(default=0, init=False)
 
     def __post_init__(self) -> None:
         if self.settings.model.use_clap:
@@ -123,6 +126,23 @@ class BarkDetector:
                 "vad_gate_enabled",
                 threshold_db=self.settings.model.vad_threshold_db,
             )
+
+        # Initialize YAMNet gate for fast rejection of non-dog audio
+        if self.settings.model.yamnet_enabled:
+            yamnet_config = YAMNetConfig(
+                threshold=self.settings.model.yamnet_threshold,
+            )
+            self._yamnet_gate = YAMNetGate(yamnet_config)
+            if not self._yamnet_gate.load():
+                if not self.settings.model.yamnet_fallback_to_clap:
+                    raise RuntimeError("YAMNet failed to load and fallback is disabled")
+                self._yamnet_gate = None
+                logger.warning("yamnet_fallback_to_clap_only")
+            else:
+                logger.info(
+                    "yamnet_gate_enabled",
+                    threshold=self.settings.model.yamnet_threshold,
+                )
 
         # Still set up DOA estimator for direction detection
         if self.settings.doa.enabled:
@@ -271,6 +291,35 @@ class BarkDetector:
                     vad_stats=self._vad_gate.stats,
                 )
             return
+
+        # YAMNet gate: skip CLAP inference on non-dog audio
+        if self._yamnet_gate:
+            yamnet_start = time.perf_counter()
+            yamnet_success = False
+            try:
+                is_dog = self._yamnet_gate.is_dog_sound(
+                    audio_array,
+                    sample_rate=self.settings.audio.sample_rate,
+                )
+                yamnet_success = True
+            except Exception as e:
+                logger.warning("yamnet_error", error=str(e))
+                is_dog = True  # Fallback to CLAP
+            finally:
+                if yamnet_success:
+                    metrics.observe_yamnet_latency(time.perf_counter() - yamnet_start)
+
+            if not is_dog:
+                self._yamnet_skipped_count += 1
+                metrics.inc_yamnet_skipped()
+                # Log YAMNet filtering stats periodically
+                if self._yamnet_skipped_count % 20 == 0:
+                    logger.debug(
+                        "yamnet_filtering",
+                        skipped=self._yamnet_skipped_count,
+                        yamnet_stats=self._yamnet_gate.stats,
+                    )
+                return
 
         # Extract DOA if enabled
         doa_bartlett, doa_capon, doa_mem = None, None, None
@@ -491,5 +540,9 @@ class BarkDetector:
         # Include VAD stats if enabled
         if self._vad_gate:
             status["vad_stats"] = self._vad_gate.stats
+
+        # Include YAMNet stats if enabled
+        if self._yamnet_gate:
+            status["yamnet_stats"] = self._yamnet_gate.stats
 
         return status

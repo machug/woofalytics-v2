@@ -68,10 +68,12 @@ class MetricsRegistry:
     _bark_detections_total: Any = field(default=None, init=False)
     _inference_total: Any = field(default=None, init=False)
     _vad_skipped_total: Any = field(default=None, init=False)
+    _yamnet_skipped_total: Any = field(default=None, init=False)
     _speech_vetoed_total: Any = field(default=None, init=False)
 
     # Histograms
     _inference_latency: Any = field(default=None, init=False)
+    _yamnet_latency: Any = field(default=None, init=False)
     _audio_energy_db: Any = field(default=None, init=False)
     _bark_probability: Any = field(default=None, init=False)
 
@@ -104,6 +106,10 @@ class MetricsRegistry:
             "woofalytics_vad_skipped_total",
             "Total number of inferences skipped by VAD gate",
         )
+        self._yamnet_skipped_total = prom.Counter(
+            "woofalytics_yamnet_skipped_total",
+            "Total number of inferences skipped by YAMNet pre-filter",
+        )
         self._speech_vetoed_total = prom.Counter(
             "woofalytics_speech_vetoed_total",
             "Total number of barks vetoed due to speech detection",
@@ -115,6 +121,11 @@ class MetricsRegistry:
             "Inference latency in seconds",
             ["model_type"],
             buckets=(0.01, 0.025, 0.05, 0.1, 0.25, 0.5, 1.0, 2.5, 5.0),
+        )
+        self._yamnet_latency = prom.Histogram(
+            "woofalytics_yamnet_inference_seconds",
+            "YAMNet inference latency in seconds",
+            buckets=(0.01, 0.025, 0.05, 0.1, 0.25),
         )
         self._audio_energy_db = prom.Histogram(
             "woofalytics_audio_energy_db",
@@ -166,6 +177,11 @@ class MetricsRegistry:
         return self._vad_skipped_total
 
     @property
+    def yamnet_skipped_total(self) -> Any:
+        """Counter for YAMNet-skipped inferences."""
+        return self._yamnet_skipped_total
+
+    @property
     def speech_vetoed_total(self) -> Any:
         """Counter for speech-vetoed detections."""
         return self._speech_vetoed_total
@@ -175,6 +191,11 @@ class MetricsRegistry:
     def inference_latency(self) -> Any:
         """Histogram for inference latency."""
         return self._inference_latency
+
+    @property
+    def yamnet_latency(self) -> Any:
+        """Histogram for YAMNet inference latency."""
+        return self._yamnet_latency
 
     @property
     def audio_energy_db(self) -> Any:
@@ -216,6 +237,16 @@ class MetricsRegistry:
         """Increment VAD skipped counter."""
         if self._vad_skipped_total:
             self._vad_skipped_total.inc()
+
+    def inc_yamnet_skipped(self) -> None:
+        """Increment YAMNet skipped counter."""
+        if self._yamnet_skipped_total:
+            self._yamnet_skipped_total.inc()
+
+    def observe_yamnet_latency(self, seconds: float) -> None:
+        """Record YAMNet inference latency."""
+        if self._yamnet_latency:
+            self._yamnet_latency.observe(seconds)
 
     def inc_speech_vetoed(self) -> None:
         """Increment speech vetoed counter."""

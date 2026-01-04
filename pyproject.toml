@@ -40,6 +40,8 @@ dependencies = [
     "matplotlib>=3.10.8",
     "transformers>=4.57.3",
     "accelerate>=1.12.0",
+    "tensorflow>=2.15",
+    "tensorflow-hub>=0.16",
 ]
 
 [project.optional-dependencies]
