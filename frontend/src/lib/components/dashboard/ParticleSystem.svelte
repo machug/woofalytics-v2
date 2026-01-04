@@ -28,7 +28,8 @@
 		rotationSpeed?: number;
 	}
 
-	let particles = $state<Particle[]>([]);
+	let particles: Particle[] = [];
+	let hasParticles = $state(false);
 	let lastBarkId: string | null = null;
 
 	// Bone emoji for special particles
@@ -57,8 +58,10 @@
 				rotationSpeed: isBone ? (Math.random() - 0.5) * 0.2 : undefined
 			});
 		}
-		// Reassign to trigger reactivity
-		particles = [...particles, ...newParticles];
+		particles.push(...newParticles);
+		if (!hasParticles) {
+			hasParticles = true;
+		}
 	}
 
 	function updateParticles() {
@@ -83,6 +86,9 @@
 
 			return p.life > 0;
 		});
+		if (particles.length === 0 && hasParticles) {
+			hasParticles = false;
+		}
 	}
 
 	function drawParticles() {
@@ -198,7 +204,7 @@
 
 <div class="particle-container">
 	<canvas bind:this={canvas} style="width: {width}px; height: {height}px"></canvas>
-	{#if particles.length === 0}
+	{#if !hasParticles}
 		<div class="empty-state">
 			<span class="emoji">🐕</span>
 			{#if barkCount > 0}
