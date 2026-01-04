@@ -180,7 +180,7 @@ def create_app() -> FastAPI:
         CORSMiddleware,
         allow_origins=["http://localhost:8000", "http://127.0.0.1:8000"],
         allow_credentials=False,  # No auth system, no credentials needed
-        allow_methods=["GET", "POST", "OPTIONS"],
+        allow_methods=["GET", "POST", "OPTIONS", "PUT", "DELETE"],
         allow_headers=["Content-Type", "Accept"],
     )
 
@@ -194,44 +194,47 @@ def create_app() -> FastAPI:
     app.include_router(api_router, prefix="/api")
     app.include_router(ws_router)
 
-    # Static files - path is relative to src/woofalytics/app.py
-    # Go up 3 levels: app.py -> woofalytics -> src -> project_root
-    static_path = Path(__file__).parent.parent.parent / "static"
+    # Path to project root (3 levels up from app.py)
+    project_root = Path(__file__).parent.parent.parent
+
+    # SvelteKit build output (production frontend)
+    frontend_build_path = project_root / "frontend" / "build"
+
+    # Legacy static files (evidence audio files served from here)
+    static_path = project_root / "static"
+
+    # Mount evidence/audio static files if they exist
     if static_path.exists():
         app.mount("/static", StaticFiles(directory=static_path), name="static")
 
-    # Root serves index.html
+    # Mount SvelteKit assets (_app directory with JS/CSS)
+    if frontend_build_path.exists():
+        app.mount(
+            "/_app",
+            StaticFiles(directory=frontend_build_path / "_app"),
+            name="frontend_assets",
+        )
+
+    # SPA catch-all: serve index.html for all non-API, non-static routes
     @app.get("/", include_in_schema=False, response_model=None)
-    async def root():
-        index_path = static_path / "index.html"
+    @app.get("/dogs", include_in_schema=False, response_model=None)
+    @app.get("/fingerprints", include_in_schema=False, response_model=None)
+    @app.get("/settings", include_in_schema=False, response_model=None)
+    async def spa_routes():
+        """Serve SvelteKit SPA for all frontend routes."""
+        index_path = frontend_build_path / "index.html"
         if index_path.exists():
-            return FileResponse(index_path)
-        # Fallback when static files not found
+            return FileResponse(index_path, media_type="text/html")
+        # Fallback when frontend not built
         return {"message": "Woofalytics API running", "docs": "/api/docs"}
 
-    # Dogs admin page
-    @app.get("/dogs.html", include_in_schema=False, response_model=None)
-    async def dogs_page():
-        dogs_path = static_path / "dogs.html"
-        if dogs_path.exists():
-            return FileResponse(dogs_path)
-        return {"error": "Dogs page not found"}
-
-    # Fingerprints explorer page
-    @app.get("/fingerprints.html", include_in_schema=False, response_model=None)
-    async def fingerprints_page():
-        fingerprints_path = static_path / "fingerprints.html"
-        if fingerprints_path.exists():
-            return FileResponse(fingerprints_path)
-        return {"error": "Fingerprints page not found"}
-
-    # Settings/maintenance page
-    @app.get("/settings.html", include_in_schema=False, response_model=None)
-    async def settings_page():
-        settings_path = static_path / "settings.html"
-        if settings_path.exists():
-            return FileResponse(settings_path)
-        return {"error": "Settings page not found"}
+    # Serve robots.txt from frontend build
+    @app.get("/robots.txt", include_in_schema=False, response_model=None)
+    async def robots():
+        robots_path = frontend_build_path / "robots.txt"
+        if robots_path.exists():
+            return FileResponse(robots_path, media_type="text/plain")
+        return Response(content="User-agent: *\nDisallow: /api/", media_type="text/plain")
 
     return app
 
