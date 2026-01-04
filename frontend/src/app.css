@@ -1,0 +1,614 @@
+/* Woofalytics - NASA Mission Control Theme */
+
+:root {
+	/* Color Palette */
+	--bg-base: #0d1117;
+	--bg-surface: #161b22;
+	--bg-elevated: #1c2128;
+	--bg-overlay: #21262d;
+
+	--border-default: rgba(240, 246, 252, 0.1);
+	--border-muted: rgba(240, 246, 252, 0.05);
+
+	--text-primary: #f0f6fc;
+	--text-secondary: #7d8590;
+	--text-muted: #484f58;
+
+	--accent-amber: #f59e0b;
+	--accent-amber-dim: rgba(245, 158, 11, 0.15);
+	--accent-teal: #14b8a6;
+	--accent-teal-dim: rgba(20, 184, 166, 0.15);
+	--accent-coral: #f85149;
+	--accent-coral-dim: rgba(248, 81, 73, 0.15);
+	--accent-blue: #58a6ff;
+	--accent-purple: #a78bfa;
+
+	/* Spacing */
+	--space-xs: 4px;
+	--space-sm: 8px;
+	--space-md: 16px;
+	--space-lg: 24px;
+	--space-xl: 32px;
+	--space-2xl: 48px;
+
+	/* Radii */
+	--radius-sm: 6px;
+	--radius-md: 10px;
+	--radius-lg: 16px;
+	--radius-full: 9999px;
+
+	/* Shadows */
+	--shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.3);
+	--shadow-md: 0 4px 12px rgba(0, 0, 0, 0.4);
+	--shadow-lg: 0 8px 24px rgba(0, 0, 0, 0.5);
+	--shadow-glow-amber: 0 0 40px rgba(245, 158, 11, 0.3);
+	--shadow-glow-coral: 0 0 40px rgba(248, 81, 73, 0.4);
+
+	/* Transitions */
+	--transition-fast: 150ms ease;
+	--transition-base: 250ms ease;
+	--transition-slow: 400ms ease;
+}
+
+/* Reset & Base */
+*,
+*::before,
+*::after {
+	box-sizing: border-box;
+	margin: 0;
+	padding: 0;
+}
+
+html {
+	height: 100%;
+}
+
+body {
+	font-family: 'Plus Jakarta Sans', -apple-system, BlinkMacSystemFont, sans-serif;
+	background: var(--bg-base);
+	color: var(--text-primary);
+	min-height: 100vh;
+	line-height: 1.5;
+	-webkit-font-smoothing: antialiased;
+	-moz-osx-font-smoothing: grayscale;
+	position: relative;
+	padding-top: 48px;
+}
+
+/* NASA Mission Control - Animated Gradient Background */
+body::before {
+	content: '';
+	position: fixed;
+	top: 0;
+	left: 0;
+	right: 0;
+	bottom: 0;
+	background: radial-gradient(ellipse at 20% 20%, rgba(20, 184, 166, 0.08) 0%, transparent 50%),
+		radial-gradient(ellipse at 80% 80%, rgba(245, 158, 11, 0.06) 0%, transparent 50%),
+		radial-gradient(ellipse at 50% 50%, rgba(248, 81, 73, 0.04) 0%, transparent 60%);
+	animation: gradientShift 20s ease-in-out infinite;
+	pointer-events: none;
+	z-index: -1;
+}
+
+@keyframes gradientShift {
+	0%,
+	100% {
+		background-position: 0% 0%, 100% 100%, 50% 50%;
+		opacity: 1;
+	}
+	25% {
+		background-position: 100% 0%, 0% 100%, 50% 0%;
+		opacity: 0.8;
+	}
+	50% {
+		background-position: 100% 100%, 0% 0%, 0% 50%;
+		opacity: 1;
+	}
+	75% {
+		background-position: 0% 100%, 100% 0%, 100% 50%;
+		opacity: 0.9;
+	}
+}
+
+/* App Container */
+.app {
+	min-height: 100vh;
+	display: flex;
+	flex-direction: column;
+}
+
+/* Telemetry Strip - NASA Mission Control Navigation */
+.telemetry-strip {
+	position: fixed;
+	top: 0;
+	left: 0;
+	right: 0;
+	z-index: 1000;
+	display: flex;
+	align-items: center;
+	justify-content: space-between;
+	padding: var(--space-sm) var(--space-lg);
+	background: rgba(13, 17, 23, 0.95);
+	border-bottom: 1px solid rgba(20, 184, 166, 0.3);
+	font-family: 'JetBrains Mono', 'Fira Code', 'SF Mono', Consolas, monospace;
+	box-shadow: 0 2px 20px rgba(0, 0, 0, 0.5), inset 0 -1px 0 rgba(20, 184, 166, 0.2);
+}
+
+@supports (backdrop-filter: blur(20px)) {
+	.telemetry-strip {
+		background: rgba(13, 17, 23, 0.85);
+		backdrop-filter: blur(20px) saturate(180%);
+		-webkit-backdrop-filter: blur(20px) saturate(180%);
+	}
+}
+
+/* Mission Badge */
+.telemetry-mission {
+	display: flex;
+	align-items: center;
+	gap: var(--space-sm);
+}
+
+.mission-badge {
+	font-size: 0.7rem;
+	font-weight: 700;
+	letter-spacing: 0.15em;
+	color: var(--accent-amber);
+	padding: 2px 8px;
+	background: rgba(245, 158, 11, 0.15);
+	border: 1px solid rgba(245, 158, 11, 0.4);
+	border-radius: 2px;
+}
+
+.mission-callsign {
+	font-size: 0.65rem;
+	font-weight: 500;
+	letter-spacing: 0.1em;
+	color: var(--text-muted);
+	text-transform: uppercase;
+}
+
+/* Mission Clock */
+.telemetry-clock {
+	display: flex;
+	align-items: baseline;
+	gap: 4px;
+}
+
+.clock-label {
+	font-size: 0.7rem;
+	font-weight: 600;
+	color: var(--accent-teal);
+	letter-spacing: 0.05em;
+}
+
+.clock-value {
+	font-size: 1.1rem;
+	font-weight: 700;
+	color: var(--text-primary);
+	letter-spacing: 0.05em;
+	font-variant-numeric: tabular-nums;
+	text-shadow: 0 0 10px rgba(20, 184, 166, 0.5);
+}
+
+/* Footer */
+.footer {
+	display: flex;
+	justify-content: center;
+	align-items: center;
+	gap: var(--space-sm);
+	padding: var(--space-lg) 0 var(--space-md);
+	font-size: 0.75rem;
+	color: var(--text-muted);
+}
+
+.footer-divider {
+	opacity: 0.5;
+}
+
+.footer a {
+	color: var(--accent-blue);
+	text-decoration: none;
+	transition: color var(--transition-fast);
+}
+
+.footer a:hover {
+	color: var(--text-primary);
+}
+
+/* Panel Base - NASA Mission Control Glassmorphism */
+.panel {
+	background: rgba(22, 27, 34, 0.7);
+	border: 1px solid var(--border-default);
+	border-radius: var(--radius-lg);
+	padding: var(--space-lg);
+	transition: border-color var(--transition-base), box-shadow var(--transition-base),
+		transform var(--transition-base);
+	position: relative;
+	overflow: hidden;
+}
+
+@supports (backdrop-filter: blur(20px)) {
+	.panel {
+		background: rgba(22, 27, 34, 0.6);
+		backdrop-filter: blur(20px) saturate(180%);
+		-webkit-backdrop-filter: blur(20px) saturate(180%);
+	}
+}
+
+.panel::before {
+	content: '';
+	position: absolute;
+	top: 0;
+	left: 0;
+	right: 0;
+	height: 1px;
+	background: linear-gradient(90deg, transparent, rgba(20, 184, 166, 0.4), transparent);
+	opacity: 0;
+	transition: opacity var(--transition-base);
+}
+
+.panel:hover::before {
+	opacity: 1;
+}
+
+.panel:hover {
+	transform: translateY(-2px);
+	border-color: rgba(20, 184, 166, 0.3);
+	box-shadow: 0 8px 32px rgba(0, 0, 0, 0.3), 0 0 0 1px rgba(20, 184, 166, 0.1);
+}
+
+.panel-title {
+	font-size: 0.75rem;
+	font-weight: 600;
+	text-transform: uppercase;
+	letter-spacing: 0.08em;
+	color: var(--text-secondary);
+	margin-bottom: var(--space-md);
+}
+
+/* Button Variants */
+.btn {
+	display: inline-flex;
+	align-items: center;
+	justify-content: center;
+	gap: var(--space-sm);
+	padding: var(--space-sm) var(--space-md);
+	font-size: 0.875rem;
+	font-weight: 600;
+	border: none;
+	border-radius: var(--radius-sm);
+	cursor: pointer;
+	transition: all var(--transition-fast);
+}
+
+.btn:disabled {
+	opacity: 0.5;
+	cursor: not-allowed;
+}
+
+.btn-amber {
+	background: var(--accent-amber);
+	color: var(--bg-base);
+}
+
+.btn-amber:hover:not(:disabled) {
+	background: #fbbf24;
+}
+
+.btn-teal {
+	background: var(--accent-teal);
+	color: var(--bg-base);
+}
+
+.btn-teal:hover:not(:disabled) {
+	background: #2dd4bf;
+}
+
+.btn-coral {
+	background: var(--accent-coral);
+	color: white;
+}
+
+.btn-coral:hover:not(:disabled) {
+	background: #ef4444;
+}
+
+.btn-outline {
+	background: transparent;
+	border: 1px solid var(--border-default);
+	color: var(--text-secondary);
+}
+
+.btn-outline:hover:not(:disabled) {
+	background: var(--bg-overlay);
+	color: var(--text-primary);
+	border-color: var(--text-muted);
+}
+
+.btn-sm {
+	padding: var(--space-xs) var(--space-sm);
+	font-size: 0.75rem;
+}
+
+/* Form Styles */
+.form-group {
+	margin-bottom: var(--space-md);
+}
+
+.form-label {
+	display: block;
+	font-size: 0.75rem;
+	font-weight: 600;
+	text-transform: uppercase;
+	letter-spacing: 0.05em;
+	color: var(--text-secondary);
+	margin-bottom: var(--space-xs);
+}
+
+.form-input {
+	width: 100%;
+	padding: var(--space-sm) var(--space-md);
+	background: var(--bg-overlay);
+	border: 1px solid var(--border-default);
+	border-radius: var(--radius-sm);
+	color: var(--text-primary);
+	font-size: 0.875rem;
+	transition: border-color var(--transition-fast);
+}
+
+.form-input:focus {
+	outline: none;
+	border-color: var(--accent-amber);
+}
+
+.form-input::placeholder {
+	color: var(--text-muted);
+}
+
+.form-textarea {
+	resize: vertical;
+	min-height: 80px;
+}
+
+.form-checkbox {
+	display: flex;
+	align-items: center;
+	gap: var(--space-sm);
+	cursor: pointer;
+}
+
+.form-checkbox input[type='checkbox'] {
+	width: 16px;
+	height: 16px;
+	accent-color: var(--accent-amber);
+}
+
+/* Status Badges */
+.badge {
+	display: inline-flex;
+	align-items: center;
+	gap: 4px;
+	font-size: 0.625rem;
+	font-weight: 700;
+	text-transform: uppercase;
+	letter-spacing: 0.05em;
+	padding: 2px 8px;
+	border-radius: var(--radius-full);
+}
+
+.badge-success {
+	background: rgba(52, 211, 153, 0.15);
+	color: #34d399;
+	border: 1px solid rgba(52, 211, 153, 0.3);
+}
+
+.badge-warning {
+	background: rgba(251, 191, 36, 0.15);
+	color: #fbbf24;
+	border: 1px solid rgba(251, 191, 36, 0.3);
+}
+
+.badge-danger {
+	background: rgba(248, 81, 73, 0.15);
+	color: var(--accent-coral);
+	border: 1px solid rgba(248, 81, 73, 0.3);
+}
+
+.badge-info {
+	background: var(--accent-teal-dim);
+	color: var(--accent-teal);
+	border: 1px solid rgba(20, 184, 166, 0.3);
+}
+
+/* Stat Cards */
+.stat-card {
+	background: var(--bg-overlay);
+	border-radius: var(--radius-md);
+	padding: var(--space-md);
+	text-align: center;
+}
+
+.stat-card-value {
+	font-size: 2rem;
+	font-weight: 700;
+	color: var(--text-primary);
+	line-height: 1;
+	font-family: 'JetBrains Mono', monospace;
+}
+
+.stat-card-label {
+	font-size: 0.7rem;
+	font-weight: 600;
+	text-transform: uppercase;
+	letter-spacing: 0.05em;
+	color: var(--text-muted);
+	margin-top: var(--space-xs);
+}
+
+/* Modal */
+.modal-backdrop {
+	position: fixed;
+	inset: 0;
+	background: rgba(0, 0, 0, 0.7);
+	display: flex;
+	align-items: center;
+	justify-content: center;
+	z-index: 2000;
+	opacity: 0;
+	visibility: hidden;
+	transition: all var(--transition-base);
+}
+
+.modal-backdrop.active {
+	opacity: 1;
+	visibility: visible;
+}
+
+.modal {
+	background: var(--bg-surface);
+	border: 1px solid var(--border-default);
+	border-radius: var(--radius-lg);
+	padding: var(--space-lg);
+	max-width: 500px;
+	width: 90%;
+	max-height: 90vh;
+	overflow-y: auto;
+	transform: scale(0.9);
+	transition: transform var(--transition-base);
+}
+
+.modal-backdrop.active .modal {
+	transform: scale(1);
+}
+
+.modal-title {
+	font-size: 1.1rem;
+	font-weight: 600;
+	margin-bottom: var(--space-md);
+}
+
+.modal-actions {
+	display: flex;
+	gap: var(--space-sm);
+	justify-content: flex-end;
+	margin-top: var(--space-lg);
+}
+
+/* Scrollbar */
+::-webkit-scrollbar {
+	width: 6px;
+	height: 6px;
+}
+
+::-webkit-scrollbar-track {
+	background: transparent;
+}
+
+::-webkit-scrollbar-thumb {
+	background: var(--bg-elevated);
+	border-radius: 3px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+	background: var(--text-muted);
+}
+
+/* Responsive */
+@media (max-width: 768px) {
+	.telemetry-strip {
+		padding: var(--space-xs) var(--space-md);
+		gap: var(--space-sm);
+	}
+
+	.mission-callsign {
+		display: none;
+	}
+
+	.clock-value {
+		font-size: 0.9rem;
+	}
+}
+
+@media (max-width: 480px) {
+	.telemetry-mission {
+		display: none;
+	}
+}
+
+/* Loading States */
+.loading {
+	display: flex;
+	align-items: center;
+	justify-content: center;
+	gap: var(--space-sm);
+	color: var(--text-muted);
+}
+
+.spinner {
+	width: 20px;
+	height: 20px;
+	border: 2px solid var(--border-default);
+	border-top-color: var(--accent-teal);
+	border-radius: 50%;
+	animation: spin 0.8s linear infinite;
+}
+
+@keyframes spin {
+	to {
+		transform: rotate(360deg);
+	}
+}
+
+/* Empty States */
+.empty-state {
+	display: flex;
+	flex-direction: column;
+	align-items: center;
+	justify-content: center;
+	gap: var(--space-sm);
+	padding: var(--space-xl);
+	color: var(--text-muted);
+	font-size: 0.875rem;
+	text-align: center;
+}
+
+.empty-state svg {
+	width: 48px;
+	height: 48px;
+	opacity: 0.5;
+}
+
+/* Toast Notifications */
+.toast {
+	position: fixed;
+	bottom: var(--space-lg);
+	right: var(--space-lg);
+	padding: var(--space-md) var(--space-lg);
+	background: var(--bg-surface);
+	border: 1px solid var(--border-default);
+	border-radius: var(--radius-md);
+	box-shadow: var(--shadow-lg);
+	z-index: 3000;
+	animation: slideIn 0.3s ease;
+}
+
+.toast-success {
+	border-color: rgba(52, 211, 153, 0.5);
+}
+
+.toast-error {
+	border-color: rgba(248, 81, 73, 0.5);
+}
+
+@keyframes slideIn {
+	from {
+		transform: translateX(100%);
+		opacity: 0;
+	}
+	to {
+		transform: translateX(0);
+		opacity: 1;
+	}
+}
