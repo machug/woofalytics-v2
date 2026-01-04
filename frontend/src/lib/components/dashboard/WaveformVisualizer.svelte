@@ -1,238 +1,192 @@
 <script lang="ts">
-	import { onMount } from 'svelte';
 	import { audioHistory, audioLevel } from '$lib/stores/audio';
 
 	interface Props {
-		width?: number;
 		height?: number;
 	}
 
-	let { width = 400, height = 150 }: Props = $props();
+	let { height = 120 }: Props = $props();
 
 	let canvas: HTMLCanvasElement;
-	let ctx: CanvasRenderingContext2D | null = null;
-	let animationFrame: number;
-
-	// Phosphor persistence buffers for glow effect
-	let previousFrames: ImageData[] = [];
-	const PERSISTENCE_FRAMES = 5;
-	const PERSISTENCE_DECAY = 0.7;
-
-	// Color interpolation based on amplitude
-	function getWaveformColor(amplitude: number): string {
-		// Interpolate from teal (low) -> amber (medium) -> coral (high)
-		if (amplitude < 0.4) {
-			// Teal range
-			const t = amplitude / 0.4;
-			return `rgba(88, 166, 255, ${0.6 + t * 0.4})`;
-		} else if (amplitude < 0.7) {
-			// Teal to amber transition
-			const t = (amplitude - 0.4) / 0.3;
-			const r = Math.round(88 + (255 - 88) * t);
-			const g = Math.round(166 + (180 - 166) * t);
-			const b = Math.round(255 - 255 * t);
-			return `rgba(${r}, ${g}, ${b}, 1)`;
-		} else {
-			// Amber to coral (high amplitude / near clipping)
-			const t = (amplitude - 0.7) / 0.3;
-			const r = 255;
-			const g = Math.round(180 - 100 * t);
-			const b = Math.round(0 + 73 * t);
-			return `rgba(${r}, ${g}, ${b}, 1)`;
-		}
-	}
+	let containerWidth = $state(0);
+	let containerHeight = $state(0);
+	let animationFrame: number | null = null;
 
 	function draw() {
-		if (!ctx || !canvas) return;
+		if (!canvas || containerWidth === 0) return;
+
+		const ctx = canvas.getContext('2d');
+		if (!ctx) return;
 
 		const dpr = window.devicePixelRatio || 1;
 		const w = canvas.width / dpr;
 		const h = canvas.height / dpr;
 
-		// Store previous frame for persistence effect
-		if (previousFrames.length >= PERSISTENCE_FRAMES) {
-			previousFrames.shift();
-		}
-		try {
-			previousFrames.push(ctx.getImageData(0, 0, canvas.width, canvas.height));
-		} catch {
-			// Canvas may not be ready
-		}
-
-		// Clear with slight opacity for trail effect
-		ctx.fillStyle = 'rgba(13, 17, 23, 0.3)';
-		ctx.fillRect(0, 0, w, h);
-
-		// Draw persistence frames (phosphor glow)
-		ctx.save();
-		previousFrames.forEach((frame, index) => {
-			const alpha = ((index + 1) / PERSISTENCE_FRAMES) * PERSISTENCE_DECAY * 0.3;
-			ctx!.globalAlpha = alpha;
-			try {
-				ctx!.putImageData(frame, 0, 0);
-			} catch {
-				// Ignore errors
-			}
-		});
-		ctx.restore();
-
-		// Get current audio history
+		// Get current audio data
 		const history = $audioHistory;
 		const currentLevel = $audioLevel;
 
-		// Draw grid lines (subtle)
-		ctx.strokeStyle = 'rgba(48, 54, 61, 0.5)';
+		// Background - solid fill
+		ctx.fillStyle = '#0d1117';
+		ctx.fillRect(0, 0, w, h);
+
+		// Draw subtle grid
+		ctx.strokeStyle = 'rgba(48, 54, 61, 0.4)';
 		ctx.lineWidth = 1;
-		for (let i = 0; i <= 4; i++) {
-			const y = (h / 4) * i;
+		const gridLines = 4;
+		for (let i = 1; i < gridLines; i++) {
+			const y = (h / gridLines) * i;
 			ctx.beginPath();
+			ctx.setLineDash([2, 4]);
 			ctx.moveTo(0, y);
 			ctx.lineTo(w, y);
 			ctx.stroke();
 		}
+		ctx.setLineDash([]);
 
 		// Draw center line
-		ctx.strokeStyle = 'rgba(88, 166, 255, 0.3)';
+		ctx.strokeStyle = 'rgba(88, 166, 255, 0.15)';
+		ctx.lineWidth = 1;
 		ctx.beginPath();
 		ctx.moveTo(0, h / 2);
 		ctx.lineTo(w, h / 2);
 		ctx.stroke();
 
-		// Draw waveform
+		// Draw waveform bars (spectrum analyzer style)
 		if (history.length > 0) {
-			const step = w / (history.length - 1);
+			const barCount = Math.min(64, history.length);
+			const totalGap = (barCount - 1) * 2;
+			const barWidth = (w - totalGap - 12) / barCount;
+			const gap = 2;
 			const centerY = h / 2;
 
-			// Glow layer
-			ctx.save();
-			ctx.shadowColor = getWaveformColor(currentLevel);
-			ctx.shadowBlur = 15;
-			ctx.strokeStyle = getWaveformColor(currentLevel);
-			ctx.lineWidth = 2;
-			ctx.lineCap = 'round';
-			ctx.lineJoin = 'round';
+			for (let i = 0; i < barCount; i++) {
+				const sampleIndex = Math.floor((i / barCount) * history.length);
+				const level = history[sampleIndex] || 0;
+				const barHeight = Math.max(1, level * (h * 0.42));
+				const x = i * (barWidth + gap);
 
-			ctx.beginPath();
-			history.forEach((level, i) => {
-				const x = i * step;
-				const amplitude = level * (h * 0.4);
-				// Create oscillating wave effect
-				const y = centerY + Math.sin(i * 0.3 + Date.now() * 0.002) * amplitude;
-
-				if (i === 0) {
-					ctx!.moveTo(x, y);
+				// Color based on level
+				let color: string;
+				if (level < 0.3) {
+					color = 'rgba(88, 166, 255, 0.85)';
+				} else if (level < 0.6) {
+					color = 'rgba(255, 180, 50, 0.9)';
 				} else {
-					ctx!.lineTo(x, y);
+					color = 'rgba(248, 81, 73, 1)';
 				}
-			});
-			ctx.stroke();
-			ctx.restore();
 
-			// Sharp line on top
-			ctx.strokeStyle = getWaveformColor(currentLevel);
+				ctx.fillStyle = color;
+				ctx.fillRect(x, centerY - barHeight, barWidth, barHeight);
+				ctx.fillRect(x, centerY + 1, barWidth, barHeight);
+			}
+
+			// Draw line waveform on top
+			ctx.strokeStyle = `rgba(88, 166, 255, ${0.5 + currentLevel * 0.5})`;
 			ctx.lineWidth = 1.5;
 			ctx.beginPath();
+
+			const step = (w - 12) / (history.length - 1);
 			history.forEach((level, i) => {
 				const x = i * step;
-				const amplitude = level * (h * 0.4);
-				const y = centerY + Math.sin(i * 0.3 + Date.now() * 0.002) * amplitude;
-
+				const y = centerY - level * (h * 0.38);
 				if (i === 0) {
-					ctx!.moveTo(x, y);
+					ctx.moveTo(x, y);
 				} else {
-					ctx!.lineTo(x, y);
+					ctx.lineTo(x, y);
 				}
 			});
 			ctx.stroke();
 
-			// Mirror wave (subtle)
-			ctx.globalAlpha = 0.3;
+			// Mirror line
+			ctx.strokeStyle = `rgba(88, 166, 255, ${0.25 + currentLevel * 0.25})`;
 			ctx.beginPath();
 			history.forEach((level, i) => {
 				const x = i * step;
-				const amplitude = level * (h * 0.4);
-				const y = centerY - Math.sin(i * 0.3 + Date.now() * 0.002) * amplitude;
-
+				const y = centerY + level * (h * 0.38);
 				if (i === 0) {
-					ctx!.moveTo(x, y);
+					ctx.moveTo(x, y);
 				} else {
-					ctx!.lineTo(x, y);
+					ctx.lineTo(x, y);
 				}
 			});
 			ctx.stroke();
-			ctx.globalAlpha = 1;
 		}
+
+		// Current level indicator on right edge
+		const indicatorHeight = Math.max(4, currentLevel * h * 0.75);
+		const indicatorY = (h - indicatorHeight) / 2;
+
+		ctx.fillStyle = currentLevel > 0.6 ? 'rgba(248, 81, 73, 1)' : 'rgba(88, 166, 255, 0.9)';
+		ctx.fillRect(w - 6, indicatorY, 4, indicatorHeight);
 
 		animationFrame = requestAnimationFrame(draw);
 	}
 
-	function setupCanvas() {
-		if (!canvas) return;
+	// Setup canvas when dimensions change (Svelte 5 idiomatic with bind:clientWidth)
+	$effect(() => {
+		if (canvas && containerWidth > 0) {
+			const dpr = window.devicePixelRatio || 1;
+			canvas.width = containerWidth * dpr;
+			canvas.height = height * dpr;
 
-		const dpr = window.devicePixelRatio || 1;
-		canvas.width = width * dpr;
-		canvas.height = height * dpr;
-
-		ctx = canvas.getContext('2d');
-		if (ctx) {
-			ctx.scale(dpr, dpr);
-		}
-	}
-
-	onMount(() => {
-		setupCanvas();
-		animationFrame = requestAnimationFrame(draw);
-
-		return () => {
-			if (animationFrame) {
-				cancelAnimationFrame(animationFrame);
+			const ctx = canvas.getContext('2d');
+			if (ctx) {
+				ctx.scale(dpr, dpr);
 			}
-		};
+		}
 	});
 
+	// Animation loop with proper cleanup
 	$effect(() => {
-		// Re-setup canvas if dimensions change
-		if (width || height) {
-			setupCanvas();
+		if (canvas && containerWidth > 0) {
+			animationFrame = requestAnimationFrame(draw);
+
+			return () => {
+				if (animationFrame) {
+					cancelAnimationFrame(animationFrame);
+					animationFrame = null;
+				}
+			};
 		}
 	});
 </script>
 
-<div class="waveform-container">
-	<canvas bind:this={canvas} style="width: {width}px; height: {height}px"></canvas>
-	<div class="waveform-overlay">
-		<span class="label">AUDIO WAVEFORM</span>
+<div class="waveform-container" bind:clientWidth={containerWidth} bind:clientHeight={containerHeight}>
+	<canvas bind:this={canvas} style="width: 100%; height: {height}px"></canvas>
+	<div class="waveform-label">
+		<span>WAVEFORM</span>
 	</div>
 </div>
 
 <style>
 	.waveform-container {
 		position: relative;
-		background: var(--bg-surface);
-		border: 1px solid var(--border-default);
+		width: 100%;
+		height: auto;
+		background: #0d1117;
 		border-radius: var(--radius-md);
 		overflow: hidden;
 	}
 
 	canvas {
 		display: block;
+		width: 100%;
 	}
 
-	.waveform-overlay {
+	.waveform-label {
 		position: absolute;
-		top: var(--space-sm);
+		top: var(--space-xs);
 		left: var(--space-sm);
 		pointer-events: none;
 	}
 
-	.label {
-		font-size: 0.65rem;
+	.waveform-label span {
+		font-size: 0.6rem;
 		font-weight: 600;
-		letter-spacing: 0.1em;
+		letter-spacing: 0.15em;
 		text-transform: uppercase;
 		color: var(--text-muted);
-		background: rgba(13, 17, 23, 0.7);
-		padding: 2px 6px;
-		border-radius: var(--radius-sm);
+		opacity: 0.5;
 	}
 </style>

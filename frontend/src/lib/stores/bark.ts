@@ -4,7 +4,7 @@
  */
 
 import { writable, derived, type Readable } from 'svelte/store';
-import { audioWebSocket } from './websocket';
+import { barkWebSocket } from './websocket';
 
 export interface BarkEvent {
 	id: string;
@@ -102,26 +102,28 @@ let messageUnsubscribe: (() => void) | null = null;
 export function startBarkListener() {
 	if (messageUnsubscribe) return;
 
-	messageUnsubscribe = audioWebSocket.lastMessage.subscribe((event) => {
+	messageUnsubscribe = barkWebSocket.lastMessage.subscribe((event) => {
 		if (!event) return;
 
 		try {
 			const data = JSON.parse(event.data);
 
-			if (data.type === 'bark_detected') {
+			// Backend sends: {type: "bark_event", data: {timestamp, probability, is_barking, doa?}}
+			if (data.type === 'bark_event' && data.data?.is_barking) {
 				const bark: BarkEvent = {
-					id: data.id || crypto.randomUUID(),
-					timestamp: new Date(data.timestamp || Date.now()),
-					confidence: data.confidence || 0,
-					duration_ms: data.duration_ms || 0,
-					pitch_hz: data.pitch_hz || null,
-					dog_id: data.dog_id || null,
-					dog_name: data.dog_name || null,
-					evidence_file: data.evidence_file || null
+					id: crypto.randomUUID(),
+					timestamp: new Date(data.data.timestamp || Date.now()),
+					confidence: data.data.probability || 0,
+					duration_ms: 0,
+					pitch_hz: null,
+					dog_id: null,
+					dog_name: null,
+					evidence_file: null
 				};
 				barkStore.addBark(bark);
-			} else if (data.type === 'detection_status') {
-				barkStore.setDetecting(data.active === true);
+			} else if (data.type === 'status') {
+				// Initial status message from backend
+				barkStore.setDetecting(data.data?.running === true);
 			}
 		} catch {
 			// Ignore non-JSON messages or parsing errors
@@ -129,7 +131,7 @@ export function startBarkListener() {
 	});
 
 	// Connect the WebSocket
-	audioWebSocket.connect();
+	barkWebSocket.connect();
 }
 
 export function stopBarkListener() {
@@ -137,5 +139,5 @@ export function stopBarkListener() {
 		messageUnsubscribe();
 		messageUnsubscribe = null;
 	}
-	audioWebSocket.disconnect();
+	barkWebSocket.disconnect();
 }

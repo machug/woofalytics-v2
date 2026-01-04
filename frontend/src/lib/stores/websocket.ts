@@ -122,6 +122,16 @@ export const audioWebSocket = createWebSocketStore({
 	maxReconnectAttempts: 10
 });
 
+// Singleton bark WebSocket for real-time bark events
+export const barkWebSocket = createWebSocketStore({
+	url: '/ws/bark',
+	reconnectInterval: 3000,
+	maxReconnectAttempts: 10
+});
+
 // Connection state derived stores
 export const audioConnectionState = audioWebSocket.state;
 export const isAudioConnected = derived(audioConnectionState, ($state) => $state === 'connected');
+
+export const barkConnectionState = barkWebSocket.state;
+export const isBarkConnected = derived(barkConnectionState, ($state) => $state === 'connected');

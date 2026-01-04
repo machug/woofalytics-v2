@@ -107,7 +107,7 @@
 			<BarkGauge />
 
 			<Card title="Audio Waveform">
-				<WaveformVisualizer width={400} height={120} />
+				<WaveformVisualizer height={120} />
 			</Card>
 
 			<Card title="Bark Particles">
