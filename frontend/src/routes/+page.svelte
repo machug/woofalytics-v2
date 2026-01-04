@@ -1,6 +1,6 @@
 <script lang="ts">
 	import { onMount, onDestroy } from 'svelte';
-	import { WaveformVisualizer, ParticleSystem, BarkGauge, RecentBarks } from '$lib/components/dashboard';
+	import { WaveformVisualizer, BarkGauge, BarkTracker, RecentBarks } from '$lib/components/dashboard';
 	import { Card } from '$lib/components/ui';
 	import { api, fetchApi } from '$lib/api/client';
 	import type { Dog, FingerprintStats, EvidenceStats } from '$lib/api/types';
@@ -110,8 +110,8 @@
 				<WaveformVisualizer height={120} />
 			</Card>
 
-			<Card title="Bark Particles">
-				<ParticleSystem width={400} height={200} />
+			<Card title="Bark Tracker">
+				<BarkTracker fingerprintStats={fingerprintStats} dogs={dogs} />
 			</Card>
 		</div>
 
