@@ -181,7 +181,7 @@ class YAMNetGate:
         mean_scores = scores.mean(axis=0)
         # Get max probability across dog-related classes
         dog_probs = [mean_scores[i] for i in self.config.dog_classes]
-        return float(max(dog_probs))
+        return float(max(dog_probs)) if dog_probs else 0.0
 
     def reset_stats(self) -> None:
         """Reset skip/pass statistics."""
