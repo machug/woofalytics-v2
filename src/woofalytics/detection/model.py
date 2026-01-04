@@ -295,16 +295,19 @@ class BarkDetector:
         # YAMNet gate: skip CLAP inference on non-dog audio
         if self._yamnet_gate:
             yamnet_start = time.perf_counter()
+            yamnet_success = False
             try:
                 is_dog = self._yamnet_gate.is_dog_sound(
                     audio_array,
                     sample_rate=self.settings.audio.sample_rate,
                 )
+                yamnet_success = True
             except Exception as e:
                 logger.warning("yamnet_error", error=str(e))
                 is_dog = True  # Fallback to CLAP
             finally:
-                metrics.observe_yamnet_latency(time.perf_counter() - yamnet_start)
+                if yamnet_success:
+                    metrics.observe_yamnet_latency(time.perf_counter() - yamnet_start)
 
             if not is_dog:
                 self._yamnet_skipped_count += 1
