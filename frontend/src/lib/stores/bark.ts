@@ -102,6 +102,8 @@ let messageUnsubscribe: (() => void) | null = null;
 export function startBarkListener() {
 	if (messageUnsubscribe) return;
 
+	console.log('[BarkStore] Starting bark listener');
+
 	messageUnsubscribe = barkWebSocket.lastMessage.subscribe((event) => {
 		if (!event) return;
 
@@ -125,12 +127,13 @@ export function startBarkListener() {
 				// Initial status message from backend
 				barkStore.setDetecting(data.data?.running === true);
 			}
-		} catch {
-			// Ignore non-JSON messages or parsing errors
+		} catch (e) {
+			console.error('[BarkStore] Parse error:', e);
 		}
 	});
 
 	// Connect the WebSocket
+	console.log('[BarkStore] Connecting WebSocket');
 	barkWebSocket.connect();
 }
 

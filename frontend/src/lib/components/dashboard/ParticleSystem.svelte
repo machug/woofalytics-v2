@@ -1,5 +1,4 @@
 <script lang="ts">
-	import { onMount } from 'svelte';
 	import { lastBark, sessionBarkCount, type BarkEvent } from '$lib/stores/bark';
 
 	interface Props {
@@ -29,19 +28,20 @@
 		rotationSpeed?: number;
 	}
 
-	let particles: Particle[] = [];
+	let particles = $state<Particle[]>([]);
 	let lastBarkId: string | null = null;
 
 	// Bone emoji for special particles
 	const BONE_EMOJI = '🦴';
 
 	function createParticles(x: number, y: number, count: number, isSpecial: boolean) {
+		const newParticles: Particle[] = [];
 		for (let i = 0; i < count; i++) {
 			const angle = (Math.PI * 2 * i) / count + Math.random() * 0.5;
 			const speed = 2 + Math.random() * 4;
 			const isBone = isSpecial && i % 5 === 0; // Every 5th particle is a bone in special mode
 
-			particles.push({
+			newParticles.push({
 				x,
 				y,
 				vx: Math.cos(angle) * speed,
@@ -57,6 +57,8 @@
 				rotationSpeed: isBone ? (Math.random() - 0.5) * 0.2 : undefined
 			});
 		}
+		// Reassign to trigger reactivity
+		particles = [...particles, ...newParticles];
 	}
 
 	function updateParticles() {
@@ -165,15 +167,21 @@
 		createParticles(x, y, isSpecial ? particleCount * 1.5 : particleCount, isSpecial);
 	}
 
-	onMount(() => {
-		setupCanvas();
-		animationFrame = requestAnimationFrame(draw);
+	// Derived bark count for display
+	let barkCount = $derived($sessionBarkCount);
 
-		return () => {
-			if (animationFrame) {
-				cancelAnimationFrame(animationFrame);
-			}
-		};
+	// Setup canvas and animation loop
+	$effect(() => {
+		if (canvas && width > 0 && height > 0) {
+			setupCanvas();
+			animationFrame = requestAnimationFrame(draw);
+
+			return () => {
+				if (animationFrame) {
+					cancelAnimationFrame(animationFrame);
+				}
+			};
+		}
 	});
 
 	// Watch for new barks
@@ -186,12 +194,6 @@
 			triggerBarkEffect(bark, count);
 		}
 	});
-
-	$effect(() => {
-		if (width || height) {
-			setupCanvas();
-		}
-	});
 </script>
 
 <div class="particle-container">
@@ -199,7 +201,16 @@
 	{#if particles.length === 0}
 		<div class="empty-state">
 			<span class="emoji">🐕</span>
-			<span class="text">Waiting for barks...</span>
+			{#if barkCount > 0}
+				<span class="bark-count">{barkCount} bark{barkCount === 1 ? '' : 's'} this session</span>
+			{:else}
+				<span class="text">Waiting for barks...</span>
+			{/if}
+		</div>
+	{/if}
+	{#if barkCount > 0}
+		<div class="session-counter">
+			<span class="counter-value">{barkCount}</span>
 		</div>
 	{/if}
 </div>
@@ -239,6 +250,29 @@
 		color: var(--text-muted);
 		text-transform: uppercase;
 		letter-spacing: 0.1em;
+	}
+
+	.bark-count {
+		font-size: 0.875rem;
+		color: var(--accent-teal);
+		font-weight: 600;
+	}
+
+	.session-counter {
+		position: absolute;
+		top: var(--space-sm);
+		right: var(--space-sm);
+		background: var(--bg-overlay);
+		border: 1px solid var(--border-subtle);
+		border-radius: var(--radius-sm);
+		padding: var(--space-xs) var(--space-sm);
+	}
+
+	.counter-value {
+		font-size: 0.75rem;
+		font-weight: 700;
+		font-family: 'JetBrains Mono', monospace;
+		color: var(--accent-teal);
 	}
 
 	@keyframes pulse {
