@@ -165,9 +165,11 @@ class YAMNetGate:
     def _get_dog_probability(self, scores: np.ndarray) -> float:
         """Extract maximum dog-related probability from YAMNet scores.
 
-        YAMNet outputs scores of shape (frames, 521) where each frame
-        represents a ~0.96s window. We take the mean across frames and
-        return the max probability across configured dog classes.
+        YAMNet outputs scores of shape (frames, 521), where each frame
+        corresponds to a single time step of roughly 10ms of audio at 16kHz.
+        Internally, the waveform is split into overlapping 25ms windows with
+        10ms hops. We take the mean across all frames and then return the max
+        probability across the configured dog-related classes.
 
         Args:
             scores: YAMNet output scores of shape (frames, 521).
