@@ -44,8 +44,8 @@
 		}
 	}
 
-	function formatNumber(num: number): string {
-		return num.toLocaleString();
+	function formatNumber(num: number | undefined | null): string {
+		return (num ?? 0).toLocaleString();
 	}
 
 	function formatDuration(seconds: number): string {
