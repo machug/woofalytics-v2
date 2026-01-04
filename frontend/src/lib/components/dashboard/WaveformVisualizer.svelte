@@ -12,6 +12,41 @@
 	let containerHeight = $state(0);
 	let animationFrame: number | null = null;
 
+	// Color state for hysteresis (0=blue, 1=yellow, 2=red)
+	// Using an array to track per-bar color states
+	let barColorStates: number[] = [];
+	let indicatorColorState = 0; // 0=blue, 1=red for the right-edge indicator
+
+	// Hysteresis thresholds - different for going up vs down
+	const THRESHOLD_LOW_UP = 0.35;    // blue -> yellow
+	const THRESHOLD_LOW_DOWN = 0.25;  // yellow -> blue
+	const THRESHOLD_HIGH_UP = 0.65;   // yellow -> red
+	const THRESHOLD_HIGH_DOWN = 0.55; // red -> yellow
+
+	function getColorWithHysteresis(level: number, barIndex: number): string {
+		const currentState = barColorStates[barIndex] ?? 0;
+		let newState = currentState;
+
+		if (currentState === 0) {
+			// Currently blue - only go to yellow if above upper threshold
+			if (level >= THRESHOLD_LOW_UP) newState = 1;
+		} else if (currentState === 1) {
+			// Currently yellow
+			if (level < THRESHOLD_LOW_DOWN) newState = 0;      // drop to blue
+			else if (level >= THRESHOLD_HIGH_UP) newState = 2; // rise to red
+		} else {
+			// Currently red - only go to yellow if below lower threshold
+			if (level < THRESHOLD_HIGH_DOWN) newState = 1;
+		}
+
+		barColorStates[barIndex] = newState;
+
+		// Return color based on state
+		if (newState === 0) return 'rgba(88, 166, 255, 0.85)';
+		if (newState === 1) return 'rgba(255, 180, 50, 0.9)';
+		return 'rgba(248, 81, 73, 1)';
+	}
+
 	function draw() {
 		if (!canvas || containerWidth === 0) return;
 
@@ -60,21 +95,19 @@
 			const gap = 2;
 			const centerY = h / 2;
 
+			// Ensure barColorStates array is sized correctly
+			if (barColorStates.length !== barCount) {
+				barColorStates = new Array(barCount).fill(0);
+			}
+
 			for (let i = 0; i < barCount; i++) {
 				const sampleIndex = Math.floor((i / barCount) * history.length);
 				const level = history[sampleIndex] || 0;
 				const barHeight = Math.max(1, level * (h * 0.42));
 				const x = i * (barWidth + gap);
 
-				// Color based on level
-				let color: string;
-				if (level < 0.3) {
-					color = 'rgba(88, 166, 255, 0.85)';
-				} else if (level < 0.6) {
-					color = 'rgba(255, 180, 50, 0.9)';
-				} else {
-					color = 'rgba(248, 81, 73, 1)';
-				}
+				// Color with hysteresis to prevent flickering
+				const color = getColorWithHysteresis(level, i);
 
 				ctx.fillStyle = color;
 				ctx.fillRect(x, centerY - barHeight, barWidth, barHeight);
@@ -113,11 +146,17 @@
 			ctx.stroke();
 		}
 
-		// Current level indicator on right edge
+		// Current level indicator on right edge with hysteresis
 		const indicatorHeight = Math.max(4, currentLevel * h * 0.75);
 		const indicatorY = (h - indicatorHeight) / 2;
 
-		ctx.fillStyle = currentLevel > 0.6 ? 'rgba(248, 81, 73, 1)' : 'rgba(88, 166, 255, 0.9)';
+		// Hysteresis for indicator: go red at 0.65, go blue at 0.55
+		if (indicatorColorState === 0 && currentLevel >= THRESHOLD_HIGH_UP) {
+			indicatorColorState = 1;
+		} else if (indicatorColorState === 1 && currentLevel < THRESHOLD_HIGH_DOWN) {
+			indicatorColorState = 0;
+		}
+		ctx.fillStyle = indicatorColorState === 1 ? 'rgba(248, 81, 73, 1)' : 'rgba(88, 166, 255, 0.9)';
 		ctx.fillRect(w - 6, indicatorY, 4, indicatorHeight);
 
 		animationFrame = requestAnimationFrame(draw);
