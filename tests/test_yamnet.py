@@ -183,10 +183,8 @@ class TestYAMNetGate:
         result = gate._preprocess(audio, sample_rate=44100)
 
         # Should resample from 44100 to 16000
-        expected_length = int(44100 * 16000 / 44100)
-        assert len(result) == expected_length
+        assert len(result) == 16000
         assert result.dtype == np.float32
-
     def test_preprocess_stereo_int16(self):
         """Test preprocessing with stereo int16 audio."""
         gate = YAMNetGate()
