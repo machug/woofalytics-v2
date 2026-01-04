@@ -81,9 +81,12 @@ class YAMNetGate:
             True if model loaded successfully, False otherwise.
         """
         try:
+            import tensorflow as tf
             import tensorflow_hub as hub
 
-            logger.info("yamnet_loading", source="tfhub.dev/google/yamnet/1")
+            # Force CPU execution - YAMNet is lightweight and avoids CUDA/XLA issues
+            tf.config.set_visible_devices([], 'GPU')
+            logger.info("yamnet_loading", source="tfhub.dev/google/yamnet/1", device="cpu")
             self._model = hub.load("https://tfhub.dev/google/yamnet/1")
             self._loaded = True
             logger.info(
@@ -117,8 +120,12 @@ class YAMNetGate:
             return True  # Fallback: pass to CLAP
 
         try:
+            import tensorflow as tf
+
             audio_16k = self._preprocess(audio, sample_rate)
-            scores, _, _ = self._model(audio_16k)
+            # Force CPU execution to avoid CUDA/XLA JIT issues
+            with tf.device('/CPU:0'):
+                scores, _, _ = self._model(audio_16k)
             dog_prob = self._get_dog_probability(scores.numpy())
             self._last_dog_prob = dog_prob  # Store for monitoring
 
