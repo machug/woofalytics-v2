@@ -115,7 +115,7 @@ This project was created with specific intentions:
 
 ```
 woofalytics-v2/
-├── src/woofalytics/
+├── src/woofalytics/             # Python backend
 │   ├── __init__.py              # Package version and exports
 │   ├── __main__.py              # CLI entry point (python -m woofalytics)
 │   ├── app.py                   # FastAPI application with lifespan
@@ -139,8 +139,10 @@ woofalytics-v2/
 │   │   ├── storage.py           # Evidence recording and management
 │   │   └── metadata.py          # JSON metadata models
 │   │
-│   ├── events/
-│   │   └── __init__.py          # (Placeholder for event filtering)
+│   ├── fingerprint/             # Dog identification system
+│   │   ├── __init__.py
+│   │   ├── storage.py           # SQLite fingerprint database
+│   │   └── matcher.py           # CLAP embedding matching
 │   │
 │   └── api/
 │       ├── __init__.py          # Module exports
@@ -148,10 +150,23 @@ woofalytics-v2/
 │       ├── schemas.py           # Pydantic response models
 │       └── websocket.py         # WebSocket endpoints + ConnectionManager
 │
-├── static/
-│   ├── index.html               # Dashboard HTML
-│   ├── styles.css               # Dark theme CSS
-│   └── app.js                   # WebSocket client + UI logic
+├── frontend/                    # SvelteKit frontend (NASA Mission Control theme)
+│   ├── src/
+│   │   ├── routes/              # SvelteKit pages
+│   │   │   ├── +page.svelte     # Dashboard with real-time monitoring
+│   │   │   ├── dogs/            # Dog management page
+│   │   │   ├── fingerprints/    # Fingerprints explorer
+│   │   │   └── settings/        # Settings & maintenance
+│   │   ├── lib/
+│   │   │   ├── api/             # Type-safe API client (openapi-fetch)
+│   │   │   ├── components/      # Reusable UI components
+│   │   │   └── stores/          # Svelte stores for WebSocket state
+│   │   └── app.css              # Global styles (glassmorphism theme)
+│   ├── build/                   # Production build (gitignored)
+│   ├── package.json
+│   └── svelte.config.js
+│
+├── static/                      # Evidence audio files (served at /static)
 │
 ├── models/
 │   └── traced_model.pt          # TorchScript bark detection model
@@ -410,16 +425,28 @@ WOOFALYTICS__WEBHOOK__IFTTT_KEY=your_secret_key
 
 ## Web UI
 
-The dashboard (`/static/index.html`) provides:
+The frontend is a **SvelteKit SPA** with a NASA Mission Control-inspired theme (glassmorphism, dark UI, cyan/amber accents).
 
-1. **Bark Probability Meter** - Real-time bar showing current probability
-2. **DOA Compass** - Semi-circle showing sound direction
-3. **Statistics** - Uptime, total barks, evidence count
-4. **Audio Level** - VU meter for microphone input
-5. **Recent Events** - List of recent detections
-6. **Evidence List** - Download recordings and metadata
+### Pages
 
-The UI uses vanilla JavaScript with WebSocket for real-time updates. No frameworks required.
+| Route | Description |
+|-------|-------------|
+| `/` | **Dashboard** - Real-time bark probability, DOA compass, VU meter, statistics |
+| `/dogs` | **Dog Management** - View registered dogs, bark counts, manage profiles |
+| `/fingerprints` | **Fingerprints Explorer** - Browse bark fingerprints with filtering and playback |
+| `/settings` | **Settings & Maintenance** - Configuration display, data purge operations |
+
+### Features
+
+- **Real-time Updates** - WebSocket streams for live bark events and audio levels
+- **Type-safe API Client** - Generated from OpenAPI schema using `openapi-fetch`
+- **Svelte 5 Runes** - Modern reactive state with `$state`, `$derived`, `$effect`
+- **Responsive Design** - Works on desktop and tablet
+- **Evidence Playback** - Listen to recorded bark clips directly in the browser
+
+### Production Serving
+
+The SvelteKit frontend is built to static files and served directly by FastAPI. No separate Node.js server required in production.
 
 ---
 
@@ -466,14 +493,20 @@ sudo apt-get update
 sudo apt-get install -y \
     python3.11 python3.11-venv \
     portaudio19-dev libasound2-dev \
-    alsa-utils
+    alsa-utils nodejs npm
 
 # Create virtual environment
 python3.11 -m venv venv
 source venv/bin/activate
 
-# Install package
+# Install Python package
 pip install -e .
+
+# Build frontend
+cd frontend
+npm install
+npm run build
+cd ..
 
 # Verify audio devices
 woofalytics --list-devices
@@ -559,9 +592,12 @@ pip install -e ".[dev]"
 
 # Install pre-commit hooks (optional)
 pre-commit install
+
+# Install frontend dependencies
+cd frontend && npm install && cd ..
 ```
 
-### Running
+### Running (Backend)
 
 ```bash
 # With hot reload
@@ -571,17 +607,39 @@ woofalytics --reload --log-level DEBUG
 uvicorn woofalytics.app:app --reload --host 0.0.0.0 --port 8000
 ```
 
+### Running (Frontend Development)
+
+```bash
+# Start the SvelteKit dev server (auto-proxies API calls to backend)
+cd frontend
+npm run dev
+
+# Frontend available at http://localhost:5173
+# Backend must be running on port 8000
+```
+
+### Building Frontend for Production
+
+```bash
+cd frontend
+npm run build    # Outputs to frontend/build/
+npm run preview  # Preview production build locally
+```
+
 ### Code Quality
 
 ```bash
-# Linting
+# Python linting
 ruff check src/woofalytics
 
-# Type checking
+# Python type checking
 mypy src/woofalytics
 
-# Format
+# Python format
 ruff format src/woofalytics
+
+# Frontend type checking
+cd frontend && npm run check
 ```
 
 ---
