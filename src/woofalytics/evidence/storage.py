@@ -9,6 +9,7 @@ from __future__ import annotations
 import asyncio
 import json
 import wave
+from collections.abc import Callable
 from dataclasses import dataclass, field
 from datetime import datetime
 from pathlib import Path
@@ -25,6 +26,9 @@ from woofalytics.evidence.metadata import EvidenceMetadata, EvidenceIndex
 if TYPE_CHECKING:
     from woofalytics.audio.capture import AsyncAudioCapture
     from woofalytics.detection.model import BarkEvent
+
+# Callback type: (evidence_filename, first_bark_time, last_bark_time) -> None
+EvidenceSavedCallback = Callable[[str, datetime, datetime], None]
 
 logger = structlog.get_logger(__name__)
 
@@ -57,6 +61,15 @@ class EvidenceStorage:
     _index: EvidenceIndex = field(default_factory=EvidenceIndex, init=False)
     _pending: PendingRecording | None = field(default=None, init=False)
     _lock: asyncio.Lock = field(default_factory=asyncio.Lock, init=False)
+    _on_saved_callbacks: list[EvidenceSavedCallback] = field(default_factory=list, init=False)
+
+    def add_on_saved_callback(self, callback: EvidenceSavedCallback) -> None:
+        """Register a callback to be called when evidence is saved.
+
+        Args:
+            callback: Function called with (filename, first_bark_time, last_bark_time).
+        """
+        self._on_saved_callbacks.append(callback)
 
     def __post_init__(self) -> None:
         """Initialize storage directory and load index."""
@@ -231,6 +244,23 @@ class EvidenceStorage:
                 barks=bark_count,
                 peak_prob=f"{peak_probability:.3f}",
             )
+
+            # Notify callbacks with bark time range for fingerprint linking
+            # Run callbacks in executor to avoid blocking the event loop
+            first_bark = self._pending.trigger_event.timestamp
+            last_bark = max(e.timestamp for e in self._pending.events)
+            loop = asyncio.get_event_loop()
+            for callback in self._on_saved_callbacks:
+                try:
+                    await loop.run_in_executor(
+                        None,
+                        callback,
+                        wav_filename,
+                        first_bark,
+                        last_bark,
+                    )
+                except Exception as cb_err:
+                    logger.warning("evidence_callback_error", error=str(cb_err))
 
             return metadata
 

@@ -680,6 +680,45 @@ class FingerprintStore:
 
         return updated
 
+    def link_evidence_to_fingerprints(
+        self,
+        evidence_filename: str,
+        start_time: datetime,
+        end_time: datetime,
+    ) -> int:
+        """Link an evidence file to fingerprints created within a time range.
+
+        Args:
+            evidence_filename: The filename of the evidence recording.
+            start_time: Start of the time range (inclusive).
+            end_time: End of the time range (inclusive).
+
+        Returns:
+            Number of fingerprints updated.
+        """
+        with self._get_connection() as conn:
+            cursor = conn.cursor()
+            cursor.execute(
+                """
+                UPDATE bark_fingerprints
+                SET evidence_filename = ?
+                WHERE timestamp >= ? AND timestamp <= ?
+                AND evidence_filename IS NULL
+                """,
+                (evidence_filename, start_time.isoformat(), end_time.isoformat()),
+            )
+            updated = cursor.rowcount
+            conn.commit()
+
+        if updated > 0:
+            logger.info(
+                "evidence_linked_to_fingerprints",
+                filename=evidence_filename,
+                count=updated,
+            )
+
+        return updated
+
     def get_fingerprints_for_dog(self, dog_id: str, limit: int = 100) -> list[BarkFingerprint]:
         """Get all fingerprints for a specific dog.
 
@@ -984,6 +1023,41 @@ class FingerprintStore:
                 })
 
         return aggregates
+
+    def get_dog_acoustic_stats(self, dog_id: str) -> dict | None:
+        """Get acoustic statistics for a specific dog.
+
+        Args:
+            dog_id: The dog's unique identifier.
+
+        Returns:
+            Dictionary with acoustic stats, or None if dog not found.
+        """
+        with self._get_connection() as conn:
+            cursor = conn.cursor()
+            cursor.execute("""
+                SELECT
+                    AVG(f.pitch_hz) as avg_pitch_hz,
+                    MIN(f.pitch_hz) as min_pitch_hz,
+                    MAX(f.pitch_hz) as max_pitch_hz,
+                    AVG(f.duration_ms) as avg_duration_ms,
+                    AVG(f.spectral_centroid_hz) as avg_spectral_centroid_hz,
+                    COUNT(f.id) as sample_count
+                FROM bark_fingerprints f
+                WHERE f.dog_id = ? AND f.pitch_hz IS NOT NULL
+            """, (dog_id,))
+
+            row = cursor.fetchone()
+            if row and row["sample_count"] > 0:
+                return {
+                    "avg_pitch_hz": row["avg_pitch_hz"],
+                    "min_pitch_hz": row["min_pitch_hz"],
+                    "max_pitch_hz": row["max_pitch_hz"],
+                    "avg_duration_ms": row["avg_duration_ms"],
+                    "avg_spectral_centroid_hz": row["avg_spectral_centroid_hz"],
+                    "sample_count": row["sample_count"],
+                }
+            return None
 
     # --- Stats ---
 

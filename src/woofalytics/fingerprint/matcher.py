@@ -30,6 +30,10 @@ DEFAULT_THRESHOLD = 0.85
 # Prevents tagging when multiple dogs have similar confidence scores
 MIN_AUTO_TAG_MARGIN = 0.10
 
+# Minimum acoustic score difference to use as tie-breaker
+# When CLAP margin is insufficient, use acoustic features if they clearly differ
+MIN_ACOUSTIC_TIE_BREAK_MARGIN = 0.15
+
 
 class FingerprintMatcher:
     """Matching engine that identifies dogs from bark audio.
@@ -85,6 +89,39 @@ class FingerprintMatcher:
             raise ValueError("Threshold must be between 0 and 1")
         self._threshold = value
         logger.debug("threshold_updated", threshold=value)
+
+    def _compute_acoustic_score(
+        self,
+        bark_pitch: float | None,
+        dog_stats: dict | None,
+    ) -> float:
+        """Compute acoustic similarity between bark and dog profile.
+
+        Uses pitch as the primary distinguishing feature.
+
+        Args:
+            bark_pitch: Pitch of the current bark in Hz (or None).
+            dog_stats: Acoustic stats for the dog (from get_dog_acoustic_stats).
+
+        Returns:
+            Similarity score from 0.0 to 1.0.
+        """
+        if bark_pitch is None or dog_stats is None:
+            return 0.5  # Neutral score when we can't compare
+
+        avg_pitch = dog_stats.get("avg_pitch_hz")
+        if avg_pitch is None:
+            return 0.5
+
+        # Compute pitch similarity using exponential decay
+        # Typical dog bark range is ~200-2000 Hz
+        pitch_range = 1800.0  # Expected range
+        pitch_diff = abs(bark_pitch - avg_pitch) / pitch_range
+
+        # Exponential decay: diff=0 -> 1.0, diff=0.5 -> ~0.37, diff=1.0 -> ~0.14
+        similarity = float(np.exp(-pitch_diff * 2.0))
+
+        return similarity
 
     def match(
         self,
@@ -210,17 +247,47 @@ class FingerprintMatcher:
             if len(matches) > 1:
                 margin = best_match.confidence - matches[1].confidence
                 if margin < MIN_AUTO_TAG_MARGIN:
-                    should_tag = False
-                    logger.info(
-                        "auto_tag_skipped_insufficient_margin",
-                        fingerprint_id=fingerprint.id,
-                        best_dog=best_match.dog_name,
-                        best_confidence=f"{best_match.confidence:.3f}",
-                        second_dog=matches[1].dog_name,
-                        second_confidence=f"{matches[1].confidence:.3f}",
-                        margin=f"{margin:.3f}",
-                        required_margin=MIN_AUTO_TAG_MARGIN,
-                    )
+                    # CLAP margin insufficient - try acoustic tie-breaking
+                    bark_pitch = acoustic_features.pitch_hz
+
+                    # Get acoustic stats for top candidates
+                    best_stats = self._store.get_dog_acoustic_stats(best_match.dog_id)
+                    second_stats = self._store.get_dog_acoustic_stats(matches[1].dog_id)
+
+                    best_acoustic = self._compute_acoustic_score(bark_pitch, best_stats)
+                    second_acoustic = self._compute_acoustic_score(bark_pitch, second_stats)
+                    acoustic_margin = best_acoustic - second_acoustic
+
+                    if acoustic_margin >= MIN_ACOUSTIC_TIE_BREAK_MARGIN:
+                        # Acoustic features CONFIRM the CLAP winner - allow tagging
+                        logger.info(
+                            "acoustic_tie_break_confirmed",
+                            fingerprint_id=fingerprint.id,
+                            winner=best_match.dog_name,
+                            bark_pitch=f"{bark_pitch:.1f}" if bark_pitch else "None",
+                            best_acoustic=f"{best_acoustic:.3f}",
+                            second_acoustic=f"{second_acoustic:.3f}",
+                            acoustic_margin=f"{acoustic_margin:.3f}",
+                            clap_margin=f"{margin:.3f}",
+                        )
+                        # Keep should_tag = True
+                    else:
+                        # Acoustics don't confirm CLAP winner - skip auto-tag
+                        # (We never swap based on acoustics alone - CLAP embedding is
+                        # more reliable than single-bark pitch which varies naturally)
+                        should_tag = False
+                        logger.info(
+                            "auto_tag_skipped_insufficient_margin",
+                            fingerprint_id=fingerprint.id,
+                            best_dog=best_match.dog_name,
+                            best_confidence=f"{best_match.confidence:.3f}",
+                            second_dog=matches[1].dog_name,
+                            second_confidence=f"{matches[1].confidence:.3f}",
+                            margin=f"{margin:.3f}",
+                            required_margin=MIN_AUTO_TAG_MARGIN,
+                            acoustic_margin=f"{acoustic_margin:.3f}" if bark_pitch else "no_pitch",
+                            acoustic_required=MIN_ACOUSTIC_TIE_BREAK_MARGIN,
+                        )
 
             if should_tag:
                 fingerprint.dog_id = best_match.dog_id

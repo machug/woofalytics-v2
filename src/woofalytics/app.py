@@ -10,6 +10,7 @@ from __future__ import annotations
 
 import asyncio
 from contextlib import asynccontextmanager
+from datetime import datetime
 from pathlib import Path
 from typing import AsyncGenerator
 
@@ -98,6 +99,13 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
         threshold=0.7,  # Similarity threshold for matching
     )
     logger.info("fingerprint_system_initialized", db_path=str(fingerprint_db_path))
+
+    # Link evidence files to fingerprints when saved
+    def on_evidence_saved(filename: str, first_bark: datetime, last_bark: datetime) -> None:
+        """Link saved evidence file to fingerprints created during that time."""
+        fingerprint_store.link_evidence_to_fingerprints(filename, first_bark, last_bark)
+
+    evidence.add_on_saved_callback(on_evidence_saved)
 
     # Fingerprint callback - process detected barks for dog identification
     def on_bark_for_fingerprint(event: BarkEvent) -> None:

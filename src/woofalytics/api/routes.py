@@ -25,6 +25,7 @@ from woofalytics.api.schemas import (
     EvidenceFileSchema,
     EvidenceListSchema,
     EvidenceStatsSchema,
+    GateStatsSchema,
     HealthSchema,
     PurgeEvidenceRequestSchema,
     PurgeFingerprintsRequestSchema,
@@ -110,10 +111,32 @@ async def get_status(
 ) -> DetectorStatusSchema:
     """Get current detector status.
 
-    Returns running state, uptime, bark count, and last event.
+    Returns running state, uptime, bark count, last event, and gate statistics.
     """
     status = detector.get_status()
     last_event = detector.get_last_event()
+
+    # Convert VAD stats (uses passed_count/skipped_count naming)
+    vad_stats = None
+    if "vad_stats" in status:
+        vad = status["vad_stats"]
+        vad_stats = GateStatsSchema(
+            passed=vad["passed_count"],
+            skipped=vad["skipped_count"],
+            total=vad["total_count"],
+            skip_rate=vad["skip_rate"],
+        )
+
+    # Convert YAMNet stats (uses passed/skipped naming)
+    yamnet_stats = None
+    if "yamnet_stats" in status:
+        yamnet = status["yamnet_stats"]
+        yamnet_stats = GateStatsSchema(
+            passed=yamnet["passed"],
+            skipped=yamnet["skipped"],
+            total=yamnet["total"],
+            skip_rate=yamnet["skip_rate"],
+        )
 
     return DetectorStatusSchema(
         running=status["running"],
@@ -121,6 +144,8 @@ async def get_status(
         total_barks=status["total_barks"],
         last_event=bark_event_to_schema(last_event) if last_event else None,
         microphone=status["microphone"],
+        vad_stats=vad_stats,
+        yamnet_stats=yamnet_stats,
     )
 
 

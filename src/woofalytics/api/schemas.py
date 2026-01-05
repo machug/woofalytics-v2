@@ -25,6 +25,15 @@ class BarkEventSchema(BaseModel):
     doa_mem: int | None = None
 
 
+class GateStatsSchema(BaseModel):
+    """Statistics for a pipeline gate (VAD or YAMNet)."""
+
+    passed: int
+    skipped: int
+    total: int
+    skip_rate: float = Field(ge=0.0, le=1.0)
+
+
 class DetectorStatusSchema(BaseModel):
     """Current detector status."""
 
@@ -33,6 +42,8 @@ class DetectorStatusSchema(BaseModel):
     total_barks: int
     last_event: BarkEventSchema | None = None
     microphone: str | None = None
+    vad_stats: GateStatsSchema | None = None
+    yamnet_stats: GateStatsSchema | None = None
 
 
 class HealthSchema(BaseModel):

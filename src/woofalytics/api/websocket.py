@@ -300,7 +300,7 @@ async def websocket_audio_endpoint(websocket: WebSocket) -> None:
                 },
             })
             if not success:
-                logger.warning("audio_ws_send_failed", loop=loop_count)
+                logger.debug("audio_ws_send_failed", loop=loop_count)
                 break  # Client disconnected
 
             await asyncio.sleep(0.1)  # 10Hz update rate

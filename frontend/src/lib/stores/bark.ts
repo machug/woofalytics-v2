@@ -23,6 +23,7 @@ interface BarkState {
 	sessionCount: number;
 	lastBark: BarkEvent | null;
 	isDetecting: boolean;
+	uptimeSeconds: number;
 }
 
 const MAX_RECENT_BARKS = 50;
@@ -33,7 +34,8 @@ function createBarkStore() {
 		totalCount: 0,
 		sessionCount: 0,
 		lastBark: null,
-		isDetecting: false
+		isDetecting: false,
+		uptimeSeconds: 0
 	});
 
 	return {
@@ -53,6 +55,12 @@ function createBarkStore() {
 		setTotalCount: (count: number) => {
 			update((state) => ({ ...state, totalCount: count }));
 		},
+		setUptime: (seconds: number) => {
+			update((state) => ({ ...state, uptimeSeconds: seconds }));
+		},
+		incrementUptime: () => {
+			update((state) => ({ ...state, uptimeSeconds: state.uptimeSeconds + 1 }));
+		},
 		resetSession: () => {
 			update((state) => ({
 				...state,
@@ -66,7 +74,8 @@ function createBarkStore() {
 				totalCount: 0,
 				sessionCount: 0,
 				lastBark: null,
-				isDetecting: false
+				isDetecting: false,
+				uptimeSeconds: 0
 			})
 	};
 }
@@ -96,8 +105,14 @@ export const isDetecting: Readable<boolean> = derived(
 	($state) => $state.isDetecting
 );
 
+export const uptimeSeconds: Readable<number> = derived(
+	barkStore,
+	($state) => $state.uptimeSeconds
+);
+
 // Process incoming WebSocket messages
 let messageUnsubscribe: (() => void) | null = null;
+let uptimeInterval: ReturnType<typeof setInterval> | null = null;
 
 export function startBarkListener() {
 	if (messageUnsubscribe) return;
@@ -126,11 +141,22 @@ export function startBarkListener() {
 			} else if (data.type === 'status') {
 				// Initial status message from backend
 				barkStore.setDetecting(data.data?.running === true);
+				// Set uptime from backend (persists across page reloads)
+				if (typeof data.data?.uptime_seconds === 'number') {
+					barkStore.setUptime(Math.floor(data.data.uptime_seconds));
+				}
 			}
 		} catch (e) {
 			console.error('[BarkStore] Parse error:', e);
 		}
 	});
+
+	// Start uptime counter (increment every second)
+	if (!uptimeInterval) {
+		uptimeInterval = setInterval(() => {
+			barkStore.incrementUptime();
+		}, 1000);
+	}
 
 	// Connect the WebSocket
 	console.log('[BarkStore] Connecting WebSocket');
@@ -141,6 +167,10 @@ export function stopBarkListener() {
 	if (messageUnsubscribe) {
 		messageUnsubscribe();
 		messageUnsubscribe = null;
+	}
+	if (uptimeInterval) {
+		clearInterval(uptimeInterval);
+		uptimeInterval = null;
 	}
 	barkWebSocket.disconnect();
 }

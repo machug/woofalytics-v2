@@ -4,7 +4,18 @@ All notable changes to Woofalytics will be documented in this file.
 
 Format based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
-## [0.2.0] - 2026-01-05
+## [2.1.0] - 2026-01-05
+
+### Added
+- MET (Mission Elapsed Time) clock in header showing detector uptime
+- Acoustic tie-breaking for fingerprint matching when CLAP margin is low
+- Gate statistics exposed via `/api/status` endpoint
+
+### Fixed
+- Evidence recording no longer blocks the event loop (callbacks run in executor)
+- Fingerprint-to-evidence linking runs asynchronously
+
+## [2.0.0] - 2026-01-05
 
 ### Added
 - YAMNet pre-filter for two-stage bark detection (30-40% inference skip rate)

@@ -1,7 +1,22 @@
 <script lang="ts">
 	import '../app.css';
+	import { onMount } from 'svelte';
+	import { uptimeSeconds, startBarkListener, stopBarkListener } from '$lib/stores/bark';
 
 	let { children } = $props();
+
+	// Format seconds as HH:MM:SS
+	function formatUptime(seconds: number): string {
+		const hrs = Math.floor(seconds / 3600);
+		const mins = Math.floor((seconds % 3600) / 60);
+		const secs = seconds % 60;
+		return `${hrs.toString().padStart(2, '0')}:${mins.toString().padStart(2, '0')}:${secs.toString().padStart(2, '0')}`;
+	}
+
+	onMount(() => {
+		startBarkListener();
+		return () => stopBarkListener();
+	});
 </script>
 
 <svelte:head>
@@ -28,7 +43,7 @@
 
 		<div class="telemetry-clock">
 			<span class="clock-label">MET</span>
-			<span class="clock-value" id="mission-clock">00:00:00</span>
+			<span class="clock-value">{formatUptime($uptimeSeconds)}</span>
 		</div>
 	</nav>
 
