@@ -35,7 +35,7 @@
 
 			// Update total bark count from API
 			if (fingerprintStats) {
-				barkStore.setTotalCount(fingerprintStats.total);
+				barkStore.setTotalCount(fingerprintStats.fingerprints);
 			}
 		} catch (e) {
 			error = e instanceof Error ? e.message : 'Failed to load dashboard data';
@@ -128,7 +128,7 @@
 					<span class="stat-label">Dogs</span>
 				</div>
 				<div class="stat-card">
-					<span class="stat-value">{formatNumber(fingerprintStats?.total ?? 0)}</span>
+					<span class="stat-value">{formatNumber(fingerprintStats?.fingerprints ?? 0)}</span>
 					<span class="stat-label">Total Barks</span>
 				</div>
 				<div class="stat-card">

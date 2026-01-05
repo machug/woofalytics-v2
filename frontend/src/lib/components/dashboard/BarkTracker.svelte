@@ -13,9 +13,9 @@
 	let sessionCount = $derived($sessionBarkCount);
 	let recentBark = $derived($lastBark);
 
-	let taggedCount = $derived(fingerprintStats?.tagged ?? 0);
+	let totalCount = $derived(fingerprintStats?.fingerprints ?? 0);
 	let untaggedCount = $derived(fingerprintStats?.untagged ?? 0);
-	let totalCount = $derived(fingerprintStats?.total ?? 0);
+	let taggedCount = $derived(totalCount - untaggedCount);
 
 	let autoAssignRate = $derived(totalCount > 0 ? Math.round((taggedCount / totalCount) * 100) : 0);
 	let unassignedRate = $derived(

@@ -312,6 +312,7 @@ export interface paths {
 export interface Dog {
 	id: string;
 	name: string;
+	emoji: string | null;
 	notes: string | null;
 	created_at: string;
 	updated_at: string;

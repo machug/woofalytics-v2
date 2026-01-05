@@ -63,7 +63,7 @@
 	};
 
 	// Format duration from ms to readable
-	const formatDuration = (ms: number): string => {
+	const formatDuration = (ms: number | null): string => {
 		if (!ms) return '--';
 		return (ms / 1000).toFixed(2) + 's';
 	};

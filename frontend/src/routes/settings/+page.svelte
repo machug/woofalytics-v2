@@ -32,8 +32,9 @@
 	let toastId = 0;
 
 	// Derived values
-	let taggedCount = $derived(fingerprintStats ? fingerprintStats.tagged : 0);
-	let untaggedCount = $derived(fingerprintStats ? fingerprintStats.untagged : 0);
+	let totalCount = $derived(fingerprintStats?.fingerprints ?? 0);
+	let untaggedCount = $derived(fingerprintStats?.untagged ?? 0);
+	let taggedCount = $derived(totalCount - untaggedCount);
 	let confirmedDogs = $derived(dogs.filter((d) => d.confirmed).length);
 
 	// Load stats on mount
@@ -248,7 +249,7 @@
 						{#if isLoadingStats}
 							--
 						{:else}
-							{fingerprintStats?.total ?? 0}
+							{totalCount}
 						{/if}
 					</div>
 					<div class="stat-card-detail">

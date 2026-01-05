@@ -31,7 +31,7 @@
 		}
 	}
 
-	function toggleSelect(barkId: string, event: MouseEvent) {
+	function toggleSelect(barkId: string, event: Event) {
 		event.stopPropagation();
 		const newSet = new Set(selectedIds);
 		if (newSet.has(barkId)) {
