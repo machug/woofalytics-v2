@@ -122,11 +122,11 @@
 		error = null;
 
 		try {
+			// API uses offset-based pagination (limit/offset), not page-based
+			const offset = (currentPage - 1) * pageSize;
 			const queryParams: Record<string, unknown> = {
-				page: currentPage,
-				size: pageSize,
-				sort_by: sortBy,
-				sort_order: sortOrder
+				limit: pageSize,
+				offset: offset
 			};
 
 			if (filters.dog_id) queryParams.dog_id = filters.dog_id;
@@ -143,8 +143,9 @@
 				const data = response.data;
 				fingerprints = data.items;
 				totalItems = data.total;
-				totalPages = data.pages;
-				currentPage = data.page;
+				// Calculate pages from total and limit
+				totalPages = Math.ceil(data.total / pageSize);
+				// currentPage stays as-is since we control it client-side
 			}
 		} catch (e) {
 			console.error('Failed to load fingerprints:', e);
@@ -198,10 +199,11 @@
 	};
 
 	// Computed stats display values
-	const statsTotal = $derived(stats?.total ?? 0);
-	const statsTagged = $derived(stats?.tagged ?? 0);
+	// API returns { dogs, fingerprints, untagged, clusters }
+	const statsTotal = $derived(stats?.fingerprints ?? 0);
+	const statsTagged = $derived((stats?.fingerprints ?? 0) - (stats?.untagged ?? 0));
 	const statsUntagged = $derived(stats?.untagged ?? 0);
-	const statsDogs = $derived(stats ? Object.keys(stats.by_dog).length : 0);
+	const statsDogs = $derived(stats?.dogs ?? 0);
 </script>
 
 <svelte:head>

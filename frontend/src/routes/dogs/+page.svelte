@@ -58,7 +58,8 @@
 			params: { query: { limit: 20 } }
 		});
 		if (response.error) throw new Error('Failed to load untagged barks');
-		untaggedBarks = response.data ?? [];
+		// API returns { count, total_untagged, barks: [...] }
+		untaggedBarks = response.data?.barks ?? [];
 	}
 
 	async function loadStats() {
@@ -180,7 +181,8 @@
 				throw new Error('Failed to load barks');
 			}
 
-			dogBarks = response.data ?? [];
+			// API returns { dog_id, dog_name, count, total_barks, barks: [...] }
+			dogBarks = response.data?.barks ?? [];
 		} catch (e) {
 			console.error('Error loading dog barks:', e);
 		} finally {
@@ -277,7 +279,7 @@
 			<span class="stat-pill-label">Untagged</span>
 		</div>
 		<div class="stat-pill stat-pill--total">
-			<span class="stat-pill-value">{stats?.total ?? 0}</span>
+			<span class="stat-pill-value">{stats?.fingerprints ?? 0}</span>
 			<span class="stat-pill-label">Total Barks</span>
 		</div>
 	</div>

@@ -119,7 +119,7 @@ export interface paths {
 			responses: {
 				200: {
 					content: {
-						'application/json': Fingerprint[];
+						'application/json': DogBarksList;
 					};
 				};
 			};
@@ -134,10 +134,8 @@ export interface paths {
 					start_date?: string;
 					end_date?: string;
 					min_confidence?: number;
-					page?: number;
-					size?: number;
-					sort_by?: string;
-					sort_order?: string;
+					limit?: number;
+					offset?: number;
 				};
 			};
 			responses: {
@@ -191,7 +189,7 @@ export interface paths {
 			responses: {
 				200: {
 					content: {
-						'application/json': Fingerprint[];
+						'application/json': UntaggedBarksList;
 					};
 				};
 			};
@@ -312,16 +310,15 @@ export interface Fingerprint {
 export interface PaginatedFingerprints {
 	items: Fingerprint[];
 	total: number;
-	page: number;
-	size: number;
-	pages: number;
+	limit: number;
+	offset: number;
 }
 
 export interface FingerprintStats {
-	total: number;
-	tagged: number;
+	dogs: number;
+	fingerprints: number;
 	untagged: number;
-	by_dog: Record<string, number>;
+	clusters: number;
 }
 
 export interface EvidenceStats {
@@ -339,4 +336,18 @@ export interface PurgeResult {
 export interface RecalculateResult {
 	updated_dogs: number;
 	message: string;
+}
+
+export interface DogBarksList {
+	dog_id: string;
+	dog_name: string;
+	count: number;
+	total_barks: number;
+	barks: Fingerprint[];
+}
+
+export interface UntaggedBarksList {
+	count: number;
+	total_untagged: number;
+	barks: Fingerprint[];
 }
