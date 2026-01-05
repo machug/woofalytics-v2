@@ -1,38 +1,77 @@
-# sv
+# Woofalytics Frontend
 
-Everything you need to build a Svelte project, powered by [`sv`](https://github.com/sveltejs/cli).
+SvelteKit-based web dashboard for real-time bark detection monitoring.
 
-## Creating a project
+## Tech Stack
 
-If you're seeing this, you've probably already done this step. Congrats!
+- **SvelteKit** 2.x with Svelte 5 runes
+- **TypeScript** with strict mode
+- **openapi-fetch** for type-safe API calls
+- **Vite** for development and building
 
-```sh
-# create a new project in the current directory
-npx sv create
+## Pages
 
-# create a new project in my-app
-npx sv create my-app
+| Route | Description |
+|-------|-------------|
+| `/` | Mission Control dashboard (real-time monitoring) |
+| `/dogs` | Dog profile management and bark tagging |
+| `/fingerprints` | Browse and filter bark fingerprints |
+| `/settings` | Configuration and maintenance |
+
+## Development
+
+```bash
+npm install
+npm run dev      # Start dev server on :5173
+npm run build    # Build for production
+npm run check    # TypeScript/Svelte checks
+npm run preview  # Preview production build
 ```
 
-## Developing
+The dev server proxies API calls to the backend at `localhost:8000`.
 
-Once you've created a project and installed dependencies with `npm install` (or `pnpm install` or `yarn`), start a development server:
+## Architecture
 
-```sh
-npm run dev
+### State Management
 
-# or start the server and open the app in a new browser tab
-npm run dev -- --open
+Uses Svelte 5 runes (`$state`, `$derived`, `$effect`) with stores for:
+
+- `barkStore` - Real-time bark events via WebSocket
+- `audioStore` - Audio level updates for VU meter
+- `audioConnectionState` - WebSocket connection status
+
+### API Client
+
+Type-safe client using `openapi-fetch` in `src/lib/api/`:
+
+```typescript
+import { api, fetchApi } from '$lib/api/client';
+
+const dogs = await fetchApi(() => api.GET('/api/dogs'));
 ```
 
-## Building
+### Components
 
-To create a production version of your app:
+Located in `src/lib/components/`:
 
-```sh
-npm run build
+- **dashboard/** - BarkGauge, WaveformVisualizer, DetectionPipeline, BarkTracker
+- **dogs/** - DogCard, UntaggedBarkList, BarkModal
+- **ui/** - Card, Button, Badge, Modal, Spinner
+
+### Theme
+
+NASA Mission Control aesthetic:
+- Dark glassmorphism UI
+- Cyan/amber accent colors
+- JetBrains Mono for metrics
+- Real-time data visualization
+
+## Production
+
+The frontend is built to static files and served by FastAPI. No separate Node.js server required.
+
+```bash
+npm run build    # Outputs to build/
 ```
 
-You can preview the production build with `npm run preview`.
-
-> To deploy your app, you may need to install an [adapter](https://svelte.dev/docs/kit/adapters) for your target environment.
+The backend serves these files from the `frontend/build` directory.

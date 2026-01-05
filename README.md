@@ -10,6 +10,7 @@ A complete modernization of the original woofalytics project, built for catalogi
 
 - [Project Goals](#project-goals)
 - [Architecture Overview](#architecture-overview)
+- [Detection Pipeline](#detection-pipeline)
 - [File Structure](#file-structure)
 - [Module Documentation](#module-documentation)
 - [Configuration System](#configuration-system)
@@ -23,6 +24,7 @@ A complete modernization of the original woofalytics project, built for catalogi
 - [Design Decisions](#design-decisions)
 - [Known Issues & TODOs](#known-issues--todos)
 - [Original Project](#original-project)
+- [Versioning](#versioning)
 
 ---
 
@@ -108,6 +110,44 @@ This project was created with specific intentions:
 8. **WebSocket** broadcasts events to connected web clients in real-time
 
 *Note: Legacy MLP mode uses 80ms inference with TorchScript for faster but less accurate detection.*
+
+---
+
+## Detection Pipeline
+
+Woofalytics uses a multi-stage filtering approach to balance accuracy with performance:
+
+```
+Audio Input → VAD Gate → YAMNet Gate → CLAP Detector → Bark Event
+                ↓            ↓              ↓
+             (skip)       (skip)        (detect)
+```
+
+### 1. VAD Gate (Voice Activity Detection)
+- **Purpose**: Fast energy-based rejection of silent audio
+- **Method**: RMS energy threshold in dB
+- **Skip Rate**: ~60-80% of frames (environment dependent)
+- **Latency**: <1ms
+
+### 2. YAMNet Gate (Pre-filter)
+- **Purpose**: Skip CLAP inference for non-dog sounds
+- **Model**: Google's YAMNet (TensorFlow, ~3.7M params)
+- **Classes**: AudioSet class 69 (Dog) and 70 (Bark)
+- **Threshold**: 0.05 (kept low to avoid missing barks)
+- **Skip Rate**: 30-40% of VAD-passed frames
+- **Latency**: ~50ms
+
+### 3. CLAP Detector (Primary)
+- **Purpose**: Zero-shot audio classification with multi-label veto
+- **Model**: LAION CLAP (`laion/clap-htsat-unfused`)
+- **Features**:
+  - Compares bark labels against speech, percussion, birds
+  - Rolling window (2/3 positives required)
+  - High-confidence bypass (≥80%)
+  - Detection cooldown prevents rapid-fire
+- **Latency**: ~500ms
+
+Monitor pipeline status in real-time via the Dashboard's **Detection Pipeline** card.
 
 ---
 
@@ -779,6 +819,12 @@ This is a fork/rewrite of the original woofalytics project. Key changes:
 | Evidence | WAV only | WAV + JSON metadata |
 | Deployment | Manual | Docker |
 | Tests | None | pytest suite |
+
+---
+
+## Versioning
+
+Version is tracked in the `VERSION` file at the repository root. See [CHANGELOG.md](CHANGELOG.md) for release history.
 
 ---
 
