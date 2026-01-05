@@ -24,7 +24,7 @@
 	const columns = [
 		{ key: 'timestamp', label: 'Timestamp', sortable: true },
 		{ key: 'dog_name', label: 'Dog', sortable: true },
-		{ key: 'confidence', label: 'Confidence', sortable: true },
+		{ key: 'detection_probability', label: 'Confidence', sortable: true },
 		{ key: 'duration_ms', label: 'Duration', sortable: true },
 		{ key: 'pitch_hz', label: 'Pitch', sortable: true },
 		{ key: 'actions', label: 'Actions', sortable: false }
@@ -126,14 +126,14 @@
 							{/if}
 						</td>
 						<td>
-							<span class="confidence-badge confidence-badge--{getConfidenceClass(fp.confidence)}">
-								{Math.round(fp.confidence * 100)}%
+							<span class="confidence-badge confidence-badge--{getConfidenceClass(fp.detection_probability)}">
+								{Math.round(fp.detection_probability * 100)}%
 							</span>
 						</td>
 						<td class="mono">{formatDuration(fp.duration_ms)}</td>
 						<td class="mono">{formatPitch(fp.pitch_hz)}</td>
 						<td>
-							{#if fp.evidence_file}
+							{#if fp.evidence_filename}
 								<button
 									class="action-btn action-btn--play"
 									class:active={expandedRow === fp.id}
@@ -156,11 +156,11 @@
 							{/if}
 						</td>
 					</tr>
-					{#if expandedRow === fp.id && fp.evidence_file}
+					{#if expandedRow === fp.id && fp.evidence_filename}
 						<tr class="expanded-row">
 							<td colspan="6">
 								<div class="audio-row">
-									<AudioPlayer src={fp.evidence_file} onClose={() => (expandedRow = null)} />
+									<AudioPlayer src={fp.evidence_filename} onClose={() => (expandedRow = null)} />
 								</div>
 							</td>
 						</tr>

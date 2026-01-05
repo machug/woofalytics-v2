@@ -158,16 +158,16 @@ export interface paths {
 			};
 		};
 	};
-	'/api/fingerprints/{fingerprint_id}/tag': {
+	'/api/barks/{bark_id}/tag': {
 		post: {
 			parameters: {
 				path: {
-					fingerprint_id: string;
+					bark_id: string;
 				};
 			};
 			requestBody: {
 				content: {
-					'application/json': { dog_id: string };
+					'application/json': { dog_id: string; confidence?: number };
 				};
 			};
 			responses: {
@@ -298,13 +298,16 @@ export interface DogUpdate {
 export interface Fingerprint {
 	id: string;
 	timestamp: string;
-	confidence: number;
-	duration_ms: number;
+	detection_probability: number;
+	match_confidence: number | null;
+	duration_ms: number | null;
 	pitch_hz: number | null;
+	spectral_centroid_hz: number | null;
+	doa_degrees: number | null;
 	dog_id: string | null;
 	dog_name: string | null;
-	evidence_file: string | null;
-	created_at: string;
+	cluster_id: string | null;
+	evidence_filename: string | null;
 }
 
 export interface PaginatedFingerprints {

@@ -222,8 +222,8 @@
 
 	async function handleTagBark(barkId: string, dogId: string) {
 		try {
-			const response = await api.POST('/api/fingerprints/{fingerprint_id}/tag', {
-				params: { path: { fingerprint_id: barkId } },
+			const response = await api.POST('/api/barks/{bark_id}/tag', {
+				params: { path: { bark_id: barkId } },
 				body: { dog_id: dogId }
 			});
 

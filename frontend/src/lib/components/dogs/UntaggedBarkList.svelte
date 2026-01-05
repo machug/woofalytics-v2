@@ -39,11 +39,11 @@
 	}
 
 	function playAudio(bark: Fingerprint) {
-		if (!bark.evidence_file) return;
+		if (!bark.evidence_filename) return;
 
 		stopAudio();
 
-		const audioUrl = `/api/evidence/${bark.evidence_file}?format=opus`;
+		const audioUrl = `/api/evidence/${bark.evidence_filename}?format=opus`;
 		audioElement = new Audio(audioUrl);
 		audioElement.onended = () => {
 			currentlyPlaying = null;
@@ -100,11 +100,11 @@
 					<div class="bark-header">
 						<span class="bark-time">{formatTime(bark.timestamp)}</span>
 						<span class="bark-prob">
-							{(bark.confidence * 100).toFixed(0)}%
+							{(bark.detection_probability * 100).toFixed(0)}%
 						</span>
 					</div>
 					<div class="bark-meta">
-						{#if bark.evidence_file}
+						{#if bark.evidence_filename}
 							<button class="play-link" onclick={(e) => toggleAudio(bark, e)}>
 								{#if currentlyPlaying === bark.id}
 									Stop
