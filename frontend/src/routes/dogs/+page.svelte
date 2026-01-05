@@ -208,7 +208,8 @@
 				if (response.error) throw new Error('Failed to unconfirm dog');
 			} else {
 				const response = await api.POST('/api/dogs/{dog_id}/confirm', {
-					params: { path: { dog_id: dog.id } }
+					params: { path: { dog_id: dog.id } },
+					body: {}
 				});
 				if (response.error) throw new Error('Failed to confirm dog');
 			}

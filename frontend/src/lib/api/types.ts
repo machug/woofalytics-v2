@@ -84,6 +84,11 @@ export interface paths {
 					dog_id: string;
 				};
 			};
+			requestBody: {
+				content: {
+					'application/json': { min_samples?: number };
+				};
+			};
 			responses: {
 				200: {
 					content: {
