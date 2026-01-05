@@ -1,7 +1,7 @@
 <script lang="ts">
 	import { onMount } from 'svelte';
 	import { api, fetchApi } from '$lib/api/client';
-	import type { Dog, Fingerprint, FingerprintStats, DogCreate, DogUpdate } from '$lib/api/types';
+	import type { Dog, Fingerprint, FingerprintStats, DogCreate, DogUpdate, BulkTagResult } from '$lib/api/types';
 	import DogCard from '$lib/components/dogs/DogCard.svelte';
 	import DogForm from '$lib/components/dogs/DogForm.svelte';
 	import BarkModal from '$lib/components/dogs/BarkModal.svelte';
@@ -238,6 +238,28 @@
 		}
 	}
 
+	async function handleBulkTagBarks(barkIds: string[], dogId: string) {
+		try {
+			const response = await api.POST('/api/barks/bulk-tag', {
+				body: { bark_ids: barkIds, dog_id: dogId }
+			});
+
+			if (response.error) {
+				throw new Error('Failed to bulk tag barks');
+			}
+
+			const result = response.data;
+			if (result && result.failed_count > 0) {
+				console.warn(`Bulk tag: ${result.tagged_count} succeeded, ${result.failed_count} failed`);
+			}
+
+			await Promise.all([loadUntaggedBarks(), loadDogs(), loadStats()]);
+		} catch (e) {
+			console.error('Error bulk tagging barks:', e);
+			alert('Failed to tag barks. Please try again.');
+		}
+	}
+
 	onMount(() => {
 		loadData();
 
@@ -379,7 +401,7 @@
 				</div>
 
 				<div class="dogs-section-body">
-					<UntaggedBarkList barks={untaggedBarks} {dogs} onTag={handleTagBark} />
+					<UntaggedBarkList barks={untaggedBarks} {dogs} onTag={handleTagBark} onBulkTag={handleBulkTagBarks} />
 				</div>
 			</section>
 		</main>

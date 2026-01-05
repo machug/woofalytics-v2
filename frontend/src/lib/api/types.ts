@@ -179,6 +179,22 @@ export interface paths {
 			};
 		};
 	};
+	'/api/barks/bulk-tag': {
+		post: {
+			requestBody: {
+				content: {
+					'application/json': { bark_ids: string[]; dog_id: string; confidence?: number };
+				};
+			};
+			responses: {
+				200: {
+					content: {
+						'application/json': BulkTagResult;
+					};
+				};
+			};
+		};
+	};
 	'/api/barks/untagged': {
 		get: {
 			parameters: {
@@ -353,4 +369,10 @@ export interface UntaggedBarksList {
 	count: number;
 	total_untagged: number;
 	barks: Fingerprint[];
+}
+
+export interface BulkTagResult {
+	tagged_count: number;
+	failed_count: number;
+	failed_ids: string[];
 }

@@ -5,13 +5,58 @@
 		barks: Fingerprint[];
 		dogs: Dog[];
 		onTag: (barkId: string, dogId: string) => void;
+		onBulkTag: (barkIds: string[], dogId: string) => void;
 	}
 
-	let { barks, dogs, onTag }: Props = $props();
+	let { barks, dogs, onTag, onBulkTag }: Props = $props();
 
 	let openDropdownId = $state<string | null>(null);
 	let currentlyPlaying = $state<string | null>(null);
 	let audioElement = $state<HTMLAudioElement | null>(null);
+
+	// Selection state
+	let selectedIds = $state<Set<string>>(new Set());
+	let bulkDropdownOpen = $state(false);
+
+	// Derived selection state
+	let selectedCount = $derived(selectedIds.size);
+	let allSelected = $derived(barks.length > 0 && selectedIds.size === barks.length);
+	let someSelected = $derived(selectedIds.size > 0 && selectedIds.size < barks.length);
+
+	function toggleSelectAll() {
+		if (allSelected) {
+			selectedIds = new Set();
+		} else {
+			selectedIds = new Set(barks.map((b) => b.id));
+		}
+	}
+
+	function toggleSelect(barkId: string, event: MouseEvent) {
+		event.stopPropagation();
+		const newSet = new Set(selectedIds);
+		if (newSet.has(barkId)) {
+			newSet.delete(barkId);
+		} else {
+			newSet.add(barkId);
+		}
+		selectedIds = newSet;
+	}
+
+	function clearSelection() {
+		selectedIds = new Set();
+		bulkDropdownOpen = false;
+	}
+
+	function handleBulkTag(dogId: string) {
+		if (selectedIds.size === 0) return;
+		onBulkTag(Array.from(selectedIds), dogId);
+		clearSelection();
+	}
+
+	function toggleBulkDropdown(event: MouseEvent) {
+		event.stopPropagation();
+		bulkDropdownOpen = !bulkDropdownOpen;
+	}
 
 	function formatTime(dateStr: string): string {
 		const date = new Date(dateStr);
@@ -31,6 +76,7 @@
 
 	function closeDropdowns() {
 		openDropdownId = null;
+		bulkDropdownOpen = false;
 	}
 
 	function handleTag(barkId: string, dogId: string) {
@@ -87,8 +133,31 @@
 			<span>All barks have been reviewed!</span>
 		</div>
 	{:else}
+		<!-- Select All Header -->
+		<div class="select-header">
+			<label class="checkbox-label">
+				<input
+					type="checkbox"
+					checked={allSelected}
+					indeterminate={someSelected}
+					onchange={toggleSelectAll}
+				/>
+				<span>Select All ({barks.length})</span>
+			</label>
+		</div>
+
+		<!-- Bark Cards -->
 		{#each barks as bark (bark.id)}
-			<div class="bark-card">
+			<div class="bark-card" class:selected={selectedIds.has(bark.id)}>
+				<span class="bark-checkbox">
+					<input
+						type="checkbox"
+						checked={selectedIds.has(bark.id)}
+						onclick={(e) => e.stopPropagation()}
+						onchange={(e) => toggleSelect(bark.id, e)}
+					/>
+				</span>
+
 				<div class="bark-icon">
 					<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
 						<path d="M11 5L6 9H2v6h4l5 4V5z" />
@@ -144,6 +213,35 @@
 				{/if}
 			</div>
 		{/each}
+
+		<!-- Bulk Action Bar -->
+		{#if selectedCount > 0 && dogs.length > 0}
+			<div class="bulk-action-bar">
+				<span class="bulk-count">{selectedCount} selected</span>
+
+				<div class="bulk-actions">
+					<div class="bulk-dropdown" class:open={bulkDropdownOpen}>
+						<button class="bulk-assign-btn" onclick={toggleBulkDropdown}>
+							Assign all to...
+							<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+								<polyline points="6 9 12 15 18 9" />
+							</svg>
+						</button>
+						<div class="bulk-dropdown-menu">
+							{#each dogs as dog (dog.id)}
+								<button class="bulk-option" onclick={() => handleBulkTag(dog.id)}>
+									{dog.emoji || '🐕'} {dog.name}
+								</button>
+							{/each}
+						</div>
+					</div>
+
+					<button class="bulk-clear-btn" onclick={clearSelection}>
+						Clear
+					</button>
+				</div>
+			</div>
+		{/if}
 	{/if}
 </div>
 
@@ -152,6 +250,48 @@
 		display: flex;
 		flex-direction: column;
 		gap: var(--space-sm);
+		position: relative;
+	}
+
+	/* Select All Header */
+	.select-header {
+		display: flex;
+		align-items: center;
+		padding: var(--space-sm) var(--space-md);
+		background: var(--bg-overlay);
+		border-radius: var(--radius-sm);
+		border-bottom: 1px solid var(--border-muted);
+	}
+
+	.checkbox-label {
+		display: flex;
+		align-items: center;
+		gap: var(--space-sm);
+		cursor: pointer;
+		font-size: 0.75rem;
+		font-weight: 500;
+		color: var(--text-secondary);
+	}
+
+	.checkbox-label input[type='checkbox'] {
+		width: 16px;
+		height: 16px;
+		accent-color: var(--accent-amber);
+		cursor: pointer;
+	}
+
+	.bark-checkbox {
+		display: flex;
+		align-items: center;
+		justify-content: center;
+		flex-shrink: 0;
+	}
+
+	.bark-checkbox input[type='checkbox'] {
+		width: 16px;
+		height: 16px;
+		accent-color: var(--accent-amber);
+		cursor: pointer;
 	}
 
 	.empty-state {
@@ -185,6 +325,11 @@
 
 	.bark-card:hover {
 		background: rgba(28, 33, 40, 0.8);
+	}
+
+	.bark-card.selected {
+		border-color: var(--accent-amber);
+		background: rgba(245, 158, 11, 0.08);
 	}
 
 	.bark-icon {
@@ -346,6 +491,128 @@
 		flex-shrink: 0;
 	}
 
+	/* Bulk Action Bar */
+	.bulk-action-bar {
+		display: flex;
+		align-items: center;
+		justify-content: space-between;
+		padding: var(--space-md);
+		background: var(--bg-surface);
+		border: 1px solid var(--accent-amber);
+		border-radius: var(--radius-md);
+		margin-top: var(--space-sm);
+	}
+
+	.bulk-count {
+		font-size: 0.8rem;
+		font-weight: 600;
+		color: var(--accent-amber);
+	}
+
+	.bulk-actions {
+		display: flex;
+		align-items: center;
+		gap: var(--space-sm);
+	}
+
+	.bulk-dropdown {
+		position: relative;
+	}
+
+	.bulk-assign-btn {
+		display: flex;
+		align-items: center;
+		gap: var(--space-sm);
+		padding: var(--space-sm) var(--space-md);
+		font-size: 0.75rem;
+		font-weight: 600;
+		background: var(--accent-amber);
+		border: none;
+		border-radius: var(--radius-sm);
+		color: var(--bg-base);
+		cursor: pointer;
+		transition: all var(--transition-fast);
+	}
+
+	.bulk-assign-btn:hover {
+		background: #fbbf24;
+	}
+
+	.bulk-assign-btn svg {
+		width: 12px;
+		height: 12px;
+		transition: transform var(--transition-fast);
+	}
+
+	.bulk-dropdown.open .bulk-assign-btn svg {
+		transform: rotate(180deg);
+	}
+
+	.bulk-dropdown-menu {
+		position: absolute;
+		bottom: 100%;
+		right: 0;
+		margin-bottom: 4px;
+		padding: var(--space-xs);
+		background: var(--bg-surface);
+		border: 1px solid var(--border-default);
+		border-radius: var(--radius-md);
+		box-shadow: var(--shadow-lg);
+		z-index: 100;
+		opacity: 0;
+		visibility: hidden;
+		transform: translateY(8px);
+		transition: all var(--transition-fast);
+		min-width: 140px;
+		max-height: 200px;
+		overflow-y: auto;
+	}
+
+	.bulk-dropdown.open .bulk-dropdown-menu {
+		opacity: 1;
+		visibility: visible;
+		transform: translateY(0);
+	}
+
+	.bulk-option {
+		display: flex;
+		align-items: center;
+		gap: var(--space-sm);
+		width: 100%;
+		padding: var(--space-sm) var(--space-md);
+		font-size: 0.75rem;
+		font-weight: 500;
+		color: var(--text-secondary);
+		background: transparent;
+		border: none;
+		border-radius: var(--radius-sm);
+		cursor: pointer;
+		transition: all var(--transition-fast);
+		text-align: left;
+	}
+
+	.bulk-option:hover {
+		background: var(--accent-amber-dim);
+		color: var(--accent-amber);
+	}
+
+	.bulk-clear-btn {
+		padding: var(--space-sm) var(--space-md);
+		font-size: 0.75rem;
+		font-weight: 500;
+		background: transparent;
+		border: 1px solid var(--border-default);
+		border-radius: var(--radius-sm);
+		color: var(--text-muted);
+		cursor: pointer;
+		transition: all var(--transition-fast);
+	}
+
+	.bulk-clear-btn:hover {
+		border-color: var(--text-secondary);
+		color: var(--text-primary);
+	}
+
 	@media (max-width: 600px) {
 		.bark-card {
 			flex-wrap: wrap;
@@ -354,6 +621,16 @@
 		.tag-select {
 			width: 100%;
 			margin-top: var(--space-sm);
+		}
+
+		.bulk-action-bar {
+			flex-direction: column;
+			gap: var(--space-sm);
+			align-items: stretch;
+		}
+
+		.bulk-actions {
+			justify-content: flex-end;
 		}
 	}
 </style>
