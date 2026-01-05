@@ -12,10 +12,11 @@
 		sortBy: string;
 		sortOrder: 'asc' | 'desc';
 		onSort: (column: string) => void;
+		onUntag?: (fingerprint: Fingerprint) => void;
 		isLoading?: boolean;
 	}
 
-	let { fingerprints, sortBy, sortOrder, onSort, isLoading = false }: Props = $props();
+	let { fingerprints, sortBy, sortOrder, onSort, onUntag, isLoading = false }: Props = $props();
 
 	// Track which row is expanded for audio playback
 	let expandedRow: string | null = $state(null);
@@ -132,7 +133,7 @@
 						</td>
 						<td class="mono">{formatDuration(fp.duration_ms)}</td>
 						<td class="mono">{formatPitch(fp.pitch_hz)}</td>
-						<td>
+						<td class="actions-cell">
 							{#if fp.evidence_filename}
 								<button
 									class="action-btn action-btn--play"
@@ -153,6 +154,18 @@
 								</button>
 							{:else}
 								<span class="no-audio">--</span>
+							{/if}
+							{#if fp.dog_id && onUntag}
+								<button
+									class="action-btn action-btn--untag"
+									onclick={() => onUntag(fp)}
+									title="Untag this bark"
+								>
+									<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+										<path d="M18.36 6.64a9 9 0 11-12.73 0" />
+										<line x1="12" y1="2" x2="12" y2="12" />
+									</svg>
+								</button>
 							{/if}
 						</td>
 					</tr>
@@ -331,9 +344,21 @@
 		background: var(--accent-amber-dim);
 	}
 
+	.action-btn--untag:hover {
+		border-color: var(--accent-coral);
+		color: var(--accent-coral);
+		background: var(--accent-coral-dim);
+	}
+
 	.action-btn svg {
 		width: 14px;
 		height: 14px;
+	}
+
+	.actions-cell {
+		display: flex;
+		gap: 4px;
+		align-items: center;
 	}
 
 	.no-audio {

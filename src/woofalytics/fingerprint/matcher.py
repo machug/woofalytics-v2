@@ -23,8 +23,12 @@ if TYPE_CHECKING:
 
 logger = structlog.get_logger(__name__)
 
-# Default similarity threshold for matching
-DEFAULT_THRESHOLD = 0.75
+# Default similarity threshold for matching (raised from 0.75 to reduce false positives)
+DEFAULT_THRESHOLD = 0.85
+
+# Minimum margin between best and second-best match required for auto-tagging
+# Prevents tagging when multiple dogs have similar confidence scores
+MIN_AUTO_TAG_MARGIN = 0.10
 
 
 class FingerprintMatcher:
@@ -194,27 +198,50 @@ class FingerprintMatcher:
             mfcc_mean=acoustic_features.mfcc_mean,
         )
 
-        # If we have a match, link to the dog
+        # If we have a match, check margin before auto-tagging
         if matches:
             best_match = matches[0]
-            fingerprint.dog_id = best_match.dog_id
-            fingerprint.match_confidence = best_match.confidence
 
-            logger.info(
-                "bark_auto_tagged",
-                fingerprint_id=fingerprint.id,
-                dog_id=best_match.dog_id,
-                dog_name=best_match.dog_name,
-                confidence=f"{best_match.confidence:.3f}",
-                detection_prob=f"{detection_prob:.3f}",
-            )
+            # Check margin between best and second-best match
+            # Only auto-tag if the best match is clearly better than alternatives
+            should_tag = True
+            margin = None
 
-            # Update dog profile statistics
-            self._store.update_dog_stats(
-                dog_id=best_match.dog_id,
-                embedding=embedding,
-                timestamp=timestamp,
-            )
+            if len(matches) > 1:
+                margin = best_match.confidence - matches[1].confidence
+                if margin < MIN_AUTO_TAG_MARGIN:
+                    should_tag = False
+                    logger.info(
+                        "auto_tag_skipped_insufficient_margin",
+                        fingerprint_id=fingerprint.id,
+                        best_dog=best_match.dog_name,
+                        best_confidence=f"{best_match.confidence:.3f}",
+                        second_dog=matches[1].dog_name,
+                        second_confidence=f"{matches[1].confidence:.3f}",
+                        margin=f"{margin:.3f}",
+                        required_margin=MIN_AUTO_TAG_MARGIN,
+                    )
+
+            if should_tag:
+                fingerprint.dog_id = best_match.dog_id
+                fingerprint.match_confidence = best_match.confidence
+
+                logger.info(
+                    "bark_auto_tagged",
+                    fingerprint_id=fingerprint.id,
+                    dog_id=best_match.dog_id,
+                    dog_name=best_match.dog_name,
+                    confidence=f"{best_match.confidence:.3f}",
+                    margin=f"{margin:.3f}" if margin else "only_match",
+                    detection_prob=f"{detection_prob:.3f}",
+                )
+
+                # Update dog profile statistics
+                self._store.update_dog_stats(
+                    dog_id=best_match.dog_id,
+                    embedding=embedding,
+                    timestamp=timestamp,
+                )
         else:
             # No auto-taggable match found - bark will be untagged
             # Check if there are any potential matches (for logging)

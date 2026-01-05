@@ -184,6 +184,22 @@ export interface paths {
 			};
 		};
 	};
+	'/api/barks/{bark_id}/untag': {
+		post: {
+			parameters: {
+				path: {
+					bark_id: string;
+				};
+			};
+			responses: {
+				200: {
+					content: {
+						'application/json': Fingerprint;
+					};
+				};
+			};
+		};
+	};
 	'/api/barks/bulk-tag': {
 		post: {
 			requestBody: {

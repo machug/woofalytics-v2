@@ -198,6 +198,22 @@
 		syncUrl();
 	};
 
+	// Handle untag a fingerprint
+	const handleUntag = async (fingerprint: Fingerprint) => {
+		try {
+			await api.POST('/api/barks/{bark_id}/untag', {
+				params: { path: { bark_id: fingerprint.id } }
+			});
+
+			// Refresh data
+			loadFingerprints();
+			loadStats();
+		} catch (e) {
+			console.error('Failed to untag bark:', e);
+			error = 'Failed to untag bark. Please try again.';
+		}
+	};
+
 	// Computed stats display values
 	// API returns { dogs, fingerprints, untagged, clusters }
 	const statsTotal = $derived(stats?.fingerprints ?? 0);
@@ -286,6 +302,7 @@
 					{sortBy}
 					{sortOrder}
 					onSort={handleSort}
+					onUntag={handleUntag}
 					{isLoading}
 				/>
 			</div>
