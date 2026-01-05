@@ -51,3 +51,6 @@ Thumbs.db
 # Playwright MCP
 .playwright-mcp/
 .worktrees
+
+# Development plans
+plans/
