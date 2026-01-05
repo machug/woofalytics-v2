@@ -34,7 +34,7 @@
 	// Derived values
 	let taggedCount = $derived(fingerprintStats ? fingerprintStats.tagged : 0);
 	let untaggedCount = $derived(fingerprintStats ? fingerprintStats.untagged : 0);
-	let confirmedDogs = $derived(dogs.filter((d) => d.is_confirmed).length);
+	let confirmedDogs = $derived(dogs.filter((d) => d.confirmed).length);
 
 	// Load stats on mount
 	$effect(() => {

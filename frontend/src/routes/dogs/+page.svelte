@@ -31,7 +31,7 @@
 
 	// Computed stats
 	let totalDogs = $derived(dogs.length);
-	let confirmedDogs = $derived(dogs.filter((d) => d.is_confirmed).length);
+	let confirmedDogs = $derived(dogs.filter((d) => d.confirmed).length);
 	let untaggedCount = $derived(stats?.untagged ?? untaggedBarks.length);
 
 	async function loadData() {
@@ -198,7 +198,7 @@
 
 	async function handleToggleConfirm(dog: Dog) {
 		try {
-			if (dog.is_confirmed) {
+			if (dog.confirmed) {
 				if (!confirm(`Remove confirmation from "${dog.name}"? This will disable auto-tagging for this dog.`)) {
 					return;
 				}

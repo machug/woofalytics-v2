@@ -149,7 +149,7 @@
 							<a href="/dogs" class="dog-card">
 								<span class="dog-emoji">{dog.emoji || '🐕'}</span>
 								<span class="dog-name">{dog.name}</span>
-								<span class="dog-barks">{formatNumber(dog.bark_count)} barks</span>
+								<span class="dog-barks">{formatNumber(dog.total_barks)} barks</span>
 							</a>
 						{/each}
 					</div>

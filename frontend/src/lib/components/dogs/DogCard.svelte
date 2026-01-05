@@ -68,7 +68,7 @@
 	<div class="dog-content">
 		<div class="dog-header">
 			<span class="dog-name">{dog.name}</span>
-			{#if dog.is_confirmed}
+			{#if dog.confirmed}
 				<span class="status-chip status-chip--active">
 					<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
 						<path d="M22 11.08V12a10 10 0 11-5.93-9.14" />
@@ -90,7 +90,7 @@
 				<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
 					<path d="M11 5L6 9H2v6h4l5 4V5z" />
 				</svg>
-				<strong>{dog.bark_count}</strong> barks
+				<strong>{dog.total_barks}</strong> barks
 			</div>
 			<div class="dog-stat">
 				<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
@@ -103,12 +103,12 @@
 	</div>
 
 	<div class="dog-actions">
-		{#if dog.is_confirmed}
+		{#if dog.confirmed}
 			<button class="btn-action btn-action--teal" onclick={handleViewBarks}>
 				<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
 					<path d="M11 5L6 9H2v6h4l5 4V5z" />
 				</svg>
-				Barks ({dog.bark_count})
+				Barks ({dog.total_barks})
 			</button>
 		{:else}
 			<button class="btn-action btn-action--primary" onclick={handleToggleConfirm}>
@@ -140,7 +140,7 @@
 					Edit Profile
 				</button>
 				<button class="dropdown-item" onclick={handleToggleConfirm}>
-					{#if dog.is_confirmed}
+					{#if dog.confirmed}
 						<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
 							<circle cx="12" cy="12" r="10" />
 							<line x1="15" y1="9" x2="9" y2="15" />

@@ -43,7 +43,7 @@
 		return list.filter((dog) => now - new Date(dog.created_at).getTime() < dayMs).length;
 	}
 
-	let unconfirmedDogs = $derived(dogs.filter((dog) => !dog.is_confirmed).length);
+	let unconfirmedDogs = $derived(dogs.filter((dog) => !dog.confirmed).length);
 	let newDogs = $derived(countNewDogs(dogs));
 </script>
 

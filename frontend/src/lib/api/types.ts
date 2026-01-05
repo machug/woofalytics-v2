@@ -297,11 +297,18 @@ export interface Dog {
 	id: string;
 	name: string;
 	notes: string | null;
-	emoji: string;
-	is_confirmed: boolean;
-	bark_count: number;
 	created_at: string;
 	updated_at: string;
+	confirmed: boolean;
+	confirmed_at: string | null;
+	min_samples_for_auto_tag: number;
+	can_auto_tag: boolean;
+	sample_count: number;
+	first_seen: string | null;
+	last_seen: string | null;
+	total_barks: number;
+	avg_duration_ms: number | null;
+	avg_pitch_hz: number | null;
 }
 
 export interface DogCreate {
