@@ -111,8 +111,8 @@ class RateLimitMiddleware(BaseHTTPMiddleware):
         """Determine limit type based on request."""
         path = request.url.path
 
-        # Evidence downloads get stricter limits
-        if "/evidence/" in path and request.method == "GET":
+        # Evidence file downloads get stricter limits (actual files, not stats/list)
+        if "/evidence/" in path and "/file" in path and request.method == "GET":
             return "download"
 
         # WebSocket connections
@@ -153,6 +153,10 @@ class RateLimitMiddleware(BaseHTTPMiddleware):
             return await call_next(request)
 
         client_ip = self._get_client_ip(request)
+
+        # Skip localhost - don't rate limit the local frontend
+        if client_ip in ("127.0.0.1", "::1", "localhost"):
+            return await call_next(request)
         limit_type = self._get_limit_type(request)
         limit = _configured_limits.get(limit_type, 120)
         now = time.time()
