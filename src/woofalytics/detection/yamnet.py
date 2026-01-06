@@ -86,6 +86,11 @@ class YAMNetGate:
 
             # Force CPU execution - YAMNet is lightweight and avoids CUDA/XLA issues
             tf.config.set_visible_devices([], 'GPU')
+
+            # Limit TensorFlow threads to prevent CPU explosion
+            tf.config.threading.set_inter_op_parallelism_threads(2)
+            tf.config.threading.set_intra_op_parallelism_threads(4)
+
             logger.info("yamnet_loading", source="tfhub.dev/google/yamnet/1", device="cpu")
             self._model = hub.load("https://tfhub.dev/google/yamnet/1")
             self._loaded = True

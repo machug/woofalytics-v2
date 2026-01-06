@@ -139,6 +139,10 @@ class CLAPDetector:
         import torch
         from transformers import ClapModel, ClapProcessor
 
+        # Limit PyTorch threads to prevent CPU explosion
+        torch.set_num_threads(4)
+        torch.set_num_interop_threads(2)
+
         logger.info(
             "loading_clap_model",
             model=self.config.model_name,

@@ -9,6 +9,14 @@ Usage:
     woofalytics  # If installed via pip
 """
 
+# Limit ML library threads BEFORE any imports
+# Prevents PyTorch/TensorFlow/OpenBLAS from spawning unlimited threads
+import os
+os.environ.setdefault("OMP_NUM_THREADS", "4")
+os.environ.setdefault("MKL_NUM_THREADS", "4")
+os.environ.setdefault("OPENBLAS_NUM_THREADS", "4")
+os.environ.setdefault("NUMEXPR_NUM_THREADS", "4")
+
 from __future__ import annotations
 
 import argparse
