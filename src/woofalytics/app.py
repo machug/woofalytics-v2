@@ -249,6 +249,7 @@ def create_app() -> FastAPI:
     @app.get("/", include_in_schema=False, response_model=None)
     @app.get("/dogs", include_in_schema=False, response_model=None)
     @app.get("/fingerprints", include_in_schema=False, response_model=None)
+    @app.get("/reports", include_in_schema=False, response_model=None)
     @app.get("/settings", include_in_schema=False, response_model=None)
     async def spa_routes():
         """Serve SvelteKit SPA for all frontend routes."""
