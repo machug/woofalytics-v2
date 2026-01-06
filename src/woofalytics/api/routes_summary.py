@@ -9,6 +9,10 @@ from __future__ import annotations
 from calendar import monthrange
 from collections import defaultdict
 from datetime import datetime, timedelta, timezone
+from zoneinfo import ZoneInfo
+
+# Get system local timezone
+LOCAL_TZ = datetime.now().astimezone().tzinfo
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Request
 
@@ -45,10 +49,12 @@ def _calculate_period_stats(
     total_duration = sum(e.duration_seconds for e in entries)
     avg_confidence = sum(e.detection.peak_probability for e in entries) / total_events
 
-    # Calculate hourly breakdown
+    # Calculate hourly breakdown (in local time)
     hourly: dict[int, int] = defaultdict(int)
     for entry in entries:
-        hour = entry.timestamp_utc.hour
+        # Convert UTC to local time for hourly display
+        local_time = entry.timestamp_utc.astimezone(LOCAL_TZ)
+        hour = local_time.hour
         hourly[hour] += entry.detection.bark_count_in_clip
 
     # Find peak hour
@@ -165,10 +171,11 @@ async def weekly_summary(
         _calculate_period_stats(entries)
     )
 
-    # Calculate daily breakdown
+    # Calculate daily breakdown (in local time)
     daily: dict[str, int] = defaultdict(int)
     for entry in entries:
-        day_str = entry.timestamp_utc.strftime("%Y-%m-%d")
+        local_time = entry.timestamp_utc.astimezone(LOCAL_TZ)
+        day_str = local_time.strftime("%Y-%m-%d")
         daily[day_str] += entry.detection.bark_count_in_clip
 
     return WeeklySummarySchema(
@@ -220,10 +227,11 @@ async def monthly_summary(
         _calculate_period_stats(entries)
     )
 
-    # Calculate daily breakdown
+    # Calculate daily breakdown (in local time)
     daily: dict[str, int] = defaultdict(int)
     for entry in entries:
-        day_str = entry.timestamp_utc.strftime("%Y-%m-%d")
+        local_time = entry.timestamp_utc.astimezone(LOCAL_TZ)
+        day_str = local_time.strftime("%Y-%m-%d")
         daily[day_str] += entry.detection.bark_count_in_clip
 
     return MonthlySummarySchema(
