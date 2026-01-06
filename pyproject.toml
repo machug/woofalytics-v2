@@ -43,6 +43,7 @@ dependencies = [
     "tensorflow>=2.15",
     "tensorflow-hub>=0.16",
     "librosa>=0.10",
+    "scipy>=1.11",
 ]
 
 [project.optional-dependencies]

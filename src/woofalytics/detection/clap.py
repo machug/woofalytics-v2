@@ -327,7 +327,7 @@ class CLAPDetector:
 
         # Process audio to get audio embeddings
         audio_inputs = self._processor(
-            audios=audio,
+            audio=audio,
             sampling_rate=sample_rate,
             return_tensors="pt",
         )
@@ -699,7 +699,7 @@ class CLAPDetector:
 
         # Process audio to get audio embeddings
         audio_inputs = self._processor(
-            audios=audio,
+            audio=audio,
             sampling_rate=sample_rate,
             return_tensors="pt",
         )
