@@ -27,6 +27,7 @@ from woofalytics.detection.model import BarkDetector, BarkEvent
 from woofalytics.evidence.storage import EvidenceStorage
 from woofalytics.api.websocket import broadcast_bark_event, ConnectionManager
 from woofalytics.api.ratelimit import setup_rate_limiting, configure_rate_limits
+from woofalytics.api.auth import setup_auth, configure_auth
 from woofalytics.fingerprint.storage import FingerprintStore
 from woofalytics.fingerprint.matcher import FingerprintMatcher
 
@@ -81,6 +82,9 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
         websocket=rate_limit_config.websocket_limit,
         enabled=rate_limit_config.enabled,
     )
+
+    # Configure authentication
+    configure_auth(settings.server.api_key)
 
     # Initialize detector
     detector = BarkDetector(settings)
@@ -205,6 +209,9 @@ def create_app() -> FastAPI:
 
     # Security headers middleware
     app.add_middleware(SecurityHeadersMiddleware)
+
+    # Authentication setup (added before rate limiting so rate limit runs first)
+    setup_auth(app)
 
     # Rate limiting setup
     setup_rate_limiting(app)

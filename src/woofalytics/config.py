@@ -287,6 +287,13 @@ class ServerConfig(BaseModel):
         default_factory=RateLimitConfig,
         description="Rate limiting configuration.",
     )
+    api_key: str | None = Field(
+        default=None,
+        description=(
+            "API key for authentication. If not set, authentication is disabled. "
+            "Generate with: python -c 'import secrets; print(secrets.token_hex(16))'"
+        ),
+    )
 
 
 class Settings(BaseSettings):

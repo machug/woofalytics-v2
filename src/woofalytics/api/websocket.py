@@ -11,8 +11,10 @@ import json
 from typing import Any
 
 from fastapi import APIRouter, WebSocket, WebSocketDisconnect
+from starlette.websockets import WebSocketClose
 import structlog
 
+from woofalytics.api.auth import verify_websocket_token
 from woofalytics.detection.model import BarkEvent
 from woofalytics.detection.doa import angle_to_direction
 
@@ -136,6 +138,8 @@ async def broadcast_bark_event(event: BarkEvent, manager: ConnectionManager) -> 
 async def websocket_bark_endpoint(websocket: WebSocket) -> None:
     """WebSocket endpoint for real-time bark detection updates.
 
+    Authentication: ?token=<api_key> query parameter (if auth enabled).
+
     Clients receive JSON messages with the format:
     {
         "type": "bark_event",
@@ -152,6 +156,11 @@ async def websocket_bark_endpoint(websocket: WebSocket) -> None:
         }
     }
     """
+    # Verify authentication before accepting connection
+    if not await verify_websocket_token(websocket):
+        await websocket.close(code=4001, reason="Invalid credentials")
+        return
+
     manager = websocket.app.state.ws_manager
     await manager.connect(websocket)
 
@@ -204,6 +213,8 @@ async def websocket_bark_endpoint(websocket: WebSocket) -> None:
 async def websocket_pipeline_endpoint(websocket: WebSocket) -> None:
     """WebSocket endpoint for real-time detection pipeline monitoring.
 
+    Authentication: ?token=<api_key> query parameter (if auth enabled).
+
     Streams live detection pipeline state at ~10Hz for debugging visualization.
     Format:
     {
@@ -217,6 +228,11 @@ async def websocket_pipeline_endpoint(websocket: WebSocket) -> None:
         }
     }
     """
+    # Verify authentication before accepting connection
+    if not await verify_websocket_token(websocket):
+        await websocket.close(code=4001, reason="Invalid credentials")
+        return
+
     manager = websocket.app.state.ws_manager
     await manager.connect(websocket)
 
@@ -247,10 +263,17 @@ async def websocket_pipeline_endpoint(websocket: WebSocket) -> None:
 async def websocket_audio_endpoint(websocket: WebSocket) -> None:
     """WebSocket endpoint for real-time audio level monitoring.
 
+    Authentication: ?token=<api_key> query parameter (if auth enabled).
+
     Sends audio level updates at ~10Hz for VU meter visualization.
     Format: {"type": "audio_level", "data": {"level": 0.75, "peak": 0.92}}
     """
     import numpy as np
+
+    # Verify authentication before accepting connection
+    if not await verify_websocket_token(websocket):
+        await websocket.close(code=4001, reason="Invalid credentials")
+        return
 
     manager = websocket.app.state.ws_manager
     await manager.connect(websocket)

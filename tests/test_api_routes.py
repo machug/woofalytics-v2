@@ -1067,3 +1067,235 @@ class TestRateLimiting:
 
         # Reset rate limits
         configure_rate_limits(read="120/minute", write="30/minute", enabled=True)
+
+
+# --- Authentication Tests ---
+
+
+class TestAuthentication:
+    """Tests for API key authentication middleware."""
+
+    def test_public_endpoint_no_auth_required(
+        self,
+        api_settings: Settings,
+        mock_detector: MagicMock,
+        mock_evidence: MagicMock,
+        mock_fingerprint_store: MagicMock,
+    ) -> None:
+        """Test that public endpoints work without authentication."""
+        from woofalytics.api.routes import router
+        from woofalytics.api.websocket import ConnectionManager
+        from woofalytics.api.ratelimit import setup_rate_limiting, configure_rate_limits
+        from woofalytics.api.auth import setup_auth, configure_auth
+
+        app = FastAPI()
+
+        # Enable auth with a test key
+        configure_auth("test-api-key-12345")
+        configure_rate_limits(enabled=False)
+        setup_auth(app)
+        setup_rate_limiting(app)
+
+        app.include_router(router, prefix="/api")
+
+        app.state.settings = api_settings
+        app.state.detector = mock_detector
+        app.state.evidence = mock_evidence
+        app.state.fingerprint_store = mock_fingerprint_store
+        app.state.ws_manager = ConnectionManager()
+
+        with TestClient(app) as client:
+            # Health endpoint should work without auth
+            response = client.get("/api/health")
+            assert response.status_code == 200
+
+            # Metrics endpoint should work without auth
+            with patch("woofalytics.api.routes.get_metrics") as mock_get_metrics, \
+                 patch("woofalytics.api.routes.generate_latest") as mock_generate:
+                mock_metrics = MagicMock()
+                mock_metrics.is_initialized = True
+                mock_get_metrics.return_value = mock_metrics
+                mock_generate.return_value = b"# test metrics"
+                response = client.get("/api/metrics")
+                assert response.status_code == 200
+
+        # Reset auth
+        configure_auth(None)
+
+    def test_protected_endpoint_requires_auth(
+        self,
+        api_settings: Settings,
+        mock_detector: MagicMock,
+        mock_evidence: MagicMock,
+        mock_fingerprint_store: MagicMock,
+    ) -> None:
+        """Test that protected endpoints require authentication."""
+        from woofalytics.api.routes import router
+        from woofalytics.api.websocket import ConnectionManager
+        from woofalytics.api.ratelimit import setup_rate_limiting, configure_rate_limits
+        from woofalytics.api.auth import setup_auth, configure_auth
+
+        app = FastAPI()
+
+        # Enable auth with a test key
+        configure_auth("test-api-key-12345")
+        configure_rate_limits(enabled=False)
+        setup_auth(app)
+        setup_rate_limiting(app)
+
+        app.include_router(router, prefix="/api")
+
+        app.state.settings = api_settings
+        app.state.detector = mock_detector
+        app.state.evidence = mock_evidence
+        app.state.fingerprint_store = mock_fingerprint_store
+        app.state.ws_manager = ConnectionManager()
+
+        with TestClient(app) as client:
+            # Protected endpoint without auth header
+            response = client.get("/api/status")
+            assert response.status_code == 401
+            assert "Missing Authorization" in response.json()["detail"]
+            assert "WWW-Authenticate" in response.headers
+
+        # Reset auth
+        configure_auth(None)
+
+    def test_protected_endpoint_with_invalid_key(
+        self,
+        api_settings: Settings,
+        mock_detector: MagicMock,
+        mock_evidence: MagicMock,
+        mock_fingerprint_store: MagicMock,
+    ) -> None:
+        """Test that invalid API key returns 401."""
+        from woofalytics.api.routes import router
+        from woofalytics.api.websocket import ConnectionManager
+        from woofalytics.api.ratelimit import setup_rate_limiting, configure_rate_limits
+        from woofalytics.api.auth import setup_auth, configure_auth
+
+        app = FastAPI()
+
+        # Enable auth with a test key
+        configure_auth("correct-api-key")
+        configure_rate_limits(enabled=False)
+        setup_auth(app)
+        setup_rate_limiting(app)
+
+        app.include_router(router, prefix="/api")
+
+        app.state.settings = api_settings
+        app.state.detector = mock_detector
+        app.state.evidence = mock_evidence
+        app.state.fingerprint_store = mock_fingerprint_store
+        app.state.ws_manager = ConnectionManager()
+
+        with TestClient(app) as client:
+            # Wrong API key
+            response = client.get(
+                "/api/status",
+                headers={"Authorization": "Bearer wrong-key"},
+            )
+            assert response.status_code == 401
+            assert "Invalid API key" in response.json()["detail"]
+
+            # Invalid format (no Bearer prefix)
+            response = client.get(
+                "/api/status",
+                headers={"Authorization": "wrong-key"},
+            )
+            assert response.status_code == 401
+            assert "Invalid Authorization format" in response.json()["detail"]
+
+        # Reset auth
+        configure_auth(None)
+
+    def test_protected_endpoint_with_valid_key(
+        self,
+        api_settings: Settings,
+        mock_detector: MagicMock,
+        mock_evidence: MagicMock,
+        mock_fingerprint_store: MagicMock,
+    ) -> None:
+        """Test that valid API key allows access."""
+        from woofalytics.api.routes import router
+        from woofalytics.api.websocket import ConnectionManager
+        from woofalytics.api.ratelimit import setup_rate_limiting, configure_rate_limits
+        from woofalytics.api.auth import setup_auth, configure_auth
+
+        app = FastAPI()
+
+        api_key = "valid-test-api-key"
+        configure_auth(api_key)
+        configure_rate_limits(enabled=False)
+        setup_auth(app)
+        setup_rate_limiting(app)
+
+        app.include_router(router, prefix="/api")
+
+        app.state.settings = api_settings
+        app.state.detector = mock_detector
+        app.state.evidence = mock_evidence
+        app.state.fingerprint_store = mock_fingerprint_store
+        app.state.ws_manager = ConnectionManager()
+
+        with TestClient(app) as client:
+            # Valid API key should work
+            response = client.get(
+                "/api/status",
+                headers={"Authorization": f"Bearer {api_key}"},
+            )
+            assert response.status_code == 200
+
+            # Also test POST endpoint
+            response = client.post(
+                "/api/dogs",
+                json={"name": "Test Dog", "notes": "test"},
+                headers={"Authorization": f"Bearer {api_key}"},
+            )
+            assert response.status_code == 201
+
+        # Reset auth
+        configure_auth(None)
+
+    def test_auth_disabled_allows_all_requests(
+        self,
+        api_settings: Settings,
+        mock_detector: MagicMock,
+        mock_evidence: MagicMock,
+        mock_fingerprint_store: MagicMock,
+    ) -> None:
+        """Test that disabled authentication allows all requests."""
+        from woofalytics.api.routes import router
+        from woofalytics.api.websocket import ConnectionManager
+        from woofalytics.api.ratelimit import setup_rate_limiting, configure_rate_limits
+        from woofalytics.api.auth import setup_auth, configure_auth
+
+        app = FastAPI()
+
+        # Disable auth
+        configure_auth(None)
+        configure_rate_limits(enabled=False)
+        setup_auth(app)
+        setup_rate_limiting(app)
+
+        app.include_router(router, prefix="/api")
+
+        app.state.settings = api_settings
+        app.state.detector = mock_detector
+        app.state.evidence = mock_evidence
+        app.state.fingerprint_store = mock_fingerprint_store
+        app.state.ws_manager = ConnectionManager()
+
+        with TestClient(app) as client:
+            # Should work without auth when disabled
+            response = client.get("/api/status")
+            assert response.status_code == 200
+
+            # Empty string should also disable
+            configure_auth("")
+            response = client.get("/api/status")
+            assert response.status_code == 200
+
+        # Reset auth
+        configure_auth(None)
