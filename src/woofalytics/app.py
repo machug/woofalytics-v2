@@ -25,7 +25,7 @@ from woofalytics import __version__
 from woofalytics.config import Settings, load_settings, configure_logging
 from woofalytics.detection.model import BarkDetector, BarkEvent
 from woofalytics.evidence.storage import EvidenceStorage
-from woofalytics.api.websocket import broadcast_bark_event, ConnectionManager
+from woofalytics.api.websocket import broadcast_bark_event, WebSocketManagers
 from woofalytics.api.ratelimit import setup_rate_limiting, configure_rate_limits
 from woofalytics.api.auth import setup_auth, configure_auth
 from woofalytics.fingerprint.storage import FingerprintStore
@@ -102,8 +102,8 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
         ),
     )
 
-    # Create WebSocket connection manager
-    ws_manager = ConnectionManager()
+    # Create WebSocket connection managers (separate for each endpoint type)
+    ws_managers = WebSocketManagers()
 
     # Initialize fingerprint system for dog identification
     fingerprint_db_path = settings.evidence.directory / "fingerprints.db"
@@ -143,14 +143,15 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
 
     # Register callbacks
     detector.add_callback(lambda event: asyncio.create_task(evidence.on_bark_event(event)))
-    detector.add_callback(lambda event: asyncio.create_task(broadcast_bark_event(event, ws_manager)))
+    # Broadcast bark events ONLY to bark WebSocket clients (not pipeline/audio)
+    detector.add_callback(lambda event: asyncio.create_task(broadcast_bark_event(event, ws_managers.bark)))
     detector.add_callback(on_bark_for_fingerprint)
 
     # Store in app.state for dependency injection
     app.state.settings = settings
     app.state.detector = detector
     app.state.evidence = evidence
-    app.state.ws_manager = ws_manager
+    app.state.ws_managers = ws_managers  # Separate managers for bark/pipeline/audio
     app.state.fingerprint_store = fingerprint_store
     app.state.fingerprint_matcher = fingerprint_matcher
 

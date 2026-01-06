@@ -23,6 +23,28 @@ logger = structlog.get_logger(__name__)
 router = APIRouter(tags=["websocket"])
 
 
+class WebSocketManagers:
+    """Container for separate WebSocket connection managers by type.
+
+    Each WebSocket endpoint type (bark, pipeline, audio) has its own manager
+    to ensure broadcasts only go to the correct client type.
+    """
+
+    def __init__(self) -> None:
+        self.bark = ConnectionManager("bark")
+        self.pipeline = ConnectionManager("pipeline")
+        self.audio = ConnectionManager("audio")
+
+    @property
+    def total_connections(self) -> int:
+        """Total connections across all managers."""
+        return (
+            self.bark.connection_count +
+            self.pipeline.connection_count +
+            self.audio.connection_count
+        )
+
+
 class ConnectionManager:
     """Manages WebSocket connections for broadcasting.
 
@@ -32,7 +54,8 @@ class ConnectionManager:
     - Connection health checking
     """
 
-    def __init__(self) -> None:
+    def __init__(self, name: str = "default") -> None:
+        self.name = name
         self.active_connections: list[WebSocket] = []
         self._lock = asyncio.Lock()
 
@@ -41,7 +64,7 @@ class ConnectionManager:
         await websocket.accept()
         async with self._lock:
             self.active_connections.append(websocket)
-        logger.info("websocket_connected", total=len(self.active_connections))
+        logger.info("websocket_connected", manager=self.name, count=len(self.active_connections))
 
     async def disconnect(self, websocket: WebSocket) -> None:
         """Remove a WebSocket connection."""
@@ -51,7 +74,7 @@ class ConnectionManager:
                 self.active_connections.remove(websocket)
                 removed = True
         if removed:
-            logger.info("websocket_disconnected", total=len(self.active_connections))
+            logger.info("websocket_disconnected", manager=self.name, count=len(self.active_connections))
 
     async def broadcast(self, message: dict[str, Any]) -> None:
         """Broadcast a message to all connected clients.
@@ -161,7 +184,9 @@ async def websocket_bark_endpoint(websocket: WebSocket) -> None:
         await websocket.close(code=4001, reason="Invalid credentials")
         return
 
-    manager = websocket.app.state.ws_manager
+    # Use bark-specific manager so broadcasts only go to bark clients
+    managers: WebSocketManagers = websocket.app.state.ws_managers
+    manager = managers.bark
     await manager.connect(websocket)
 
     detector = websocket.app.state.detector
@@ -233,7 +258,9 @@ async def websocket_pipeline_endpoint(websocket: WebSocket) -> None:
         await websocket.close(code=4001, reason="Invalid credentials")
         return
 
-    manager = websocket.app.state.ws_manager
+    # Use pipeline-specific manager
+    managers: WebSocketManagers = websocket.app.state.ws_managers
+    manager = managers.pipeline
     await manager.connect(websocket)
 
     detector = websocket.app.state.detector
@@ -275,7 +302,9 @@ async def websocket_audio_endpoint(websocket: WebSocket) -> None:
         await websocket.close(code=4001, reason="Invalid credentials")
         return
 
-    manager = websocket.app.state.ws_manager
+    # Use audio-specific manager
+    managers: WebSocketManagers = websocket.app.state.ws_managers
+    manager = managers.audio
     await manager.connect(websocket)
 
     detector = websocket.app.state.detector

@@ -98,16 +98,16 @@ def ws_client(
     mock_detector: MagicMock,
 ) -> Generator[TestClient, None, None]:
     """Create a test client with WebSocket support."""
-    from woofalytics.api.websocket import router, ConnectionManager
+    from woofalytics.api.websocket import router, WebSocketManagers
 
     app = FastAPI()
     app.include_router(router)
 
-    # Set up app state
-    ws_manager = ConnectionManager()
+    # Set up app state with separate managers for each WebSocket type
+    ws_managers = WebSocketManagers()
     app.state.settings = ws_settings
     app.state.detector = mock_detector
-    app.state.ws_manager = ws_manager
+    app.state.ws_managers = ws_managers
 
     with TestClient(app) as client:
         yield client
