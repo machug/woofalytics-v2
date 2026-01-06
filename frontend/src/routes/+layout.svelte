@@ -36,6 +36,7 @@
 
 		<div class="nav-links">
 			<a href="/" class="nav-link">Dashboard</a>
+			<a href="/reports" class="nav-link">Reports</a>
 			<a href="/dogs" class="nav-link">Dogs</a>
 			<a href="/fingerprints" class="nav-link">Fingerprints</a>
 			<a href="/settings" class="nav-link">Settings</a>

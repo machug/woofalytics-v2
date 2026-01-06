@@ -306,6 +306,110 @@ export interface paths {
 			};
 		};
 	};
+	// Summary endpoints
+	'/api/summary/daily': {
+		get: {
+			parameters: {
+				query?: {
+					date?: string;
+				};
+			};
+			responses: {
+				200: {
+					content: {
+						'application/json': DailySummary;
+					};
+				};
+			};
+		};
+	};
+	'/api/summary/weekly': {
+		get: {
+			parameters: {
+				query?: {
+					date?: string;
+				};
+			};
+			responses: {
+				200: {
+					content: {
+						'application/json': WeeklySummary;
+					};
+				};
+			};
+		};
+	};
+	'/api/summary/monthly': {
+		get: {
+			parameters: {
+				query?: {
+					month?: string;
+				};
+			};
+			responses: {
+				200: {
+					content: {
+						'application/json': MonthlySummary;
+					};
+				};
+			};
+		};
+	};
+	// Export endpoints
+	'/api/export/stats': {
+		get: {
+			parameters: {
+				query?: {
+					start_date?: string;
+					end_date?: string;
+					min_confidence?: number;
+				};
+			};
+			responses: {
+				200: {
+					content: {
+						'application/json': ExportStats;
+					};
+				};
+			};
+		};
+	};
+	'/api/export/json': {
+		get: {
+			parameters: {
+				query?: {
+					start_date?: string;
+					end_date?: string;
+					min_confidence?: number;
+				};
+			};
+			responses: {
+				200: {
+					content: {
+						'application/json': ExportData;
+					};
+				};
+			};
+		};
+	};
+	'/api/export/csv': {
+		get: {
+			parameters: {
+				query?: {
+					start_date?: string;
+					end_date?: string;
+					min_confidence?: number;
+				};
+			};
+			responses: {
+				200: {
+					content: {
+						'text/csv': string;
+					};
+				};
+			};
+		};
+	};
 }
 
 // Domain types
@@ -404,4 +508,57 @@ export interface BulkTagResult {
 	tagged_count: number;
 	failed_count: number;
 	failed_ids: string[];
+}
+
+// Summary types
+export interface PeriodSummary {
+	total_barks: number;
+	total_events: number;
+	total_duration_seconds: number;
+	avg_confidence: number;
+	peak_hour: number | null;
+}
+
+export interface DailySummary extends PeriodSummary {
+	date: string;
+	hourly_breakdown: Record<number, number>;
+}
+
+export interface WeeklySummary extends PeriodSummary {
+	week_start: string;
+	week_end: string;
+	daily_breakdown: Record<string, number>;
+}
+
+export interface MonthlySummary extends PeriodSummary {
+	month: string;
+	daily_breakdown: Record<string, number>;
+}
+
+// Export types
+export interface ExportStats {
+	total_count: number;
+	date_range: { start: string; end: string } | null;
+	filters_applied: Record<string, unknown>;
+}
+
+export interface ExportEvent {
+	id: string;
+	timestamp: string;
+	detection_probability: number;
+	match_confidence: number | null;
+	duration_ms: number | null;
+	pitch_hz: number | null;
+	dog_id: string | null;
+	dog_name: string | null;
+	evidence_filename: string | null;
+}
+
+export interface ExportData {
+	events: ExportEvent[];
+	metadata: {
+		exported_at: string;
+		total_count: number;
+		date_range: { start: string; end: string } | null;
+	};
 }
