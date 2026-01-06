@@ -28,6 +28,7 @@ from woofalytics.api.schemas_fingerprint import (
     FingerprintAggregatesSchema,
     FingerprintListSchema,
     FingerprintStatsSchema,
+    RejectBarkRequestSchema,
     TagBarkRequestSchema,
     UntaggedBarksListSchema,
 )
@@ -93,6 +94,7 @@ def _fingerprint_to_schema(
         match_confidence=fingerprint.match_confidence,
         cluster_id=fingerprint.cluster_id,
         evidence_filename=fingerprint.evidence_filename,
+        rejection_reason=fingerprint.rejection_reason,
         detection_probability=fingerprint.detection_probability,
         doa_degrees=fingerprint.doa_degrees,
         duration_ms=fingerprint.duration_ms,
@@ -503,6 +505,71 @@ async def untag_bark(
     return _fingerprint_to_schema(updated)
 
 
+@router.post(
+    "/barks/{bark_id}/reject",
+    response_model=BarkFingerprintSchema,
+    summary="Reject bark as false positive",
+    description="Marks a bark fingerprint as a false positive with a reason. "
+    "Rejected barks are hidden from normal views but data is preserved.",
+)
+async def reject_bark(
+    bark_id: str,
+    data: RejectBarkRequestSchema,
+    store: Annotated[FingerprintStore, Depends(get_fingerprint_store)],
+) -> BarkFingerprintSchema:
+    """Mark a bark as a false positive."""
+    # Verify the bark exists
+    fingerprint = store.get_fingerprint(bark_id)
+    if not fingerprint:
+        logger.warning("bark_not_found_for_reject", bark_id=bark_id)
+        raise HTTPException(status_code=404, detail="Bark fingerprint not found")
+
+    # Reject the fingerprint
+    success = store.reject_fingerprint(bark_id, data.reason)
+    if not success:
+        raise HTTPException(status_code=500, detail="Failed to reject bark")
+
+    # Get the updated fingerprint
+    updated = store.get_fingerprint(bark_id)
+    logger.info(
+        "bark_rejected",
+        bark_id=bark_id,
+        reason=data.reason,
+    )
+    return _fingerprint_to_schema(updated)
+
+
+@router.post(
+    "/barks/{bark_id}/unreject",
+    response_model=BarkFingerprintSchema,
+    summary="Remove rejection from bark",
+    description="Removes the rejection status from a bark, making it visible again.",
+)
+async def unreject_bark(
+    bark_id: str,
+    store: Annotated[FingerprintStore, Depends(get_fingerprint_store)],
+) -> BarkFingerprintSchema:
+    """Remove rejection status from a bark."""
+    # Verify the bark exists
+    fingerprint = store.get_fingerprint(bark_id)
+    if not fingerprint:
+        logger.warning("bark_not_found_for_unreject", bark_id=bark_id)
+        raise HTTPException(status_code=404, detail="Bark fingerprint not found")
+
+    if not fingerprint.rejection_reason:
+        raise HTTPException(status_code=400, detail="Bark is not rejected")
+
+    # Remove the rejection
+    success = store.unreject_fingerprint(bark_id)
+    if not success:
+        raise HTTPException(status_code=500, detail="Failed to unreject bark")
+
+    # Get the updated fingerprint
+    updated = store.get_fingerprint(bark_id)
+    logger.info("bark_unrejected", bark_id=bark_id)
+    return _fingerprint_to_schema(updated)
+
+
 # --- Fingerprint Explorer Endpoints ---
 
 
@@ -511,7 +578,7 @@ async def untag_bark(
     response_model=FingerprintListSchema,
     summary="List fingerprints with filtering",
     description="Returns a paginated list of fingerprints with optional filtering by dog, "
-    "tagged status, confidence, and date range.",
+    "tagged status, rejection status, confidence, and date range.",
 )
 async def list_fingerprints(
     store: Annotated[FingerprintStore, Depends(get_fingerprint_store)],
@@ -519,6 +586,9 @@ async def list_fingerprints(
     offset: Annotated[int, Query(ge=0)] = 0,
     dog_id: Annotated[str | None, Query(description="Filter by dog ID")] = None,
     tagged: Annotated[bool | None, Query(description="Filter by tagged status")] = None,
+    rejected: Annotated[
+        bool | None, Query(description="Filter by rejection status (True=rejected only, False=not rejected, None=all)")
+    ] = None,
     min_confidence: Annotated[
         float | None, Query(ge=0.0, le=1.0, description="Minimum match confidence")
     ] = None,
@@ -538,6 +608,7 @@ async def list_fingerprints(
         min_confidence=min_confidence,
         start_date=start_date,
         end_date=end_date,
+        rejected=rejected,
     )
 
     # Build a map of dog_id -> dog_name for tagged fingerprints

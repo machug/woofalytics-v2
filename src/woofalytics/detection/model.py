@@ -12,7 +12,7 @@ import time
 from collections import deque
 from collections.abc import Callable
 from dataclasses import dataclass, field
-from datetime import datetime
+from datetime import datetime, timezone
 from pathlib import Path
 
 import numpy as np
@@ -373,7 +373,7 @@ class BarkDetector:
 
         # Create event - include audio for fingerprint extraction when barking
         event = BarkEvent(
-            timestamp=datetime.now(),
+            timestamp=datetime.now(timezone.utc),
             probability=probability,
             is_barking=is_barking,
             doa_bartlett=doa_bartlett,
@@ -486,7 +486,7 @@ class BarkDetector:
         # Create event
         is_barking = probability >= self.settings.model.threshold
         event = BarkEvent(
-            timestamp=datetime.now(),
+            timestamp=datetime.now(timezone.utc),
             probability=probability,
             is_barking=is_barking,
             doa_bartlett=doa_bartlett,

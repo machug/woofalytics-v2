@@ -136,6 +136,7 @@ export interface paths {
 				query?: {
 					dog_id?: string;
 					tagged?: boolean;
+					rejected?: boolean;
 					start_date?: string;
 					end_date?: string;
 					min_confidence?: number;
@@ -185,6 +186,43 @@ export interface paths {
 		};
 	};
 	'/api/barks/{bark_id}/untag': {
+		post: {
+			parameters: {
+				path: {
+					bark_id: string;
+				};
+			};
+			responses: {
+				200: {
+					content: {
+						'application/json': Fingerprint;
+					};
+				};
+			};
+		};
+	};
+	'/api/barks/{bark_id}/reject': {
+		post: {
+			parameters: {
+				path: {
+					bark_id: string;
+				};
+			};
+			requestBody: {
+				content: {
+					'application/json': { reason: string };
+				};
+			};
+			responses: {
+				200: {
+					content: {
+						'application/json': Fingerprint;
+					};
+				};
+			};
+		};
+	};
+	'/api/barks/{bark_id}/unreject': {
 		post: {
 			parameters: {
 				path: {
@@ -457,6 +495,7 @@ export interface Fingerprint {
 	dog_name: string | null;
 	cluster_id: string | null;
 	evidence_filename: string | null;
+	rejection_reason: string | null;
 }
 
 export interface PaginatedFingerprints {
@@ -470,6 +509,7 @@ export interface FingerprintStats {
 	dogs: number;
 	fingerprints: number;
 	untagged: number;
+	rejected: number;
 	clusters: number;
 }
 

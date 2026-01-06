@@ -164,6 +164,10 @@ class BarkFingerprint:
     # Link to evidence file (if recorded)
     evidence_filename: str | None = None
 
+    # Rejection status (if marked as false positive)
+    # Values: None (not rejected), "speech", "wind", "bird", "other", or custom text
+    rejection_reason: str | None = None
+
     # Detection metadata
     detection_probability: float = 0.0
     doa_degrees: int | None = None
@@ -183,6 +187,7 @@ class BarkFingerprint:
             "match_confidence": self.match_confidence,
             "cluster_id": self.cluster_id,
             "evidence_filename": self.evidence_filename,
+            "rejection_reason": self.rejection_reason,
             "detection_probability": self.detection_probability,
             "doa_degrees": self.doa_degrees,
             "duration_ms": self.duration_ms,
@@ -207,6 +212,7 @@ class BarkFingerprint:
             match_confidence=data.get("match_confidence"),
             cluster_id=data.get("cluster_id"),
             evidence_filename=data.get("evidence_filename"),
+            rejection_reason=data.get("rejection_reason"),
             detection_probability=data.get("detection_probability", 0.0),
             doa_degrees=data.get("doa_degrees"),
             duration_ms=data.get("duration_ms"),

@@ -57,6 +57,7 @@ class BarkFingerprintSchema(BaseModel):
     match_confidence: float | None = Field(default=None, description="Confidence of the dog identification (0-1)")
     cluster_id: str | None = Field(default=None, description="ID of the cluster this bark belongs to (if untagged)")
     evidence_filename: str | None = Field(default=None, description="Filename of the evidence recording")
+    rejection_reason: str | None = Field(default=None, description="Reason for rejection if this is a false positive")
     detection_probability: float = Field(default=0.0, description="Bark detection probability")
     doa_degrees: int | None = Field(default=None, description="Direction of arrival in degrees")
     duration_ms: float | None = Field(default=None, description="Duration of the bark in milliseconds")
@@ -81,6 +82,7 @@ class FingerprintStatsSchema(BaseModel):
     dogs: int = Field(description="Total number of dog profiles")
     fingerprints: int = Field(description="Total number of bark fingerprints")
     untagged: int = Field(description="Number of fingerprints not yet tagged to a dog")
+    rejected: int = Field(default=0, description="Number of fingerprints marked as false positives")
     clusters: int = Field(description="Number of auto-detected clusters")
 
 
@@ -127,6 +129,16 @@ class BulkTagResultSchema(BaseModel):
     tagged_count: int = Field(description="Number of barks successfully tagged")
     failed_count: int = Field(description="Number of barks that failed to tag")
     failed_ids: list[str] = Field(default_factory=list, description="IDs of barks that failed to tag")
+
+
+class RejectBarkRequestSchema(BaseModel):
+    """Request to reject a bark fingerprint as a false positive."""
+
+    reason: str = Field(
+        description="Reason for rejection (e.g., 'speech', 'wind', 'bird', 'other')",
+        min_length=1,
+        max_length=100,
+    )
 
 
 class UntaggedBarksListSchema(BaseModel):

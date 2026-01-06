@@ -28,7 +28,7 @@ logger = structlog.get_logger(__name__)
 EMBEDDING_DIM = 512
 
 # Schema version for migrations
-SCHEMA_VERSION = 2
+SCHEMA_VERSION = 3
 
 
 def _serialize_embedding(arr: np.ndarray | None) -> bytes | None:
@@ -184,12 +184,23 @@ class FingerprintStore:
                     pass
                 cursor.execute("UPDATE schema_version SET version = 2 WHERE id = 1")
                 logger.info("schema_migrated", from_version=current_version, to_version=2)
+                current_version = 2
+
+            if current_version < 3:
+                # Migration: Add rejection_reason for false positive marking
+                try:
+                    cursor.execute("ALTER TABLE bark_fingerprints ADD COLUMN rejection_reason TEXT")
+                except sqlite3.OperationalError:
+                    pass  # Column already exists
+                cursor.execute("UPDATE schema_version SET version = 3 WHERE id = 1")
+                logger.info("schema_migrated", from_version=current_version, to_version=3)
 
             # Indexes for common queries
             cursor.execute("CREATE INDEX IF NOT EXISTS idx_fingerprints_dog_id ON bark_fingerprints(dog_id)")
             cursor.execute("CREATE INDEX IF NOT EXISTS idx_fingerprints_cluster_id ON bark_fingerprints(cluster_id)")
             cursor.execute("CREATE INDEX IF NOT EXISTS idx_fingerprints_timestamp ON bark_fingerprints(timestamp)")
             cursor.execute("CREATE INDEX IF NOT EXISTS idx_fingerprints_untagged ON bark_fingerprints(dog_id) WHERE dog_id IS NULL")
+            cursor.execute("CREATE INDEX IF NOT EXISTS idx_fingerprints_rejected ON bark_fingerprints(rejection_reason) WHERE rejection_reason IS NOT NULL")
 
             conn.commit()
 
@@ -579,6 +590,7 @@ class FingerprintStore:
                 match_confidence=row["match_confidence"],
                 cluster_id=row["cluster_id"],
                 evidence_filename=row["evidence_filename"],
+                rejection_reason=row["rejection_reason"],
                 detection_probability=row["detection_probability"],
                 doa_degrees=row["doa_degrees"],
                 duration_ms=row["duration_ms"],
@@ -589,6 +601,8 @@ class FingerprintStore:
 
     def get_untagged_fingerprints(self, limit: int = 100) -> list[BarkFingerprint]:
         """Get fingerprints that haven't been tagged to a dog.
+
+        Excludes rejected fingerprints by default.
 
         Args:
             limit: Maximum number to return.
@@ -602,7 +616,7 @@ class FingerprintStore:
             cursor.execute(
                 """
                 SELECT * FROM bark_fingerprints
-                WHERE dog_id IS NULL
+                WHERE dog_id IS NULL AND rejection_reason IS NULL
                 ORDER BY timestamp DESC
                 LIMIT ?
                 """,
@@ -619,6 +633,7 @@ class FingerprintStore:
                         match_confidence=row["match_confidence"],
                         cluster_id=row["cluster_id"],
                         evidence_filename=row["evidence_filename"],
+                        rejection_reason=row["rejection_reason"],
                         detection_probability=row["detection_probability"],
                         doa_degrees=row["doa_degrees"],
                         duration_ms=row["duration_ms"],
@@ -677,6 +692,64 @@ class FingerprintStore:
             )
             updated = cursor.rowcount > 0
             conn.commit()
+
+        return updated
+
+    def reject_fingerprint(self, fingerprint_id: str, reason: str) -> bool:
+        """Mark a fingerprint as rejected (false positive).
+
+        Rejected fingerprints are hidden from normal views but data is preserved.
+        Common reasons: "speech", "wind", "bird", "other".
+
+        Args:
+            fingerprint_id: The fingerprint to reject.
+            reason: The rejection reason (e.g., "speech", "wind", "bird", "other").
+
+        Returns:
+            True if updated, False if fingerprint not found.
+        """
+        with self._get_connection() as conn:
+            cursor = conn.cursor()
+            cursor.execute(
+                """
+                UPDATE bark_fingerprints
+                SET rejection_reason = ?, dog_id = NULL, match_confidence = NULL
+                WHERE id = ?
+                """,
+                (reason, fingerprint_id),
+            )
+            updated = cursor.rowcount > 0
+            conn.commit()
+
+        if updated:
+            logger.info("fingerprint_rejected", fingerprint_id=fingerprint_id, reason=reason)
+
+        return updated
+
+    def unreject_fingerprint(self, fingerprint_id: str) -> bool:
+        """Remove rejection status from a fingerprint.
+
+        Args:
+            fingerprint_id: The fingerprint to unreject.
+
+        Returns:
+            True if updated, False if fingerprint not found.
+        """
+        with self._get_connection() as conn:
+            cursor = conn.cursor()
+            cursor.execute(
+                """
+                UPDATE bark_fingerprints
+                SET rejection_reason = NULL
+                WHERE id = ?
+                """,
+                (fingerprint_id,),
+            )
+            updated = cursor.rowcount > 0
+            conn.commit()
+
+        if updated:
+            logger.info("fingerprint_unrejected", fingerprint_id=fingerprint_id)
 
         return updated
 
@@ -752,6 +825,7 @@ class FingerprintStore:
                         match_confidence=row["match_confidence"],
                         cluster_id=row["cluster_id"],
                         evidence_filename=row["evidence_filename"],
+                        rejection_reason=row["rejection_reason"],
                         detection_probability=row["detection_probability"],
                         doa_degrees=row["doa_degrees"],
                         duration_ms=row["duration_ms"],
@@ -893,6 +967,7 @@ class FingerprintStore:
         min_confidence: float | None = None,
         start_date: datetime | None = None,
         end_date: datetime | None = None,
+        rejected: bool | None = None,
     ) -> tuple[list[BarkFingerprint], int]:
         """List fingerprints with filtering and pagination.
 
@@ -904,6 +979,7 @@ class FingerprintStore:
             min_confidence: Minimum match confidence (0-1).
             start_date: Filter by timestamp >= start_date.
             end_date: Filter by timestamp <= end_date.
+            rejected: If True, only rejected; if False, exclude rejected; if None, all.
 
         Returns:
             Tuple of (list of fingerprints, total count matching filter).
@@ -931,6 +1007,13 @@ class FingerprintStore:
         if end_date is not None:
             conditions.append("timestamp <= ?")
             params.append(end_date.isoformat())
+
+        # Rejection filter
+        if rejected is True:
+            conditions.append("rejection_reason IS NOT NULL")
+        elif rejected is False:
+            conditions.append("rejection_reason IS NULL")
+        # If rejected is None, show all (no filter)
 
         where_clause = " AND ".join(conditions) if conditions else "1=1"
 
@@ -966,6 +1049,7 @@ class FingerprintStore:
                         match_confidence=row["match_confidence"],
                         cluster_id=row["cluster_id"],
                         evidence_filename=row["evidence_filename"],
+                        rejection_reason=row["rejection_reason"],
                         detection_probability=row["detection_probability"],
                         doa_degrees=row["doa_degrees"],
                         duration_ms=row["duration_ms"],
@@ -1065,7 +1149,7 @@ class FingerprintStore:
         """Get summary statistics.
 
         Returns:
-            Dictionary with counts of dogs, fingerprints, untagged, etc.
+            Dictionary with counts of dogs, fingerprints, untagged, rejected, etc.
         """
         with self._get_connection() as conn:
             cursor = conn.cursor()
@@ -1076,8 +1160,12 @@ class FingerprintStore:
             cursor.execute("SELECT COUNT(*) FROM bark_fingerprints")
             fingerprint_count = cursor.fetchone()[0]
 
-            cursor.execute("SELECT COUNT(*) FROM bark_fingerprints WHERE dog_id IS NULL")
+            # Untagged excludes rejected fingerprints
+            cursor.execute("SELECT COUNT(*) FROM bark_fingerprints WHERE dog_id IS NULL AND rejection_reason IS NULL")
             untagged_count = cursor.fetchone()[0]
+
+            cursor.execute("SELECT COUNT(*) FROM bark_fingerprints WHERE rejection_reason IS NOT NULL")
+            rejected_count = cursor.fetchone()[0]
 
             cursor.execute("SELECT COUNT(*) FROM clusters")
             cluster_count = cursor.fetchone()[0]
@@ -1086,6 +1174,7 @@ class FingerprintStore:
                 "dogs": dog_count,
                 "fingerprints": fingerprint_count,
                 "untagged": untagged_count,
+                "rejected": rejected_count,
                 "clusters": cluster_count,
             }
 

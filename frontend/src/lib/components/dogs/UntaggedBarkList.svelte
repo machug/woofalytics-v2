@@ -158,12 +158,33 @@
 					/>
 				</span>
 
-				<div class="bark-icon">
-					<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-						<path d="M11 5L6 9H2v6h4l5 4V5z" />
-						<path d="M15.54 8.46a5 5 0 010 7.07" />
-					</svg>
-				</div>
+				{#if bark.evidence_filename}
+					<button
+						class="bark-icon playable"
+						class:playing={currentlyPlaying === bark.id}
+						onclick={(e) => toggleAudio(bark, e)}
+						title={currentlyPlaying === bark.id ? 'Stop playback' : 'Play recording'}
+					>
+						{#if currentlyPlaying === bark.id}
+							<!-- Stop icon -->
+							<svg viewBox="0 0 24 24" fill="currentColor" stroke="none">
+								<rect x="6" y="6" width="12" height="12" rx="1" />
+							</svg>
+						{:else}
+							<!-- Play icon -->
+							<svg viewBox="0 0 24 24" fill="currentColor" stroke="none">
+								<polygon points="6,4 20,12 6,20" />
+							</svg>
+						{/if}
+					</button>
+				{:else}
+					<div class="bark-icon">
+						<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+							<path d="M11 5L6 9H2v6h4l5 4V5z" />
+							<path d="M15.54 8.46a5 5 0 010 7.07" />
+						</svg>
+					</div>
+				{/if}
 
 				<div class="bark-content">
 					<div class="bark-header">
@@ -174,13 +195,7 @@
 					</div>
 					<div class="bark-meta">
 						{#if bark.evidence_filename}
-							<button class="play-link" onclick={(e) => toggleAudio(bark, e)}>
-								{#if currentlyPlaying === bark.id}
-									Stop
-								{:else}
-									Play recording
-								{/if}
-							</button>
+							<span class="has-audio">Has audio</span>
 						{/if}
 						<span>Duration: {bark.duration_ms}ms</span>
 					</div>
@@ -341,12 +356,48 @@
 		align-items: center;
 		justify-content: center;
 		flex-shrink: 0;
+		border: none;
+		padding: 0;
 	}
 
 	.bark-icon svg {
 		width: 16px;
 		height: 16px;
 		color: var(--accent-coral);
+	}
+
+	/* Playable audio button */
+	button.bark-icon.playable {
+		cursor: pointer;
+		background: var(--accent-teal-dim);
+		transition: all var(--transition-fast);
+	}
+
+	button.bark-icon.playable svg {
+		color: var(--accent-teal);
+	}
+
+	button.bark-icon.playable:hover {
+		background: var(--accent-teal);
+		transform: scale(1.05);
+	}
+
+	button.bark-icon.playable:hover svg {
+		color: var(--bg-base);
+	}
+
+	button.bark-icon.playable.playing {
+		background: var(--accent-amber);
+		animation: pulse 1.5s ease-in-out infinite;
+	}
+
+	button.bark-icon.playable.playing svg {
+		color: var(--bg-base);
+	}
+
+	@keyframes pulse {
+		0%, 100% { opacity: 1; }
+		50% { opacity: 0.7; }
 	}
 
 	.bark-content {
@@ -385,18 +436,9 @@
 		color: var(--text-muted);
 	}
 
-	.play-link {
-		background: none;
-		border: none;
-		color: var(--accent-blue);
-		cursor: pointer;
-		font-size: inherit;
-		padding: 0;
-		text-decoration: none;
-	}
-
-	.play-link:hover {
-		text-decoration: underline;
+	.has-audio {
+		color: var(--accent-teal);
+		font-size: 0.65rem;
 	}
 
 	.tag-select {

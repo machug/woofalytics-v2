@@ -11,6 +11,7 @@
 		start_date: string;
 		end_date: string;
 		tagged: boolean | null;
+		rejected: boolean | null;
 		min_confidence: number;
 	}
 
@@ -62,6 +63,22 @@
 		}
 	};
 
+	// Rejected toggle state
+	type RejectedFilter = 'hide' | 'show' | 'only';
+	let rejectedState = $derived<RejectedFilter>(
+		localFilters.rejected === null ? 'hide' : localFilters.rejected ? 'only' : 'show'
+	);
+
+	const handleRejectedToggle = (value: RejectedFilter) => {
+		if (value === 'hide') {
+			localFilters.rejected = null; // API defaults to hiding rejected
+		} else if (value === 'show') {
+			localFilters.rejected = false; // Explicit: show non-rejected
+		} else {
+			localFilters.rejected = true; // Show only rejected
+		}
+	};
+
 	const handleConfidenceChange = (event: Event) => {
 		const target = event.target as HTMLInputElement;
 		localFilters.min_confidence = parseFloat(target.value);
@@ -78,6 +95,7 @@
 			start_date: '',
 			end_date: '',
 			tagged: null,
+			rejected: null,
 			min_confidence: 0
 		};
 		filters = { ...localFilters };
@@ -130,6 +148,29 @@
 					onclick={() => handleTaggedToggle('untagged')}
 				>
 					Untagged
+				</button>
+			</div>
+		</div>
+
+		<!-- Rejected Filter Toggle -->
+		<div class="filter-group" role="group" aria-labelledby="rejected-label">
+			<span id="rejected-label" class="filter-label">Rejected</span>
+			<div class="filter-toggle filter-toggle--small">
+				<button
+					class="filter-toggle-btn"
+					class:active={rejectedState === 'hide'}
+					onclick={() => handleRejectedToggle('hide')}
+					title="Hide rejected fingerprints"
+				>
+					Hide
+				</button>
+				<button
+					class="filter-toggle-btn"
+					class:active={rejectedState === 'only'}
+					onclick={() => handleRejectedToggle('only')}
+					title="Show only rejected fingerprints"
+				>
+					Only
 				</button>
 			</div>
 		</div>

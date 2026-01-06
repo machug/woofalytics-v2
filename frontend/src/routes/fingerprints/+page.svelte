@@ -31,6 +31,7 @@
 		start_date: '',
 		end_date: '',
 		tagged: null,
+		rejected: null,
 		min_confidence: 0
 	});
 
@@ -55,6 +56,7 @@
 		if (currentPage > 1) params.set('page', String(currentPage));
 		if (filters.dog_id) params.set('dog_id', filters.dog_id);
 		if (filters.tagged !== null) params.set('tagged', String(filters.tagged));
+		if (filters.rejected !== null) params.set('rejected', String(filters.rejected));
 		if (filters.start_date) params.set('start_date', filters.start_date);
 		if (filters.end_date) params.set('end_date', filters.end_date);
 		if (filters.min_confidence > 0) params.set('min_confidence', String(filters.min_confidence));
@@ -82,6 +84,11 @@
 		if (taggedParam === 'true') filters.tagged = true;
 		else if (taggedParam === 'false') filters.tagged = false;
 		else filters.tagged = null;
+
+		const rejectedParam = params.get('rejected');
+		if (rejectedParam === 'true') filters.rejected = true;
+		else if (rejectedParam === 'false') filters.rejected = false;
+		else filters.rejected = null;
 
 		sortBy = params.get('sort_by') || 'timestamp';
 		sortOrder = (params.get('sort_order') as 'asc' | 'desc') || 'desc';
@@ -131,6 +138,7 @@
 
 			if (filters.dog_id) queryParams.dog_id = filters.dog_id;
 			if (filters.tagged !== null) queryParams.tagged = filters.tagged;
+			if (filters.rejected !== null) queryParams.rejected = filters.rejected;
 			if (filters.start_date) queryParams.start_date = filters.start_date;
 			if (filters.end_date) queryParams.end_date = filters.end_date;
 			if (filters.min_confidence > 0) queryParams.min_confidence = filters.min_confidence;
@@ -171,6 +179,7 @@
 			start_date: '',
 			end_date: '',
 			tagged: null,
+			rejected: null,
 			min_confidence: 0
 		};
 		currentPage = 1;
@@ -214,11 +223,45 @@
 		}
 	};
 
+	// Handle reject a fingerprint as false positive
+	const handleReject = async (fingerprint: Fingerprint, reason: string) => {
+		try {
+			await api.POST('/api/barks/{bark_id}/reject', {
+				params: { path: { bark_id: fingerprint.id } },
+				body: { reason }
+			});
+
+			// Refresh data
+			loadFingerprints();
+			loadStats();
+		} catch (e) {
+			console.error('Failed to reject bark:', e);
+			error = 'Failed to reject bark. Please try again.';
+		}
+	};
+
+	// Handle unreject a fingerprint (restore from rejected)
+	const handleUnreject = async (fingerprint: Fingerprint) => {
+		try {
+			await api.POST('/api/barks/{bark_id}/unreject', {
+				params: { path: { bark_id: fingerprint.id } }
+			});
+
+			// Refresh data
+			loadFingerprints();
+			loadStats();
+		} catch (e) {
+			console.error('Failed to restore bark:', e);
+			error = 'Failed to restore bark. Please try again.';
+		}
+	};
+
 	// Computed stats display values
-	// API returns { dogs, fingerprints, untagged, clusters }
+	// API returns { dogs, fingerprints, untagged, rejected, clusters }
 	const statsTotal = $derived(stats?.fingerprints ?? 0);
-	const statsTagged = $derived((stats?.fingerprints ?? 0) - (stats?.untagged ?? 0));
+	const statsTagged = $derived((stats?.fingerprints ?? 0) - (stats?.untagged ?? 0) - (stats?.rejected ?? 0));
 	const statsUntagged = $derived(stats?.untagged ?? 0);
+	const statsRejected = $derived(stats?.rejected ?? 0);
 	const statsDogs = $derived(stats?.dogs ?? 0);
 </script>
 
@@ -252,6 +295,10 @@
 		<div class="stat-pill stat-pill--untagged">
 			<span class="stat-pill-value">{statsUntagged}</span>
 			<span class="stat-pill-label">Untagged</span>
+		</div>
+		<div class="stat-pill stat-pill--rejected">
+			<span class="stat-pill-value">{statsRejected}</span>
+			<span class="stat-pill-label">Rejected</span>
 		</div>
 		<div class="stat-pill stat-pill--dogs">
 			<span class="stat-pill-value">{statsDogs}</span>
@@ -303,6 +350,8 @@
 					{sortOrder}
 					onSort={handleSort}
 					onUntag={handleUntag}
+					onReject={handleReject}
+					onUnreject={handleUnreject}
 					{isLoading}
 				/>
 			</div>
@@ -396,6 +445,9 @@
 	}
 	.stat-pill--untagged .stat-pill-value {
 		color: var(--accent-coral);
+	}
+	.stat-pill--rejected .stat-pill-value {
+		color: #64748b;
 	}
 	.stat-pill--dogs .stat-pill-value {
 		color: var(--accent-blue);

@@ -13,13 +13,35 @@
 		sortOrder: 'asc' | 'desc';
 		onSort: (column: string) => void;
 		onUntag?: (fingerprint: Fingerprint) => void;
+		onReject?: (fingerprint: Fingerprint, reason: string) => void;
+		onUnreject?: (fingerprint: Fingerprint) => void;
 		isLoading?: boolean;
 	}
 
-	let { fingerprints, sortBy, sortOrder, onSort, onUntag, isLoading = false }: Props = $props();
+	let { fingerprints, sortBy, sortOrder, onSort, onUntag, onReject, onUnreject, isLoading = false }: Props = $props();
 
 	// Track which row is expanded for audio playback
 	let expandedRow: string | null = $state(null);
+
+	// Track which row has reject dropdown open
+	let rejectDropdownRow: string | null = $state(null);
+
+	// Common rejection reasons
+	const rejectReasons = [
+		{ value: 'speech', label: 'Speech' },
+		{ value: 'wind', label: 'Wind' },
+		{ value: 'bird', label: 'Bird' },
+		{ value: 'other', label: 'Other' }
+	];
+
+	const toggleRejectDropdown = (id: string) => {
+		rejectDropdownRow = rejectDropdownRow === id ? null : id;
+	};
+
+	const handleReject = (fp: Fingerprint, reason: string) => {
+		rejectDropdownRow = null;
+		onReject?.(fp, reason);
+	};
 
 	// Column definitions
 	const columns = [
@@ -134,38 +156,86 @@
 						<td class="mono">{formatDuration(fp.duration_ms)}</td>
 						<td class="mono">{formatPitch(fp.pitch_hz)}</td>
 						<td class="actions-cell">
-							{#if fp.evidence_filename}
-								<button
-									class="action-btn action-btn--play"
-									class:active={expandedRow === fp.id}
-									onclick={() => toggleRow(fp.id)}
-									title={expandedRow === fp.id ? 'Close player' : 'Play recording'}
-								>
-									{#if expandedRow === fp.id}
+							{#if fp.rejection_reason}
+								<!-- Rejected fingerprint - show restore button -->
+								<span class="rejection-badge" title="Rejected: {fp.rejection_reason}">
+									{fp.rejection_reason}
+								</span>
+								{#if onUnreject}
+									<button
+										class="action-btn action-btn--restore"
+										onclick={() => onUnreject(fp)}
+										title="Restore this bark"
+									>
 										<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-											<line x1="18" y1="6" x2="6" y2="18" />
-											<line x1="6" y1="6" x2="18" y2="18" />
+											<path d="M3 12a9 9 0 1 0 9-9 9.75 9.75 0 0 0-6.74 2.74L3 8" />
+											<path d="M3 3v5h5" />
 										</svg>
-									{:else}
-										<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-											<polygon points="5 3 19 12 5 21 5 3" />
-										</svg>
-									{/if}
-								</button>
+									</button>
+								{/if}
 							{:else}
-								<span class="no-audio">--</span>
-							{/if}
-							{#if fp.dog_id && onUntag}
-								<button
-									class="action-btn action-btn--untag"
-									onclick={() => onUntag(fp)}
-									title="Untag this bark"
-								>
-									<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-										<path d="M18.36 6.64a9 9 0 11-12.73 0" />
-										<line x1="12" y1="2" x2="12" y2="12" />
-									</svg>
-								</button>
+								<!-- Normal fingerprint -->
+								{#if fp.evidence_filename}
+									<button
+										class="action-btn action-btn--play"
+										class:active={expandedRow === fp.id}
+										onclick={() => toggleRow(fp.id)}
+										title={expandedRow === fp.id ? 'Close player' : 'Play recording'}
+									>
+										{#if expandedRow === fp.id}
+											<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+												<line x1="18" y1="6" x2="6" y2="18" />
+												<line x1="6" y1="6" x2="18" y2="18" />
+											</svg>
+										{:else}
+											<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+												<polygon points="5 3 19 12 5 21 5 3" />
+											</svg>
+										{/if}
+									</button>
+								{:else}
+									<span class="no-audio">--</span>
+								{/if}
+								{#if fp.dog_id && onUntag}
+									<button
+										class="action-btn action-btn--untag"
+										onclick={() => onUntag(fp)}
+										title="Untag this bark"
+									>
+										<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+											<path d="M18.36 6.64a9 9 0 11-12.73 0" />
+											<line x1="12" y1="2" x2="12" y2="12" />
+										</svg>
+									</button>
+								{/if}
+								{#if onReject && !fp.dog_id}
+									<div class="reject-dropdown-wrapper">
+										<button
+											class="action-btn action-btn--reject"
+											class:active={rejectDropdownRow === fp.id}
+											onclick={() => toggleRejectDropdown(fp.id)}
+											title="Dismiss as false positive"
+										>
+											<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+												<circle cx="12" cy="12" r="10" />
+												<line x1="15" y1="9" x2="9" y2="15" />
+												<line x1="9" y1="9" x2="15" y2="15" />
+											</svg>
+										</button>
+										{#if rejectDropdownRow === fp.id}
+											<div class="reject-dropdown">
+												{#each rejectReasons as reason}
+													<button
+														class="reject-option"
+														onclick={() => handleReject(fp, reason.value)}
+													>
+														{reason.label}
+													</button>
+												{/each}
+											</div>
+										{/if}
+									</div>
+								{/if}
 							{/if}
 						</td>
 					</tr>
@@ -350,6 +420,19 @@
 		background: var(--accent-coral-dim);
 	}
 
+	.action-btn--reject:hover,
+	.action-btn--reject.active {
+		border-color: var(--accent-coral);
+		color: var(--accent-coral);
+		background: var(--accent-coral-dim);
+	}
+
+	.action-btn--restore:hover {
+		border-color: var(--accent-teal);
+		color: var(--accent-teal);
+		background: rgba(20, 184, 166, 0.12);
+	}
+
 	.action-btn svg {
 		width: 14px;
 		height: 14px;
@@ -364,6 +447,59 @@
 	.no-audio {
 		color: var(--text-muted);
 		font-size: 0.8rem;
+	}
+
+	/* Rejection Badge */
+	.rejection-badge {
+		display: inline-flex;
+		padding: 2px 8px;
+		background: rgba(239, 68, 68, 0.12);
+		color: #ef4444;
+		border-radius: var(--radius-full);
+		font-size: 0.7rem;
+		font-weight: 600;
+		text-transform: capitalize;
+	}
+
+	/* Reject Dropdown */
+	.reject-dropdown-wrapper {
+		position: relative;
+	}
+
+	.reject-dropdown {
+		position: absolute;
+		top: 100%;
+		right: 0;
+		margin-top: 4px;
+		background: var(--bg-surface);
+		border: 1px solid var(--border-default);
+		border-radius: var(--radius-md);
+		box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
+		z-index: 100;
+		min-width: 100px;
+		overflow: hidden;
+	}
+
+	.reject-option {
+		display: block;
+		width: 100%;
+		padding: 8px 12px;
+		background: transparent;
+		border: none;
+		text-align: left;
+		font-size: 0.8rem;
+		color: var(--text-secondary);
+		cursor: pointer;
+		transition: all var(--transition-fast);
+	}
+
+	.reject-option:hover {
+		background: var(--accent-coral-dim);
+		color: var(--accent-coral);
+	}
+
+	.reject-option:not(:last-child) {
+		border-bottom: 1px solid var(--border-muted);
 	}
 
 	/* Loading State */
