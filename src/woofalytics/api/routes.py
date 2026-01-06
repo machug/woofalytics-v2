@@ -17,6 +17,7 @@ from typing import Annotated
 from fastapi import APIRouter, Depends, HTTPException, Query, Request
 from fastapi.responses import FileResponse, Response
 
+from woofalytics.api.routes_export import router as export_router
 from woofalytics.api.routes_fingerprint import router as fingerprint_router
 from woofalytics.api.schemas import (
     BarkEventSchema,
@@ -47,6 +48,9 @@ router = APIRouter(tags=["api"])
 
 # Include fingerprint routes for dog profile and bark tagging management
 router.include_router(fingerprint_router)
+
+# Include export routes for CSV/JSON data export
+router.include_router(export_router)
 
 
 # Dependency injection
