@@ -96,6 +96,11 @@ class CLAPConfig:
     min_duration_ms: float = 80
     max_duration_ms: float = 1500
 
+    # HPSS pre-filter: reject predominantly percussive sounds (keyboard clicks)
+    # Uses Harmonic-Percussive Source Separation to measure harmonic vs percussive energy
+    hpss_enabled: bool = True
+    min_harmonic_ratio: float = 0.5  # Barks > 2.0, clicks < 0.3
+
     # Device for inference
     device: str = "cpu"
 
@@ -137,6 +142,9 @@ class CLAPDetector:
 
         # Temporal duration validator - initialized on load()
         self._temporal_validator: Any = None
+
+        # Spectral pre-filter (HPSS) - initialized on load()
+        self._spectral_prefilter: Any = None
 
     def load(self) -> None:
         """Load the CLAP model and pre-compute text embeddings.
@@ -206,6 +214,13 @@ class CLAPDetector:
                 max_duration_ms=self.config.max_duration_ms,
             )
 
+        # Initialize HPSS spectral pre-filter
+        if self.config.hpss_enabled:
+            from woofalytics.detection.features import SpectralPreFilter
+            self._spectral_prefilter = SpectralPreFilter(
+                min_harmonic_ratio=self.config.min_harmonic_ratio,
+            )
+
         logger.info(
             "clap_model_loaded",
             positive_labels=self.config.positive_labels,
@@ -220,6 +235,8 @@ class CLAPDetector:
             duration_validation_enabled=self.config.duration_validation_enabled,
             min_duration_ms=self.config.min_duration_ms,
             max_duration_ms=self.config.max_duration_ms,
+            hpss_enabled=self.config.hpss_enabled,
+            min_harmonic_ratio=self.config.min_harmonic_ratio,
             text_embeddings_cached=True,
             num_cached_labels=len(self._all_labels),
         )
@@ -398,7 +415,18 @@ class CLAPDetector:
             label_scores["_duration_ms"] = duration_ms
             label_scores["_duration_valid"] = 1.0 if duration_valid else 0.0
 
-        # Apply detection logic with speech, percussive, bird veto, margin, and duration check
+        # Check HPSS - reject predominantly percussive sounds (keyboard clicks)
+        hpss_valid = True
+        harmonic_ratio = 0.0
+        if self._spectral_prefilter is not None:
+            hpss_valid, harmonic_ratio = self._spectral_prefilter.is_harmonic(
+                audio, sample_rate
+            )
+            # Add HPSS results to label_scores for debugging/monitoring
+            label_scores["_harmonic_ratio"] = harmonic_ratio
+            label_scores["_hpss_valid"] = 1.0 if hpss_valid else 0.0
+
+        # Apply detection logic with speech, percussive, bird veto, margin, duration, and HPSS check
         # This is the "raw" detection before rolling window confirmation
         raw_detection = (
             bark_prob >= self.config.threshold
@@ -407,6 +435,7 @@ class CLAPDetector:
             and not bird_detected
             and margin_met
             and duration_valid
+            and hpss_valid
         )
 
         # Reset rolling window on strong non-bark detection
@@ -552,6 +581,23 @@ class CLAPDetector:
                 duration_ms=f"{duration_ms:.1f}",
                 min_duration_ms=self.config.min_duration_ms,
                 max_duration_ms=self.config.max_duration_ms,
+            )
+
+        # Log when HPSS check fails (sound is predominantly percussive)
+        if (
+            bark_prob >= self.config.threshold
+            and not speech_detected
+            and not percussive_detected
+            and not bird_detected
+            and margin_met
+            and duration_valid
+            and not hpss_valid
+        ):
+            logger.debug(
+                "bark_vetoed_by_hpss",
+                bark_prob=f"{bark_prob:.3f}",
+                harmonic_ratio=f"{harmonic_ratio:.3f}",
+                min_harmonic_ratio=self.config.min_harmonic_ratio,
             )
 
         # Log rolling window state when raw detection differs from final

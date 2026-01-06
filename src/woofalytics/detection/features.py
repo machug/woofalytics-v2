@@ -262,3 +262,85 @@ class TemporalValidator:
 
         # Duration is offset - onset
         return max(0, offset - onset)
+
+
+class SpectralPreFilter:
+    """Pre-filter using Harmonic-Percussive Source Separation (HPSS).
+
+    Uses librosa's HPSS algorithm to separate audio into harmonic and
+    percussive components. Dog barks have significant harmonic content
+    (tonal, horizontal lines in spectrogram) while keyboard clicks are
+    purely percussive (transient, vertical lines in spectrogram).
+
+    This filter rejects audio that is predominantly percussive, allowing
+    CLAP inference to be skipped for obvious non-bark sounds.
+    """
+
+    def __init__(
+        self,
+        min_harmonic_ratio: float = 0.5,
+        margin: float = 3.0,
+    ) -> None:
+        """Initialize spectral pre-filter.
+
+        Args:
+            min_harmonic_ratio: Minimum ratio of harmonic to percussive energy
+                                required to pass. Barks typically have ratio > 2.0,
+                                keyboard clicks have ratio < 0.3.
+            margin: HPSS margin parameter - higher values give better separation
+                    but require more computation. Default 3.0 is good balance.
+        """
+        self.min_harmonic_ratio = min_harmonic_ratio
+        self.margin = margin
+
+    def is_harmonic(
+        self,
+        audio: np.ndarray,
+        sample_rate: int,
+    ) -> tuple[bool, float]:
+        """Check if audio has sufficient harmonic content to be a bark candidate.
+
+        Args:
+            audio: Audio array of shape (samples,) or (channels, samples).
+                   Should be float32 in range [-1, 1] or int16.
+            sample_rate: Sample rate of the audio.
+
+        Returns:
+            Tuple of:
+            - is_harmonic: True if harmonic ratio exceeds threshold
+            - harmonic_ratio: Ratio of harmonic to percussive energy
+        """
+        import librosa
+
+        # Convert to mono if stereo
+        if audio.ndim == 2:
+            audio = audio.mean(axis=0)
+
+        # Convert int16 to float32 if needed
+        if audio.dtype == np.int16:
+            audio = audio.astype(np.float32) / 32768.0
+
+        # Ensure float32
+        audio = audio.astype(np.float32)
+
+        # Resample to 22050 Hz for librosa (its default and most efficient)
+        if sample_rate != 22050:
+            audio = librosa.resample(audio, orig_sr=sample_rate, target_sr=22050)
+
+        # Run HPSS to separate harmonic and percussive components
+        y_harmonic, y_percussive = librosa.effects.hpss(
+            audio,
+            margin=self.margin,
+        )
+
+        # Calculate energy in each component
+        harmonic_energy = np.sum(y_harmonic ** 2)
+        percussive_energy = np.sum(y_percussive ** 2)
+
+        # Compute ratio (with small epsilon to avoid division by zero)
+        harmonic_ratio = harmonic_energy / (percussive_energy + 1e-10)
+
+        # Check if harmonic content is sufficient
+        is_harmonic = harmonic_ratio >= self.min_harmonic_ratio
+
+        return is_harmonic, float(harmonic_ratio)
