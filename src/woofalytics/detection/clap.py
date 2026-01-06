@@ -90,6 +90,12 @@ class CLAPConfig:
     # Prevents rapid-fire 10x detections from a single sound
     detection_cooldown_frames: int = 5
 
+    # Duration validation: reject events too short/long to be barks
+    # Keyboard clicks are 10-50ms, dog barks are 100-1500ms
+    duration_validation_enabled: bool = True
+    min_duration_ms: float = 80
+    max_duration_ms: float = 1500
+
     # Device for inference
     device: str = "cpu"
 
@@ -128,6 +134,9 @@ class CLAPDetector:
 
         # Cached text embeddings - computed once on load()
         self._cached_text_embeddings: Any = None
+
+        # Temporal duration validator - initialized on load()
+        self._temporal_validator: Any = None
 
     def load(self) -> None:
         """Load the CLAP model and pre-compute text embeddings.
@@ -189,6 +198,14 @@ class CLAPDetector:
         # Pre-compute and cache text embeddings for all labels
         self._cache_text_embeddings()
 
+        # Initialize temporal duration validator
+        if self.config.duration_validation_enabled:
+            from woofalytics.detection.features import TemporalValidator
+            self._temporal_validator = TemporalValidator(
+                min_duration_ms=self.config.min_duration_ms,
+                max_duration_ms=self.config.max_duration_ms,
+            )
+
         logger.info(
             "clap_model_loaded",
             positive_labels=self.config.positive_labels,
@@ -200,6 +217,9 @@ class CLAPDetector:
             percussive_veto_threshold=self.config.percussive_veto_threshold,
             bird_veto_threshold=self.config.bird_veto_threshold,
             detection_cooldown_frames=self.config.detection_cooldown_frames,
+            duration_validation_enabled=self.config.duration_validation_enabled,
+            min_duration_ms=self.config.min_duration_ms,
+            max_duration_ms=self.config.max_duration_ms,
             text_embeddings_cached=True,
             num_cached_labels=len(self._all_labels),
         )
@@ -367,7 +387,18 @@ class CLAPDetector:
         )
         margin_met = (max_positive_score - best_non_bark_score) >= self.config.confidence_margin
 
-        # Apply detection logic with speech, percussive, bird veto, and margin check
+        # Check duration validation - reject events too short/long to be barks
+        duration_valid = True
+        duration_ms = 0.0
+        if self._temporal_validator is not None:
+            duration_valid, duration_ms = self._temporal_validator.validate(
+                audio, sample_rate
+            )
+            # Add duration to label_scores for debugging/monitoring
+            label_scores["_duration_ms"] = duration_ms
+            label_scores["_duration_valid"] = 1.0 if duration_valid else 0.0
+
+        # Apply detection logic with speech, percussive, bird veto, margin, and duration check
         # This is the "raw" detection before rolling window confirmation
         raw_detection = (
             bark_prob >= self.config.threshold
@@ -375,6 +406,7 @@ class CLAPDetector:
             and not percussive_detected
             and not bird_detected
             and margin_met
+            and duration_valid
         )
 
         # Reset rolling window on strong non-bark detection
@@ -503,6 +535,23 @@ class CLAPDetector:
                 best_non_bark_score=f"{best_non_bark_score:.3f}",
                 actual_margin=f"{max_positive_score - best_non_bark_score:.3f}",
                 required_margin=self.config.confidence_margin,
+            )
+
+        # Log when duration check fails (event too short/long)
+        if (
+            bark_prob >= self.config.threshold
+            and not speech_detected
+            and not percussive_detected
+            and not bird_detected
+            and margin_met
+            and not duration_valid
+        ):
+            logger.debug(
+                "bark_vetoed_by_duration",
+                bark_prob=f"{bark_prob:.3f}",
+                duration_ms=f"{duration_ms:.1f}",
+                min_duration_ms=self.config.min_duration_ms,
+                max_duration_ms=self.config.max_duration_ms,
             )
 
         # Log rolling window state when raw detection differs from final

@@ -134,3 +134,131 @@ def create_default_extractor(source_sample_rate: int = 44100) -> FeatureExtracto
         frame_length_ms=25,
         frame_shift_ms=10,
     )
+
+
+class TemporalValidator:
+    """Validate audio events based on temporal duration.
+
+    Rejects events that are too short (keyboard clicks ~10-50ms) or too long
+    to be real dog barks. Dog barks typically range from 100-1500ms.
+
+    Uses the amplitude envelope to measure the duration of sound events,
+    from onset (when energy rises above threshold) to offset (when it falls below).
+    """
+
+    def __init__(
+        self,
+        min_duration_ms: float = 80,
+        max_duration_ms: float = 1500,
+        onset_threshold: float = 0.1,
+        offset_threshold: float = 0.05,
+    ) -> None:
+        """Initialize temporal validator.
+
+        Args:
+            min_duration_ms: Minimum event duration in milliseconds.
+                             Keyboard clicks are 10-50ms, barks are 100ms+.
+            max_duration_ms: Maximum event duration in milliseconds.
+                             Very long sounds are unlikely to be single barks.
+            onset_threshold: Amplitude threshold (0-1) for detecting event start.
+            offset_threshold: Amplitude threshold (0-1) for detecting event end.
+        """
+        self.min_duration_ms = min_duration_ms
+        self.max_duration_ms = max_duration_ms
+        self.onset_threshold = onset_threshold
+        self.offset_threshold = offset_threshold
+
+    def validate(
+        self,
+        audio: np.ndarray,
+        sample_rate: int,
+    ) -> tuple[bool, float]:
+        """Validate audio event duration.
+
+        Args:
+            audio: Audio array of shape (samples,) or (channels, samples).
+                   Should be float32 in range [-1, 1] or int16.
+            sample_rate: Sample rate of the audio.
+
+        Returns:
+            Tuple of:
+            - is_valid: True if duration is within acceptable range
+            - duration_ms: Measured event duration in milliseconds
+        """
+        # Convert to mono if stereo
+        if audio.ndim == 2:
+            audio = audio.mean(axis=0)
+
+        # Convert int16 to float32 if needed
+        if audio.dtype == np.int16:
+            audio = audio.astype(np.float32) / 32768.0
+
+        # Extract amplitude envelope using Hilbert transform
+        envelope = self._extract_envelope(audio)
+
+        # Normalize envelope to 0-1 range
+        max_amp = envelope.max()
+        if max_amp > 0:
+            envelope = envelope / max_amp
+
+        # Measure duration from onset to offset
+        duration_samples = self._measure_duration(envelope)
+        duration_ms = (duration_samples / sample_rate) * 1000.0
+
+        # Validate against thresholds
+        is_valid = self.min_duration_ms <= duration_ms <= self.max_duration_ms
+
+        return is_valid, duration_ms
+
+    def _extract_envelope(self, audio: np.ndarray) -> np.ndarray:
+        """Extract amplitude envelope using Hilbert transform.
+
+        The Hilbert transform gives us the analytic signal, whose absolute
+        value is the instantaneous amplitude (envelope) of the signal.
+
+        Args:
+            audio: 1D audio array.
+
+        Returns:
+            Amplitude envelope array.
+        """
+        from scipy.signal import hilbert
+
+        # Compute analytic signal and take absolute value for envelope
+        analytic_signal = hilbert(audio)
+        envelope = np.abs(analytic_signal)
+
+        # Apply light smoothing to reduce noise in envelope
+        # Using a simple moving average with ~5ms window
+        window_size = max(1, int(len(audio) * 0.005))
+        if window_size > 1:
+            kernel = np.ones(window_size) / window_size
+            envelope = np.convolve(envelope, kernel, mode='same')
+
+        return envelope
+
+    def _measure_duration(self, envelope: np.ndarray) -> int:
+        """Measure event duration from onset to offset.
+
+        Args:
+            envelope: Normalized amplitude envelope (0-1 range).
+
+        Returns:
+            Duration in samples from first onset to last offset.
+        """
+        # Find onset: first sample above onset threshold
+        onset_indices = np.where(envelope >= self.onset_threshold)[0]
+        if len(onset_indices) == 0:
+            return 0  # No significant event detected
+
+        onset = onset_indices[0]
+
+        # Find offset: last sample above offset threshold
+        offset_indices = np.where(envelope >= self.offset_threshold)[0]
+        if len(offset_indices) == 0:
+            return 0
+
+        offset = offset_indices[-1]
+
+        # Duration is offset - onset
+        return max(0, offset - onset)
