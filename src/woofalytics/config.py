@@ -237,6 +237,31 @@ class EvidenceConfig(BaseModel):
     )
 
 
+class RateLimitConfig(BaseModel):
+    """Rate limiting configuration to prevent DoS attacks."""
+
+    enabled: bool = Field(
+        default=True,
+        description="Enable rate limiting on API endpoints.",
+    )
+    read_limit: str = Field(
+        default="120/minute",
+        description="Rate limit for read operations (GET requests).",
+    )
+    write_limit: str = Field(
+        default="30/minute",
+        description="Rate limit for write operations (POST/PUT/DELETE).",
+    )
+    download_limit: str = Field(
+        default="20/minute",
+        description="Rate limit for evidence file downloads.",
+    )
+    websocket_limit: str = Field(
+        default="10/minute",
+        description="Rate limit for new WebSocket connections.",
+    )
+
+
 class ServerConfig(BaseModel):
     """Web server configuration."""
 
@@ -257,6 +282,10 @@ class ServerConfig(BaseModel):
     cors_origins: list[str] | None = Field(
         default=None,
         description="Allowed CORS origins. Defaults to localhost only if not set.",
+    )
+    rate_limit: RateLimitConfig = Field(
+        default_factory=RateLimitConfig,
+        description="Rate limiting configuration.",
     )
 
 

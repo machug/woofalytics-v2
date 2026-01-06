@@ -14,7 +14,6 @@ from typing import Annotated
 
 import structlog
 from fastapi import APIRouter, Depends, HTTPException, Query, Request
-
 from woofalytics.api.schemas_fingerprint import (
     BarkFingerprintSchema,
     BulkTagRequestSchema,

@@ -224,8 +224,13 @@ def api_client(
     """Create a test client with mocked dependencies."""
     from woofalytics.api.routes import router
     from woofalytics.api.websocket import ConnectionManager
+    from woofalytics.api.ratelimit import setup_rate_limiting
 
     app = FastAPI()
+
+    # Set up rate limiting
+    setup_rate_limiting(app)
+
     app.include_router(router, prefix="/api")
 
     # Set up app state
@@ -911,3 +916,154 @@ class TestMetricsEndpoint:
             response = api_client.get("/api/metrics")
             assert response.status_code == 200
             assert "text/plain" in response.headers["content-type"]
+
+
+# --- Rate Limiting Tests ---
+
+
+class TestRateLimiting:
+    """Tests for rate limiting middleware."""
+
+    def test_rate_limit_headers_present(self, api_client: TestClient) -> None:
+        """Test that rate limit headers are included in responses."""
+        response = api_client.get("/api/health")
+        assert response.status_code == 200
+
+        # Middleware should add rate limit headers
+        assert "X-RateLimit-Limit" in response.headers
+        assert "X-RateLimit-Remaining" in response.headers
+        assert "X-RateLimit-Reset" in response.headers
+
+    def test_rate_limit_exceeded(
+        self,
+        api_settings: Settings,
+        mock_detector: MagicMock,
+        mock_evidence: MagicMock,
+        mock_fingerprint_store: MagicMock,
+    ) -> None:
+        """Test that rate limiting returns 429 when exceeded."""
+        from woofalytics.api.routes import router
+        from woofalytics.api.websocket import ConnectionManager
+        from woofalytics.api.ratelimit import (
+            setup_rate_limiting,
+            configure_rate_limits,
+            RateLimitMiddleware,
+        )
+
+        app = FastAPI()
+
+        # Configure very low rate limit for testing
+        configure_rate_limits(read="3/minute", enabled=True)
+        setup_rate_limiting(app)
+
+        app.include_router(router, prefix="/api")
+
+        # Set up app state
+        app.state.settings = api_settings
+        app.state.detector = mock_detector
+        app.state.evidence = mock_evidence
+        app.state.fingerprint_store = mock_fingerprint_store
+        app.state.ws_manager = ConnectionManager()
+
+        with TestClient(app) as client:
+            # First requests should succeed
+            for i in range(3):
+                response = client.get("/api/health")
+                assert response.status_code == 200, f"Request {i+1} should succeed"
+
+            # Next request should be rate limited
+            response = client.get("/api/health")
+            assert response.status_code == 429
+            assert "Rate limit exceeded" in response.json()["detail"]
+            assert "Retry-After" in response.headers
+
+        # Reset rate limits for other tests
+        configure_rate_limits(read="120/minute", enabled=True)
+
+    def test_rate_limiting_can_be_disabled(
+        self,
+        api_settings: Settings,
+        mock_detector: MagicMock,
+        mock_evidence: MagicMock,
+        mock_fingerprint_store: MagicMock,
+    ) -> None:
+        """Test that rate limiting can be disabled via configuration."""
+        from woofalytics.api.routes import router
+        from woofalytics.api.websocket import ConnectionManager
+        from woofalytics.api.ratelimit import (
+            setup_rate_limiting,
+            configure_rate_limits,
+        )
+
+        app = FastAPI()
+
+        # Disable rate limiting
+        configure_rate_limits(read="1/minute", enabled=False)
+        setup_rate_limiting(app)
+
+        app.include_router(router, prefix="/api")
+
+        # Set up app state
+        app.state.settings = api_settings
+        app.state.detector = mock_detector
+        app.state.evidence = mock_evidence
+        app.state.fingerprint_store = mock_fingerprint_store
+        app.state.ws_manager = ConnectionManager()
+
+        with TestClient(app) as client:
+            # All requests should succeed when disabled
+            for i in range(5):
+                response = client.get("/api/health")
+                assert response.status_code == 200
+
+        # Re-enable rate limits for other tests
+        configure_rate_limits(read="120/minute", enabled=True)
+
+    def test_write_operations_have_lower_limit(
+        self,
+        api_settings: Settings,
+        mock_detector: MagicMock,
+        mock_evidence: MagicMock,
+        mock_fingerprint_store: MagicMock,
+    ) -> None:
+        """Test that POST/PUT/DELETE use write limits (lower than read)."""
+        from woofalytics.api.routes import router
+        from woofalytics.api.websocket import ConnectionManager
+        from woofalytics.api.ratelimit import (
+            setup_rate_limiting,
+            configure_rate_limits,
+        )
+
+        app = FastAPI()
+
+        # Set read high, write low
+        configure_rate_limits(read="100/minute", write="2/minute", enabled=True)
+        setup_rate_limiting(app)
+
+        app.include_router(router, prefix="/api")
+
+        # Set up app state
+        app.state.settings = api_settings
+        app.state.detector = mock_detector
+        app.state.evidence = mock_evidence
+        app.state.fingerprint_store = mock_fingerprint_store
+        app.state.ws_manager = ConnectionManager()
+
+        with TestClient(app) as client:
+            # Write operations should hit limit quickly
+            for i in range(2):
+                response = client.post(
+                    "/api/dogs",
+                    json={"name": f"Dog {i}", "notes": "test"},
+                )
+                assert response.status_code == 201
+
+            # Third POST should be rate limited
+            response = client.post(
+                "/api/dogs",
+                json={"name": "Dog 3", "notes": "test"},
+            )
+            assert response.status_code == 429
+
+        # Reset rate limits
+        configure_rate_limits(read="120/minute", write="30/minute", enabled=True)
