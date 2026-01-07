@@ -256,6 +256,22 @@
 		}
 	};
 
+	// Handle confirm a fingerprint as a real bark
+	const handleConfirm = async (fingerprint: Fingerprint) => {
+		try {
+			await api.POST('/api/barks/{bark_id}/confirm', {
+				params: { path: { bark_id: fingerprint.id } }
+			});
+
+			// Refresh data
+			loadFingerprints();
+			loadStats();
+		} catch (e) {
+			console.error('Failed to confirm bark:', e);
+			error = 'Failed to confirm bark. Please try again.';
+		}
+	};
+
 	// Computed stats display values
 	// API returns { dogs, fingerprints, untagged, rejected, clusters }
 	const statsTotal = $derived(stats?.fingerprints ?? 0);
@@ -352,6 +368,7 @@
 					onUntag={handleUntag}
 					onReject={handleReject}
 					onUnreject={handleUnreject}
+					onConfirm={handleConfirm}
 					{isLoading}
 				/>
 			</div>

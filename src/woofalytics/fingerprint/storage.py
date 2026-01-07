@@ -753,6 +753,67 @@ class FingerprintStore:
 
         return updated
 
+    def confirm_fingerprint(self, fingerprint_id: str) -> bool:
+        """Confirm a fingerprint as a real bark (even if dog is unknown).
+
+        This marks the fingerprint as reviewed and confirmed to be a bark,
+        distinguishing it from unreviewed fingerprints.
+
+        Args:
+            fingerprint_id: The fingerprint to confirm.
+
+        Returns:
+            True if updated, False if fingerprint not found.
+        """
+        now = datetime.now(timezone.utc).isoformat()
+
+        with self._get_connection() as conn:
+            cursor = conn.cursor()
+            cursor.execute(
+                """
+                UPDATE bark_fingerprints
+                SET confirmed = 1, confirmed_at = ?, rejection_reason = NULL
+                WHERE id = ?
+                """,
+                (now, fingerprint_id),
+            )
+            updated = cursor.rowcount > 0
+            conn.commit()
+
+        if updated:
+            logger.info("fingerprint_confirmed", fingerprint_id=fingerprint_id)
+
+        return updated
+
+    def unconfirm_fingerprint(self, fingerprint_id: str) -> bool:
+        """Remove confirmation status from a fingerprint.
+
+        This returns the fingerprint to an unreviewed state.
+
+        Args:
+            fingerprint_id: The fingerprint to unconfirm.
+
+        Returns:
+            True if updated, False if fingerprint not found.
+        """
+        with self._get_connection() as conn:
+            cursor = conn.cursor()
+            cursor.execute(
+                """
+                UPDATE bark_fingerprints
+                SET confirmed = NULL, confirmed_at = NULL
+                WHERE id = ?
+                """,
+                (fingerprint_id,),
+            )
+            updated = cursor.rowcount > 0
+            conn.commit()
+
+        if updated:
+            logger.info("fingerprint_unconfirmed", fingerprint_id=fingerprint_id)
+
+        return updated
+
     def link_evidence_to_fingerprints(
         self,
         evidence_filename: str,

@@ -15,10 +15,11 @@
 		onUntag?: (fingerprint: Fingerprint) => void;
 		onReject?: (fingerprint: Fingerprint, reason: string) => void;
 		onUnreject?: (fingerprint: Fingerprint) => void;
+		onConfirm?: (fingerprint: Fingerprint) => void;
 		isLoading?: boolean;
 	}
 
-	let { fingerprints, sortBy, sortOrder, onSort, onUntag, onReject, onUnreject, isLoading = false }: Props = $props();
+	let { fingerprints, sortBy, sortOrder, onSort, onUntag, onReject, onUnreject, onConfirm, isLoading = false }: Props = $props();
 
 	// Track which row is expanded for audio playback
 	let expandedRow: string | null = $state(null);
@@ -31,6 +32,10 @@
 		{ value: 'speech', label: 'Speech' },
 		{ value: 'wind', label: 'Wind' },
 		{ value: 'bird', label: 'Bird' },
+		{ value: 'traffic', label: 'Traffic' },
+		{ value: 'music', label: 'Music' },
+		{ value: 'machinery', label: 'Machinery' },
+		{ value: 'siren', label: 'Siren' },
 		{ value: 'other', label: 'Other' }
 	];
 
@@ -208,33 +213,46 @@
 										</svg>
 									</button>
 								{/if}
-								{#if onReject && !fp.dog_id}
-									<div class="reject-dropdown-wrapper">
+								{#if !fp.dog_id}
+									{#if onConfirm && !fp.confirmed}
 										<button
-											class="action-btn action-btn--reject"
-											class:active={rejectDropdownRow === fp.id}
-											onclick={() => toggleRejectDropdown(fp.id)}
-											title="Dismiss as false positive"
+											class="action-btn action-btn--confirm"
+											onclick={() => onConfirm(fp)}
+											title="Confirm as bark"
 										>
 											<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-												<circle cx="12" cy="12" r="10" />
-												<line x1="15" y1="9" x2="9" y2="15" />
-												<line x1="9" y1="9" x2="15" y2="15" />
+												<polyline points="20 6 9 17 4 12" />
 											</svg>
 										</button>
-										{#if rejectDropdownRow === fp.id}
-											<div class="reject-dropdown">
-												{#each rejectReasons as reason}
-													<button
-														class="reject-option"
-														onclick={() => handleReject(fp, reason.value)}
-													>
-														{reason.label}
-													</button>
-												{/each}
-											</div>
-										{/if}
-									</div>
+									{/if}
+									{#if onReject}
+										<div class="reject-dropdown-wrapper">
+											<button
+												class="action-btn action-btn--reject"
+												class:active={rejectDropdownRow === fp.id}
+												onclick={() => toggleRejectDropdown(fp.id)}
+												title="Dismiss as false positive"
+											>
+												<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+													<circle cx="12" cy="12" r="10" />
+													<line x1="15" y1="9" x2="9" y2="15" />
+													<line x1="9" y1="9" x2="15" y2="15" />
+												</svg>
+											</button>
+											{#if rejectDropdownRow === fp.id}
+												<div class="reject-dropdown">
+													{#each rejectReasons as reason}
+														<button
+															class="reject-option"
+															onclick={() => handleReject(fp, reason.value)}
+														>
+															{reason.label}
+														</button>
+													{/each}
+												</div>
+											{/if}
+										</div>
+									{/if}
 								{/if}
 							{/if}
 						</td>
@@ -418,6 +436,12 @@
 		border-color: var(--accent-coral);
 		color: var(--accent-coral);
 		background: var(--accent-coral-dim);
+	}
+
+	.action-btn--confirm:hover {
+		border-color: var(--accent-teal);
+		color: var(--accent-teal);
+		background: rgba(20, 184, 166, 0.12);
 	}
 
 	.action-btn--reject:hover,

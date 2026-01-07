@@ -95,6 +95,8 @@ def _fingerprint_to_schema(
         cluster_id=fingerprint.cluster_id,
         evidence_filename=fingerprint.evidence_filename,
         rejection_reason=fingerprint.rejection_reason,
+        confirmed=fingerprint.confirmed,
+        confirmed_at=fingerprint.confirmed_at,
         detection_probability=fingerprint.detection_probability,
         doa_degrees=fingerprint.doa_degrees,
         duration_ms=fingerprint.duration_ms,
@@ -567,6 +569,66 @@ async def unreject_bark(
     # Get the updated fingerprint
     updated = store.get_fingerprint(bark_id)
     logger.info("bark_unrejected", bark_id=bark_id)
+    return _fingerprint_to_schema(updated)
+
+
+@router.post(
+    "/barks/{bark_id}/confirm",
+    response_model=BarkFingerprintSchema,
+    summary="Confirm bark as real",
+    description="Confirms a bark fingerprint as a real bark (even if the dog is unknown). "
+    "This distinguishes reviewed barks from unreviewed ones and clears any rejection.",
+)
+async def confirm_bark(
+    bark_id: str,
+    store: Annotated[FingerprintStore, Depends(get_fingerprint_store)],
+) -> BarkFingerprintSchema:
+    """Confirm a bark fingerprint as a real bark."""
+    # Verify the bark exists
+    fingerprint = store.get_fingerprint(bark_id)
+    if not fingerprint:
+        logger.warning("bark_not_found_for_confirm", bark_id=bark_id)
+        raise HTTPException(status_code=404, detail="Bark fingerprint not found")
+
+    # Confirm the fingerprint
+    success = store.confirm_fingerprint(bark_id)
+    if not success:
+        raise HTTPException(status_code=500, detail="Failed to confirm bark")
+
+    # Get the updated fingerprint
+    updated = store.get_fingerprint(bark_id)
+    logger.info("bark_confirmed", bark_id=bark_id)
+    return _fingerprint_to_schema(updated)
+
+
+@router.post(
+    "/barks/{bark_id}/unconfirm",
+    response_model=BarkFingerprintSchema,
+    summary="Remove confirmation from bark",
+    description="Removes the confirmation status from a bark, returning it to unreviewed state.",
+)
+async def unconfirm_bark(
+    bark_id: str,
+    store: Annotated[FingerprintStore, Depends(get_fingerprint_store)],
+) -> BarkFingerprintSchema:
+    """Remove confirmation status from a bark."""
+    # Verify the bark exists
+    fingerprint = store.get_fingerprint(bark_id)
+    if not fingerprint:
+        logger.warning("bark_not_found_for_unconfirm", bark_id=bark_id)
+        raise HTTPException(status_code=404, detail="Bark fingerprint not found")
+
+    if fingerprint.confirmed is None:
+        raise HTTPException(status_code=400, detail="Bark is not confirmed")
+
+    # Remove the confirmation
+    success = store.unconfirm_fingerprint(bark_id)
+    if not success:
+        raise HTTPException(status_code=500, detail="Failed to unconfirm bark")
+
+    # Get the updated fingerprint
+    updated = store.get_fingerprint(bark_id)
+    logger.info("bark_unconfirmed", bark_id=bark_id)
     return _fingerprint_to_schema(updated)
 
 

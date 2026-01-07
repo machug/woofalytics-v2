@@ -58,6 +58,8 @@ class BarkFingerprintSchema(BaseModel):
     cluster_id: str | None = Field(default=None, description="ID of the cluster this bark belongs to (if untagged)")
     evidence_filename: str | None = Field(default=None, description="Filename of the evidence recording")
     rejection_reason: str | None = Field(default=None, description="Reason for rejection if this is a false positive")
+    confirmed: bool | None = Field(default=None, description="Whether this is a confirmed bark (None=unreviewed, True=confirmed, False=dismissed)")
+    confirmed_at: datetime | None = Field(default=None, description="When the bark was confirmed/dismissed")
     detection_probability: float = Field(default=0.0, description="Bark detection probability")
     doa_degrees: int | None = Field(default=None, description="Direction of arrival in degrees")
     duration_ms: float | None = Field(default=None, description="Duration of the bark in milliseconds")

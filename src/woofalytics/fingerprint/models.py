@@ -168,6 +168,10 @@ class BarkFingerprint:
     # Values: None (not rejected), "speech", "wind", "bird", "other", or custom text
     rejection_reason: str | None = None
 
+    # Confirmation status (None = unreviewed, True = confirmed bark, False = dismissed)
+    confirmed: bool | None = None
+    confirmed_at: datetime | None = None
+
     # Detection metadata
     detection_probability: float = 0.0
     doa_degrees: int | None = None
@@ -188,6 +192,8 @@ class BarkFingerprint:
             "cluster_id": self.cluster_id,
             "evidence_filename": self.evidence_filename,
             "rejection_reason": self.rejection_reason,
+            "confirmed": self.confirmed,
+            "confirmed_at": self.confirmed_at.isoformat() if self.confirmed_at else None,
             "detection_probability": self.detection_probability,
             "doa_degrees": self.doa_degrees,
             "duration_ms": self.duration_ms,
@@ -213,6 +219,8 @@ class BarkFingerprint:
             cluster_id=data.get("cluster_id"),
             evidence_filename=data.get("evidence_filename"),
             rejection_reason=data.get("rejection_reason"),
+            confirmed=data.get("confirmed"),
+            confirmed_at=datetime.fromisoformat(data["confirmed_at"]) if data.get("confirmed_at") else None,
             detection_probability=data.get("detection_probability", 0.0),
             doa_degrees=data.get("doa_degrees"),
             duration_ms=data.get("duration_ms"),
