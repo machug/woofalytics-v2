@@ -28,7 +28,7 @@ logger = structlog.get_logger(__name__)
 EMBEDDING_DIM = 512
 
 # Schema version for migrations
-SCHEMA_VERSION = 3
+SCHEMA_VERSION = 4
 
 
 def _serialize_embedding(arr: np.ndarray | None) -> bytes | None:
@@ -194,6 +194,20 @@ class FingerprintStore:
                     pass  # Column already exists
                 cursor.execute("UPDATE schema_version SET version = 3 WHERE id = 1")
                 logger.info("schema_migrated", from_version=current_version, to_version=3)
+                current_version = 3
+
+            if current_version < 4:
+                # Migration: Add confirmation columns to bark_fingerprints
+                try:
+                    cursor.execute("ALTER TABLE bark_fingerprints ADD COLUMN confirmed INTEGER")
+                except sqlite3.OperationalError:
+                    pass  # Column already exists
+                try:
+                    cursor.execute("ALTER TABLE bark_fingerprints ADD COLUMN confirmed_at TEXT")
+                except sqlite3.OperationalError:
+                    pass
+                cursor.execute("UPDATE schema_version SET version = 4 WHERE id = 1")
+                logger.info("schema_migrated", from_version=current_version, to_version=4)
 
             # Indexes for common queries
             cursor.execute("CREATE INDEX IF NOT EXISTS idx_fingerprints_dog_id ON bark_fingerprints(dog_id)")
@@ -591,6 +605,8 @@ class FingerprintStore:
                 cluster_id=row["cluster_id"],
                 evidence_filename=row["evidence_filename"],
                 rejection_reason=row["rejection_reason"],
+                confirmed=bool(row["confirmed"]) if row["confirmed"] is not None else None,
+                confirmed_at=datetime.fromisoformat(row["confirmed_at"]) if row["confirmed_at"] else None,
                 detection_probability=row["detection_probability"],
                 doa_degrees=row["doa_degrees"],
                 duration_ms=row["duration_ms"],
@@ -634,6 +650,8 @@ class FingerprintStore:
                         cluster_id=row["cluster_id"],
                         evidence_filename=row["evidence_filename"],
                         rejection_reason=row["rejection_reason"],
+                        confirmed=bool(row["confirmed"]) if row["confirmed"] is not None else None,
+                        confirmed_at=datetime.fromisoformat(row["confirmed_at"]) if row["confirmed_at"] else None,
                         detection_probability=row["detection_probability"],
                         doa_degrees=row["doa_degrees"],
                         duration_ms=row["duration_ms"],
@@ -887,6 +905,8 @@ class FingerprintStore:
                         cluster_id=row["cluster_id"],
                         evidence_filename=row["evidence_filename"],
                         rejection_reason=row["rejection_reason"],
+                        confirmed=bool(row["confirmed"]) if row["confirmed"] is not None else None,
+                        confirmed_at=datetime.fromisoformat(row["confirmed_at"]) if row["confirmed_at"] else None,
                         detection_probability=row["detection_probability"],
                         doa_degrees=row["doa_degrees"],
                         duration_ms=row["duration_ms"],
@@ -1111,6 +1131,8 @@ class FingerprintStore:
                         cluster_id=row["cluster_id"],
                         evidence_filename=row["evidence_filename"],
                         rejection_reason=row["rejection_reason"],
+                        confirmed=bool(row["confirmed"]) if row["confirmed"] is not None else None,
+                        confirmed_at=datetime.fromisoformat(row["confirmed_at"]) if row["confirmed_at"] else None,
                         detection_probability=row["detection_probability"],
                         doa_degrees=row["doa_degrees"],
                         duration_ms=row["duration_ms"],
