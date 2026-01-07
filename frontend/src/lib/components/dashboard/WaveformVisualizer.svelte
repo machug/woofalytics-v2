@@ -1,5 +1,5 @@
 <script lang="ts">
-	import { audioHistory, audioLevel } from '$lib/stores/audio';
+	import { onMount } from 'svelte';
 
 	interface Props {
 		height?: number;
@@ -9,160 +9,98 @@
 
 	let canvas: HTMLCanvasElement;
 	let containerWidth = $state(0);
-	let containerHeight = $state(0);
-	let animationFrame: number | null = null;
+	let audioContext: AudioContext | null = null;
+	let analyser: AnalyserNode | null = null;
+	let dataArray: Uint8Array<ArrayBuffer> | null = null;
+	let animationId: number | null = null;
+	let isRunning = $state(false);
+	let error = $state<string | null>(null);
 
-	// Color state for hysteresis (0=blue, 1=yellow, 2=red)
-	// Using an array to track per-bar color states
-	let barColorStates: number[] = [];
-	let indicatorColorState = 0; // 0=blue, 1=red for the right-edge indicator
+	async function startCapture() {
+		try {
+			error = null;
 
-	// Hysteresis thresholds - different for going up vs down
-	const THRESHOLD_LOW_UP = 0.35;    // blue -> yellow
-	const THRESHOLD_LOW_DOWN = 0.25;  // yellow -> blue
-	const THRESHOLD_HIGH_UP = 0.65;   // yellow -> red
-	const THRESHOLD_HIGH_DOWN = 0.55; // red -> yellow
+			// Request microphone access
+			const stream = await navigator.mediaDevices.getUserMedia({
+				audio: {
+					echoCancellation: false,
+					noiseSuppression: false,
+					autoGainControl: false
+				}
+			});
 
-	function getColorWithHysteresis(level: number, barIndex: number): string {
-		const currentState = barColorStates[barIndex] ?? 0;
-		let newState = currentState;
+			// Create audio context and analyser
+			audioContext = new AudioContext();
+			analyser = audioContext.createAnalyser();
+			analyser.fftSize = 512; // 256 frequency bins
+			analyser.smoothingTimeConstant = 0.3;
+			analyser.minDecibels = -90;
+			analyser.maxDecibels = -10;
 
-		if (currentState === 0) {
-			// Currently blue - only go to yellow if above upper threshold
-			if (level >= THRESHOLD_LOW_UP) newState = 1;
-		} else if (currentState === 1) {
-			// Currently yellow
-			if (level < THRESHOLD_LOW_DOWN) newState = 0;      // drop to blue
-			else if (level >= THRESHOLD_HIGH_UP) newState = 2; // rise to red
-		} else {
-			// Currently red - only go to yellow if below lower threshold
-			if (level < THRESHOLD_HIGH_DOWN) newState = 1;
+			const source = audioContext.createMediaStreamSource(stream);
+			source.connect(analyser);
+			// Don't connect to destination - we don't want to play back
+
+			dataArray = new Uint8Array(analyser.frequencyBinCount);
+			isRunning = true;
+			draw();
+		} catch (err) {
+			error = err instanceof Error ? err.message : 'Failed to access microphone';
+			console.error('Spectrogram error:', err);
 		}
+	}
 
-		barColorStates[barIndex] = newState;
-
-		// Return color based on state
-		if (newState === 0) return 'rgba(88, 166, 255, 0.85)';
-		if (newState === 1) return 'rgba(255, 180, 50, 0.9)';
-		return 'rgba(248, 81, 73, 1)';
+	function stopCapture() {
+		if (animationId) {
+			cancelAnimationFrame(animationId);
+			animationId = null;
+		}
+		if (audioContext) {
+			audioContext.close();
+			audioContext = null;
+		}
+		analyser = null;
+		dataArray = null;
+		isRunning = false;
 	}
 
 	function draw() {
-		if (!canvas || containerWidth === 0) return;
+		if (!canvas || !analyser || !dataArray || !isRunning) return;
 
 		const ctx = canvas.getContext('2d');
 		if (!ctx) return;
 
-		const dpr = window.devicePixelRatio || 1;
-		const w = canvas.width / dpr;
-		const h = canvas.height / dpr;
+		// Get frequency data
+		analyser.getByteFrequencyData(dataArray);
 
-		// Get current audio data
-		const history = $audioHistory;
-		const currentLevel = $audioLevel;
+		// Shift existing image left by 1 pixel
+		const imageData = ctx.getImageData(1, 0, canvas.width - 1, canvas.height);
+		ctx.putImageData(imageData, 0, 0);
 
-		// Background - solid fill
-		ctx.fillStyle = '#0d1117';
-		ctx.fillRect(0, 0, w, h);
+		// Draw new column on right edge
+		const binCount = dataArray.length;
+		const binHeight = canvas.height / binCount;
 
-		// Draw subtle grid
-		ctx.strokeStyle = 'rgba(48, 54, 61, 0.4)';
-		ctx.lineWidth = 1;
-		const gridLines = 4;
-		for (let i = 1; i < gridLines; i++) {
-			const y = (h / gridLines) * i;
-			ctx.beginPath();
-			ctx.setLineDash([2, 4]);
-			ctx.moveTo(0, y);
-			ctx.lineTo(w, y);
-			ctx.stroke();
-		}
-		ctx.setLineDash([]);
+		for (let i = 0; i < binCount; i++) {
+			const value = dataArray[i];
+			const percent = value / 255;
 
-		// Draw center line
-		ctx.strokeStyle = 'rgba(88, 166, 255, 0.15)';
-		ctx.lineWidth = 1;
-		ctx.beginPath();
-		ctx.moveTo(0, h / 2);
-		ctx.lineTo(w, h / 2);
-		ctx.stroke();
+			// Color gradient: dark blue -> cyan -> yellow -> red
+			const r = Math.min(255, percent * 2 * 255);
+			const g = percent > 0.5 ? 255 - (percent - 0.5) * 2 * 255 : percent * 2 * 255;
+			const b = percent < 0.5 ? 255 - percent * 2 * 255 : 0;
 
-		// Draw waveform bars (spectrum analyzer style)
-		if (history.length > 0) {
-			const barCount = Math.min(64, history.length);
-			const totalGap = (barCount - 1) * 2;
-			const barWidth = (w - totalGap - 12) / barCount;
-			const gap = 2;
-			const centerY = h / 2;
+			ctx.fillStyle = `rgb(${Math.floor(r)}, ${Math.floor(g)}, ${Math.floor(b)})`;
 
-			// Ensure barColorStates array is sized correctly
-			if (barColorStates.length !== barCount) {
-				barColorStates = new Array(barCount).fill(0);
-			}
-
-			for (let i = 0; i < barCount; i++) {
-				const sampleIndex = Math.floor((i / barCount) * history.length);
-				const level = history[sampleIndex] || 0;
-				const barHeight = Math.max(1, level * (h * 0.42));
-				const x = i * (barWidth + gap);
-
-				// Color with hysteresis to prevent flickering
-				const color = getColorWithHysteresis(level, i);
-
-				ctx.fillStyle = color;
-				ctx.fillRect(x, centerY - barHeight, barWidth, barHeight);
-				ctx.fillRect(x, centerY + 1, barWidth, barHeight);
-			}
-
-			// Draw line waveform on top
-			ctx.strokeStyle = `rgba(88, 166, 255, ${0.5 + currentLevel * 0.5})`;
-			ctx.lineWidth = 1.5;
-			ctx.beginPath();
-
-			const step = (w - 12) / (history.length - 1);
-			history.forEach((level, i) => {
-				const x = i * step;
-				const y = centerY - level * (h * 0.38);
-				if (i === 0) {
-					ctx.moveTo(x, y);
-				} else {
-					ctx.lineTo(x, y);
-				}
-			});
-			ctx.stroke();
-
-			// Mirror line
-			ctx.strokeStyle = `rgba(88, 166, 255, ${0.25 + currentLevel * 0.25})`;
-			ctx.beginPath();
-			history.forEach((level, i) => {
-				const x = i * step;
-				const y = centerY + level * (h * 0.38);
-				if (i === 0) {
-					ctx.moveTo(x, y);
-				} else {
-					ctx.lineTo(x, y);
-				}
-			});
-			ctx.stroke();
+			// Draw from bottom (low freq) to top (high freq)
+			const y = canvas.height - (i + 1) * binHeight;
+			ctx.fillRect(canvas.width - 1, y, 1, binHeight);
 		}
 
-		// Current level indicator on right edge with hysteresis
-		const indicatorHeight = Math.max(4, currentLevel * h * 0.75);
-		const indicatorY = (h - indicatorHeight) / 2;
-
-		// Hysteresis for indicator: go red at 0.65, go blue at 0.55
-		if (indicatorColorState === 0 && currentLevel >= THRESHOLD_HIGH_UP) {
-			indicatorColorState = 1;
-		} else if (indicatorColorState === 1 && currentLevel < THRESHOLD_HIGH_DOWN) {
-			indicatorColorState = 0;
-		}
-		ctx.fillStyle = indicatorColorState === 1 ? 'rgba(248, 81, 73, 1)' : 'rgba(88, 166, 255, 0.9)';
-		ctx.fillRect(w - 6, indicatorY, 4, indicatorHeight);
-
-		animationFrame = requestAnimationFrame(draw);
+		animationId = requestAnimationFrame(draw);
 	}
 
-	// Setup canvas when dimensions change (Svelte 5 idiomatic with bind:clientWidth)
+	// Setup canvas dimensions
 	$effect(() => {
 		if (canvas && containerWidth > 0) {
 			const dpr = window.devicePixelRatio || 1;
@@ -172,34 +110,48 @@
 			const ctx = canvas.getContext('2d');
 			if (ctx) {
 				ctx.scale(dpr, dpr);
+				// Fill with dark background initially
+				ctx.fillStyle = '#0d1117';
+				ctx.fillRect(0, 0, containerWidth, height);
 			}
 		}
 	});
 
-	// Animation loop with proper cleanup
-	$effect(() => {
-		if (canvas && containerWidth > 0) {
-			animationFrame = requestAnimationFrame(draw);
-
-			return () => {
-				if (animationFrame) {
-					cancelAnimationFrame(animationFrame);
-					animationFrame = null;
-				}
-			};
-		}
+	// Auto-start on mount
+	onMount(() => {
+		startCapture();
+		return () => stopCapture();
 	});
 </script>
 
-<div class="waveform-container" bind:clientWidth={containerWidth} bind:clientHeight={containerHeight}>
-	<canvas bind:this={canvas} style="width: 100%; height: {height}px"></canvas>
-	<div class="waveform-label">
-		<span>WAVEFORM</span>
+<div class="spectrogram-container" bind:clientWidth={containerWidth}>
+	<canvas
+		bind:this={canvas}
+		style="width: 100%; height: {height}px"
+	></canvas>
+
+	<div class="spectrogram-label">
+		<span>SPECTROGRAM</span>
+		{#if !isRunning && !error}
+			<button class="start-btn" onclick={startCapture}>START</button>
+		{/if}
+	</div>
+
+	{#if error}
+		<div class="error-overlay">
+			<span>{error}</span>
+			<button onclick={startCapture}>Retry</button>
+		</div>
+	{/if}
+
+	<div class="freq-labels">
+		<span class="freq-high">HIGH</span>
+		<span class="freq-low">LOW</span>
 	</div>
 </div>
 
 <style>
-	.waveform-container {
+	.spectrogram-container {
 		position: relative;
 		width: 100%;
 		height: auto;
@@ -213,19 +165,82 @@
 		width: 100%;
 	}
 
-	.waveform-label {
+	.spectrogram-label {
 		position: absolute;
 		top: var(--space-xs);
 		left: var(--space-sm);
+		display: flex;
+		align-items: center;
+		gap: var(--space-sm);
 		pointer-events: none;
 	}
 
-	.waveform-label span {
+	.spectrogram-label span {
 		font-size: 0.6rem;
 		font-weight: 600;
 		letter-spacing: 0.15em;
 		text-transform: uppercase;
 		color: var(--text-muted);
 		opacity: 0.5;
+	}
+
+	.start-btn {
+		pointer-events: auto;
+		font-size: 0.55rem;
+		padding: 2px 6px;
+		background: rgba(88, 166, 255, 0.2);
+		border: 1px solid rgba(88, 166, 255, 0.4);
+		border-radius: 3px;
+		color: var(--color-primary, #58a6ff);
+		cursor: pointer;
+		opacity: 0.8;
+	}
+
+	.start-btn:hover {
+		opacity: 1;
+		background: rgba(88, 166, 255, 0.3);
+	}
+
+	.error-overlay {
+		position: absolute;
+		inset: 0;
+		display: flex;
+		flex-direction: column;
+		align-items: center;
+		justify-content: center;
+		gap: var(--space-sm);
+		background: rgba(13, 17, 23, 0.9);
+		color: var(--color-danger, #f85149);
+		font-size: 0.75rem;
+	}
+
+	.error-overlay button {
+		font-size: 0.7rem;
+		padding: 4px 12px;
+		background: rgba(88, 166, 255, 0.2);
+		border: 1px solid rgba(88, 166, 255, 0.4);
+		border-radius: 4px;
+		color: var(--color-primary, #58a6ff);
+		cursor: pointer;
+	}
+
+	.freq-labels {
+		position: absolute;
+		right: var(--space-sm);
+		top: 0;
+		bottom: 0;
+		display: flex;
+		flex-direction: column;
+		justify-content: space-between;
+		padding: var(--space-xs) 0;
+		pointer-events: none;
+	}
+
+	.freq-labels span {
+		font-size: 0.5rem;
+		font-weight: 500;
+		letter-spacing: 0.1em;
+		color: var(--text-muted);
+		opacity: 0.4;
 	}
 </style>

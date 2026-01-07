@@ -41,3 +41,12 @@ class MonthlySummarySchema(PeriodSummarySchema):
 
     month: str  # YYYY-MM format
     daily_breakdown: dict[str, int]  # date (YYYY-MM-DD) -> bark count
+
+
+class AISummarySchema(BaseModel):
+    """AI-generated natural language summary of bark data."""
+
+    summary: str  # Natural language summary from LLM
+    model: str  # Model used for generation
+    generation_time_ms: int  # Time taken to generate
+    data_period: str  # Period summarized (e.g., "2026-01-01 to 2026-01-07")

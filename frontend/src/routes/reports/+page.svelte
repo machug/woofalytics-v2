@@ -15,6 +15,7 @@
 	import BarkTrendChart from '$lib/components/reports/BarkTrendChart.svelte';
 	import HourlyBarChart from '$lib/components/reports/HourlyBarChart.svelte';
 	import ExportPreviewModal from '$lib/components/reports/ExportPreviewModal.svelte';
+	import AISummary from '$lib/components/reports/AISummary.svelte';
 
 	// State
 	let startDate = $state('');
@@ -162,7 +163,16 @@
 
 	<section class="stats-section">
 		<h2 class="section-title">Summary Statistics</h2>
+		{#if monthlySummary}
+			<p class="section-subtitle">
+				Monthly totals for {new Date(endDate).toLocaleDateString('en-US', { month: 'long', year: 'numeric' })}
+			</p>
+		{/if}
 		<SummaryStats data={summaryData} {loading} />
+	</section>
+
+	<section class="ai-section">
+		<AISummary date={endDate} />
 	</section>
 
 	<div class="charts-grid">
@@ -253,6 +263,10 @@
 		display: flex;
 		flex-direction: column;
 		gap: var(--space-md);
+	}
+
+	.ai-section {
+		margin-top: calc(-1 * var(--space-md));
 	}
 
 	.section-title {

@@ -1,105 +1,46 @@
 # Woofalytics Configuration
 # -------------------------
-# This file can be used to configure Woofalytics settings.
+# This file is managed by the Woofalytics settings UI.
 # Environment variables take precedence over this file.
 # Environment variables use the prefix WOOFALYTICS__ with __ as delimiter.
-# Example: WOOFALYTICS__AUDIO__SAMPLE_RATE=48000
+# Example: WOOFALYTICS__MODEL__CLAP_THRESHOLD=0.7
 
-# Audio capture settings
 audio:
-  # Device name filter (null = auto-detect first 2+ channel device)
-  # Examples: "Andrea", "ReSpeaker", "USB", "Blue"
-  # Use "pulse" or "default" for PulseAudio/PipeWire devices
-  device_name: "pulse"
-
-  # Sample rate in Hz
+  device_name: pulse
   sample_rate: 44100
-
-  # Number of channels (minimum 2 for DOA)
   channels: 2
-
-  # Audio chunk size in samples
   chunk_size: 441
-
-  # Microphone volume (0-100)
   volume_percent: 75
-
-# ML model settings
 model:
-  # Use CLAP zero-shot classifier (recommended)
   use_clap: true
-
-  # CLAP bark detection threshold (0.0-1.0)
-  # Higher = fewer false positives, lower = more sensitive
-  # Default: 0.6, try 0.7-0.8 if getting too many false positives
-  clap_threshold: 0.70
-
-  # Bird veto threshold - if bird sound probability exceeds this, reject the bark
-  # Lower = more aggressive bird rejection (default: 0.15)
-  # Try 0.10 if still getting bird false positives
-  clap_bird_veto_threshold: 0.10
-
-  # VAD energy threshold in dBFS (silence rejection)
-  # Audio below this level skips inference entirely
-  # Default: -40, lower = more sensitive (e.g., -50)
+  clap_threshold: 0.7
+  clap_bird_veto_threshold: 0.1
   vad_threshold_db: -40.0
-
-  # Legacy MLP settings (only used if use_clap: false)
   path: ./models/traced_model.pt
   target_sample_rate: 16000
   threshold: 0.88
-
-# Direction of arrival estimation
+  vad_enabled: true
+  yamnet_enabled: true
+  yamnet_threshold: 0.05
 doa:
-  # Enable DOA estimation
   enabled: true
-
-  # Inter-element spacing in wavelengths
   element_spacing: 0.1
-
-  # Number of microphone elements
   num_elements: 2
-
-  # Scanning angle range (degrees)
   angle_min: 0
   angle_max: 180
-
-# Evidence recording settings
 evidence:
-  # Directory for evidence files
   directory: ./evidence
-
-  # Seconds of audio before bark trigger
   past_context_seconds: 15
-
-  # Seconds of audio after last bark
   future_context_seconds: 15
-
-  # Include JSON metadata sidecar
   include_metadata: true
-
-# Webhook/IFTTT settings
+  auto_record: true
 webhook:
-  # Enable webhook notifications
   enabled: false
-
-  # IFTTT event name
   ifttt_event: woof
-
-  # IFTTT key (prefer environment variable for security)
-  # ifttt_key: your_key_here
-
-# Web server settings
+  ifttt_key: ''
 server:
-  # Bind address
   host: 0.0.0.0
-
-  # Port number
   port: 8000
-
-  # Enable WebSocket for real-time updates
   enable_websocket: true
-
-# Logging
-log_level: INFO  # DEBUG, INFO, WARNING, ERROR
-log_format: console  # console or json
+log_level: INFO
+log_format: console

@@ -1,0 +1,68 @@
+---
+name: Weekly Bark Report for Council
+description: Generate a formal noise complaint report documenting excessive dog barking
+authors:
+  - Woofalytics Team
+model:
+  api: chat
+  configuration:
+    type: ollama
+inputs:
+  week_start:
+    type: string
+    description: Start date of the week
+  week_end:
+    type: string
+    description: End date of the week
+  total_barks:
+    type: int
+    description: Total number of barks detected
+  total_events:
+    type: int
+    description: Number of bark events recorded
+  total_hours:
+    type: string
+    description: Total hours of recorded barking disturbance
+  daily_breakdown:
+    type: string
+    description: Day-by-day breakdown of barking activity
+  per_dog_breakdown:
+    type: string
+    description: Per-dog bark count table in markdown format
+  peak_hour_str:
+    type: string
+    description: Most active hour range
+  avg_confidence:
+    type: string
+    description: Average detection confidence as percentage
+---
+system:
+You are a documentation assistant preparing a formal noise complaint report about excessive dog barking from neighboring properties. Write in a professional, factual tone suitable for submission to local council authorities. Be concise but thorough. Do not embellish or exaggerate - stick to the facts provided. Present data in a clear, organized manner.
+
+user:
+Please prepare a weekly noise disturbance report for council submission.
+
+Reporting Period: {{week_start}} to {{week_end}}
+
+SUMMARY STATISTICS:
+- Total barks detected: {{total_barks}}
+- Total bark events: {{total_events}}
+- Total hours of barking disturbance: {{total_hours}}
+- Peak barking hour: {{peak_hour_str}}
+- Detection confidence: {{avg_confidence}}
+
+IDENTIFIED BARKING DOGS:
+{{per_dog_breakdown}}
+
+DAILY BREAKDOWN:
+{{daily_breakdown}}
+
+Generate a formal report that:
+1. Opens with a statement that this is an automated noise monitoring report
+2. Lists the identified barking dogs with their bark counts (include the table)
+3. Summarizes the extent of the barking problem (total barks, hours affected)
+4. Highlights the daily pattern showing when disturbances occur
+5. Notes the impact on quiet enjoyment of the property
+6. States that timestamped audio evidence files are available to support this report
+
+Keep the report to 4-5 paragraphs. Use formal language appropriate for council correspondence.

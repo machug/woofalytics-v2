@@ -37,6 +37,12 @@ def _filter_entries(
     min_confidence: float,
 ) -> list[EvidenceMetadata]:
     """Filter entries by date range and confidence threshold."""
+    # Ensure dates are timezone-aware for comparison with timestamp_utc
+    if start_date and start_date.tzinfo is None:
+        start_date = start_date.replace(tzinfo=timezone.utc)
+    if end_date and end_date.tzinfo is None:
+        end_date = end_date.replace(tzinfo=timezone.utc)
+
     filtered = []
     for entry in entries:
         # Date range filter

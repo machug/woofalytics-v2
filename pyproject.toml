@@ -1,6 +1,6 @@
 [project]
 name = "woofalytics"
-version = "2.1.0"
+version = "2.2.0"
 description = "AI-powered dog bark detection with evidence collection for Raspberry Pi"
 readme = "README.md"
 license = { text = "MIT" }
@@ -33,6 +33,7 @@ dependencies = [
     "pydantic>=2.10",
     "pydantic-settings>=2.6",
     "httpx>=0.28",
+    "prompty>=0.1.50",
     "pyyaml>=6.0",
     "structlog>=24.4",
     "rich>=13.9",

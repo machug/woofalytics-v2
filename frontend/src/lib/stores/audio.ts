@@ -25,16 +25,23 @@ function createAudioStore() {
 
 	let peakDecayTimer: ReturnType<typeof setTimeout> | null = null;
 
+	// Smoothing factor: higher = more smoothing (0.7 = 70% old value, 30% new)
+	const SMOOTHING = 0.7;
+
 	return {
 		subscribe,
 		setLevel: (level: number) => {
 			update((state) => {
 				const clampedLevel = Math.max(0, Math.min(1, level));
-				const newPeak = clampedLevel > state.peak ? clampedLevel : state.peak;
-				const isClipping = clampedLevel > 0.95;
 
-				// Add to history, remove oldest
-				const newHistory = [...state.history.slice(1), clampedLevel];
+				// Apply exponential smoothing to reduce flicker
+				const smoothedLevel = state.level * SMOOTHING + clampedLevel * (1 - SMOOTHING);
+
+				const newPeak = clampedLevel > state.peak ? clampedLevel : state.peak;
+				const isClipping = smoothedLevel > 0.95;
+
+				// Add smoothed value to history, remove oldest
+				const newHistory = [...state.history.slice(1), smoothedLevel];
 
 				return {
 					level: clampedLevel,

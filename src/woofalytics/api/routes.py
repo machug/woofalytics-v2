@@ -19,6 +19,7 @@ from fastapi.responses import FileResponse, Response
 
 from woofalytics.api.routes_export import router as export_router
 from woofalytics.api.routes_fingerprint import router as fingerprint_router
+from woofalytics.api.routes_settings import router as settings_router
 from woofalytics.api.routes_summary import router as summary_router
 from woofalytics.api.schemas import (
     BarkEventSchema,
@@ -53,6 +54,7 @@ router.include_router(fingerprint_router)
 # Include export routes for CSV/JSON data export
 router.include_router(export_router)
 router.include_router(summary_router)
+router.include_router(settings_router)
 
 
 # Dependency injection

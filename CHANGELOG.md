@@ -4,6 +4,17 @@ All notable changes to Woofalytics will be documented in this file.
 
 Format based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
+## [2.2.0] - 2026-01-07
+
+### Added
+- Bark confirmation workflow: confirm untagged barks as genuine (even if dog unknown)
+- Min harmonic ratio setting exposed in Settings UI (tunable HPSS filter)
+- Expanded rejection reasons: traffic, music, machinery, siren
+- Settings UI for backend detection parameters
+
+### Changed
+- Default min harmonic ratio lowered from 0.3 to 0.1 (accepts noisier barks)
+
 ## [2.1.0] - 2026-01-05
 
 ### Added
