@@ -99,7 +99,7 @@ class CLAPConfig:
     # HPSS pre-filter: reject predominantly percussive sounds (keyboard clicks)
     # Uses Harmonic-Percussive Source Separation to measure harmonic vs percussive energy
     hpss_enabled: bool = True
-    min_harmonic_ratio: float = 0.3  # Lowered: real barks can be noisy (0.3-0.5)
+    min_harmonic_ratio: float = 0.1  # Low: real barks can be very noisy
 
     # Device for inference
     device: str = "cpu"

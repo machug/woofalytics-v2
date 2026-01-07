@@ -1,12 +1,30 @@
 <script lang="ts">
 	import { api, fetchApi } from '$lib/api/client';
-	import type { EvidenceStats, FingerprintStats, Dog, PurgeResult, RecalculateResult } from '$lib/api/types';
+	import type {
+		EvidenceStats,
+		FingerprintStats,
+		Dog,
+		PurgeResult,
+		RecalculateResult,
+		SettingsResponse,
+		AllSettings,
+		ModelSettings,
+		EvidenceSettings as EvidenceSettingsType,
+		WebhookSettings
+	} from '$lib/api/types';
 
 	// Stats state
 	let evidenceStats = $state<EvidenceStats | null>(null);
 	let fingerprintStats = $state<FingerprintStats | null>(null);
 	let dogs = $state<Dog[]>([]);
 	let isLoadingStats = $state(true);
+
+	// Settings state
+	let settings = $state<AllSettings | null>(null);
+	let isLoadingSettings = $state(true);
+	let isSavingSettings = $state(false);
+	let settingsRestartRequired = $state(false);
+	let showSettingsSection = $state(true);
 
 	// Form state
 	let evidenceBeforeDate = $state('');
@@ -37,9 +55,10 @@
 	let taggedCount = $derived(totalCount - untaggedCount);
 	let confirmedDogs = $derived(dogs.filter((d) => d.confirmed).length);
 
-	// Load stats on mount
+	// Load stats and settings on mount
 	$effect(() => {
 		loadStats();
+		loadSettings();
 	});
 
 	async function loadStats() {
@@ -65,6 +84,51 @@
 			showToast('Failed to load statistics', 'error');
 		} finally {
 			isLoadingStats = false;
+		}
+	}
+
+	async function loadSettings() {
+		isLoadingSettings = true;
+		try {
+			const response = await api.GET('/api/settings');
+			if (response.data) {
+				settings = response.data.settings;
+				settingsRestartRequired = response.data.restart_required;
+			}
+		} catch (error) {
+			console.error('Failed to load settings:', error);
+			showToast('Failed to load settings', 'error');
+		} finally {
+			isLoadingSettings = false;
+		}
+	}
+
+	async function saveSettings() {
+		if (!settings) return;
+
+		isSavingSettings = true;
+		try {
+			const response = await api.PUT('/api/settings', {
+				body: {
+					model: settings.model,
+					evidence: settings.evidence,
+					webhook: settings.webhook
+				}
+			});
+
+			if (response.data) {
+				settingsRestartRequired = response.data.restart_required;
+				if (response.data.message) {
+					showToast(response.data.message, 'success');
+				} else {
+					showToast('Settings saved', 'success');
+				}
+			}
+		} catch (error) {
+			console.error('Failed to save settings:', error);
+			showToast('Failed to save settings', 'error');
+		} finally {
+			isSavingSettings = false;
 		}
 	}
 
@@ -290,6 +354,226 @@
 						{/if}
 					</div>
 				</div>
+			</div>
+
+			<!-- Detection Settings Section -->
+			<div class="maintenance-section maintenance-section--settings">
+				<button type="button" class="section-header section-header--collapsible" onclick={() => showSettingsSection = !showSettingsSection} aria-expanded={showSettingsSection}>
+					<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+						<circle cx="12" cy="12" r="3" />
+						<path d="M12 1v2M12 21v2M4.22 4.22l1.42 1.42M18.36 18.36l1.42 1.42M1 12h2M21 12h2M4.22 19.78l1.42-1.42M18.36 5.64l1.42-1.42" />
+					</svg>
+					<h2>Detection Settings</h2>
+					<span class="collapse-icon" class:rotated={!showSettingsSection}>
+						<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+							<polyline points="6 9 12 15 18 9" />
+						</svg>
+					</span>
+				</button>
+				{#if showSettingsSection}
+					<div class="section-body">
+						{#if settingsRestartRequired}
+							<div class="restart-banner">
+								<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+									<path d="M10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0z" />
+									<line x1="12" y1="9" x2="12" y2="13" />
+									<line x1="12" y1="17" x2="12.01" y2="17" />
+								</svg>
+								<span>Restart required for changes to take effect</span>
+							</div>
+						{/if}
+
+						{#if isLoadingSettings}
+							<div class="loading-settings">Loading settings...</div>
+						{:else if settings}
+							<!-- Model Settings -->
+							<div class="settings-group">
+								<h3 class="settings-group-title">Bark Detection</h3>
+
+								<div class="settings-row">
+									<div class="setting-field">
+										<label class="form-label" for="clapThreshold">CLAP Threshold</label>
+										<input
+											type="number"
+											class="form-input"
+											id="clapThreshold"
+											min="0"
+											max="1"
+											step="0.05"
+											bind:value={settings.model.clap_threshold}
+										/>
+										<div class="form-hint">Higher = fewer false positives (0.6-0.8 recommended)</div>
+									</div>
+
+									<div class="setting-field">
+										<label class="form-label" for="birdVeto">Bird Veto Threshold</label>
+										<input
+											type="number"
+											class="form-input"
+											id="birdVeto"
+											min="0"
+											max="1"
+											step="0.05"
+											bind:value={settings.model.clap_bird_veto_threshold}
+										/>
+										<div class="form-hint">Lower = more aggressive bird rejection</div>
+									</div>
+								</div>
+
+								<div class="settings-row">
+									<div class="setting-field">
+										<label class="form-label" for="harmonicRatio">Min Harmonic Ratio</label>
+										<input
+											type="number"
+											class="form-input"
+											id="harmonicRatio"
+											min="0"
+											max="1"
+											step="0.05"
+											bind:value={settings.model.clap_min_harmonic_ratio}
+										/>
+										<div class="form-hint">Lower = accept noisier barks (0 to disable)</div>
+									</div>
+
+									<div class="setting-field">
+										<label class="form-label" for="vadThreshold">VAD Threshold (dBFS)</label>
+										<input
+											type="number"
+											class="form-input"
+											id="vadThreshold"
+											min="-80"
+											max="0"
+											step="5"
+											bind:value={settings.model.vad_threshold_db}
+										/>
+										<div class="form-hint">Audio below this level is ignored</div>
+									</div>
+
+									<div class="setting-field">
+										<label class="form-label" for="yamnetThreshold">YAMNet Threshold</label>
+										<input
+											type="number"
+											class="form-input"
+											id="yamnetThreshold"
+											min="0"
+											max="1"
+											step="0.01"
+											bind:value={settings.model.yamnet_threshold}
+										/>
+										<div class="form-hint">Dog probability threshold for CLAP inference</div>
+									</div>
+								</div>
+
+								<div class="checkbox-row">
+									<div class="checkbox-group">
+										<input type="checkbox" id="vadEnabled" bind:checked={settings.model.vad_enabled} />
+										<label for="vadEnabled">Enable VAD (silence rejection)</label>
+									</div>
+									<div class="checkbox-group">
+										<input type="checkbox" id="yamnetEnabled" bind:checked={settings.model.yamnet_enabled} />
+										<label for="yamnetEnabled">Enable YAMNet pre-filter</label>
+									</div>
+								</div>
+							</div>
+
+							<!-- Evidence Settings -->
+							<div class="settings-group">
+								<h3 class="settings-group-title">Evidence Recording</h3>
+
+								<div class="settings-row">
+									<div class="setting-field">
+										<label class="form-label" for="pastContext">Pre-trigger Buffer (seconds)</label>
+										<input
+											type="number"
+											class="form-input"
+											id="pastContext"
+											min="1"
+											max="60"
+											bind:value={settings.evidence.past_context_seconds}
+										/>
+										<div class="form-hint">Audio captured before bark detection</div>
+									</div>
+
+									<div class="setting-field">
+										<label class="form-label" for="futureContext">Post-trigger Buffer (seconds)</label>
+										<input
+											type="number"
+											class="form-input"
+											id="futureContext"
+											min="1"
+											max="60"
+											bind:value={settings.evidence.future_context_seconds}
+										/>
+										<div class="form-hint">Audio captured after last bark</div>
+									</div>
+								</div>
+
+								<div class="checkbox-row">
+									<div class="checkbox-group">
+										<input type="checkbox" id="autoRecord" bind:checked={settings.evidence.auto_record} />
+										<label for="autoRecord">Auto-record on bark detection</label>
+									</div>
+								</div>
+							</div>
+
+							<!-- Webhook Settings -->
+							<div class="settings-group">
+								<h3 class="settings-group-title">Webhook Notifications</h3>
+
+								<div class="checkbox-row">
+									<div class="checkbox-group">
+										<input type="checkbox" id="webhookEnabled" bind:checked={settings.webhook.enabled} />
+										<label for="webhookEnabled">Enable IFTTT webhook notifications</label>
+									</div>
+								</div>
+
+								{#if settings.webhook.enabled}
+									<div class="settings-row">
+										<div class="setting-field">
+											<label class="form-label" for="iftttEvent">IFTTT Event Name</label>
+											<input
+												type="text"
+												class="form-input"
+												id="iftttEvent"
+												bind:value={settings.webhook.ifttt_event}
+											/>
+										</div>
+
+										<div class="setting-field">
+											<label class="form-label" for="iftttKey">IFTTT Key</label>
+											<input
+												type="password"
+												class="form-input"
+												id="iftttKey"
+												placeholder={settings.webhook.ifttt_key ? '••••••••' : 'Enter API key'}
+												bind:value={settings.webhook.ifttt_key}
+											/>
+											<div class="form-hint">Leave empty to keep existing key</div>
+										</div>
+									</div>
+								{/if}
+							</div>
+
+							<!-- Save Button -->
+							<div class="settings-actions">
+								<button class="btn btn-teal" onclick={saveSettings} disabled={isSavingSettings}>
+									{#if isSavingSettings}
+										<span class="spinner"></span>
+										Saving...
+									{:else}
+										<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+											<path d="M19 21H5a2 2 0 01-2-2V5a2 2 0 012-2h11l5 5v11a2 2 0 01-2 2z" />
+											<polyline points="17 21 17 13 7 13 7 21" />
+											<polyline points="7 3 7 8 15 8" />
+										</svg>
+										Save Settings
+									{/if}
+								</button>
+								<span class="save-note">Changes require restart to take effect</span>
+							</div>
+						{/if}
+					</div>
+				{/if}
 			</div>
 
 			<!-- Purge Evidence Section -->
@@ -614,6 +898,14 @@
 		border-color: var(--danger-border);
 	}
 
+	.maintenance-section--settings {
+		border-color: var(--accent-teal);
+	}
+
+	.maintenance-section--settings .section-header svg {
+		color: var(--accent-teal);
+	}
+
 	.section-header {
 		display: flex;
 		align-items: center;
@@ -639,6 +931,130 @@
 		font-weight: 600;
 		color: var(--text-primary);
 		margin: 0;
+		flex: 1;
+	}
+
+	button.section-header--collapsible {
+		width: 100%;
+		font: inherit;
+		text-align: left;
+		cursor: pointer;
+		user-select: none;
+	}
+
+	.section-header--collapsible:hover {
+		background: rgba(0, 0, 0, 0.3);
+	}
+
+	.collapse-icon {
+		display: flex;
+		transition: transform var(--transition-fast);
+	}
+
+	.collapse-icon svg {
+		width: 16px;
+		height: 16px;
+		color: var(--text-muted);
+	}
+
+	.collapse-icon.rotated {
+		transform: rotate(-90deg);
+	}
+
+	.restart-banner {
+		display: flex;
+		align-items: center;
+		gap: var(--space-sm);
+		padding: var(--space-md);
+		background: var(--warning-bg);
+		border: 1px solid var(--warning-border);
+		border-radius: var(--radius-md);
+		margin-bottom: var(--space-lg);
+		color: var(--warning-text);
+		font-size: 0.875rem;
+	}
+
+	.restart-banner svg {
+		width: 18px;
+		height: 18px;
+		flex-shrink: 0;
+	}
+
+	.loading-settings {
+		text-align: center;
+		color: var(--text-muted);
+		padding: var(--space-xl);
+	}
+
+	.settings-group {
+		margin-bottom: var(--space-xl);
+		padding-bottom: var(--space-lg);
+		border-bottom: 1px solid var(--border-muted);
+	}
+
+	.settings-group:last-of-type {
+		margin-bottom: var(--space-lg);
+		padding-bottom: 0;
+		border-bottom: none;
+	}
+
+	.settings-group-title {
+		font-size: 0.875rem;
+		font-weight: 600;
+		color: var(--accent-teal);
+		margin: 0 0 var(--space-md) 0;
+		text-transform: uppercase;
+		letter-spacing: 0.05em;
+	}
+
+	.settings-row {
+		display: grid;
+		grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+		gap: var(--space-lg);
+		margin-bottom: var(--space-md);
+	}
+
+	.setting-field {
+		display: flex;
+		flex-direction: column;
+		gap: var(--space-xs);
+	}
+
+	.setting-field .form-input {
+		max-width: none;
+	}
+
+	.checkbox-row {
+		display: flex;
+		flex-wrap: wrap;
+		gap: var(--space-lg);
+	}
+
+	.checkbox-row .checkbox-group {
+		margin-bottom: 0;
+	}
+
+	.settings-actions {
+		display: flex;
+		align-items: center;
+		gap: var(--space-md);
+		padding-top: var(--space-md);
+		border-top: 1px solid var(--border-muted);
+	}
+
+	.save-note {
+		font-size: 0.75rem;
+		color: var(--text-muted);
+	}
+
+	.btn-teal {
+		background: rgba(20, 184, 166, 0.15);
+		color: var(--accent-teal);
+		border: 1px solid rgba(20, 184, 166, 0.3);
+	}
+
+	.btn-teal:hover:not(:disabled) {
+		background: rgba(20, 184, 166, 0.25);
 	}
 
 	.section-body {

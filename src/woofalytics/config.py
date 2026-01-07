@@ -88,6 +88,12 @@ class ModelConfig(BaseModel):
         le=1.0,
         description="Bird sound threshold for vetoing bark detections. Lower = more aggressive bird rejection.",
     )
+    clap_min_harmonic_ratio: float = Field(
+        default=0.1,
+        ge=0.0,
+        le=1.0,
+        description="Minimum harmonic ratio for bark detection. Lower = accept noisier barks. Set to 0 to disable.",
+    )
     clap_device: str = Field(
         default="cpu",
         description="Device for CLAP inference ('cpu' or 'cuda').",

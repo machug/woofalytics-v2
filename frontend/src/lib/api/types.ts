@@ -1695,6 +1695,11 @@ export interface components {
              */
             clap_bird_veto_threshold: number;
             /**
+             * Clap Min Harmonic Ratio
+             * @description Minimum harmonic ratio (lower = accept noisier barks)
+             */
+            clap_min_harmonic_ratio: number;
+            /**
              * Vad Enabled
              * @description Enable VAD silence gate
              */
