@@ -314,6 +314,36 @@ async def unconfirm_dog(
     return _dog_to_schema(dog)
 
 
+@router.post(
+    "/dogs/{dog_id}/reset-embedding",
+    response_model=DogProfileSchema,
+    summary="Reset dog's acoustic embedding",
+    description="Clears the dog's acoustic embedding to start fresh. Use this when a dog's "
+    "profile has been contaminated with barks from other dogs. By default, also disables "
+    "auto-tagging until the profile is manually confirmed again.",
+)
+async def reset_dog_embedding(
+    dog_id: str,
+    store: Annotated[FingerprintStore, Depends(get_fingerprint_store)],
+    unconfirm: Annotated[
+        bool, Query(description="Also disable auto-tagging (default: true)")
+    ] = True,
+) -> DogProfileSchema:
+    """Reset a dog's acoustic embedding to clear contamination."""
+    dog = store.reset_dog_embedding(dog_id, unconfirm=unconfirm)
+    if not dog:
+        logger.warning("dog_not_found_for_reset", dog_id=dog_id)
+        raise HTTPException(status_code=404, detail="Dog not found")
+
+    logger.info(
+        "dog_embedding_reset",
+        dog_id=dog_id,
+        name=dog.name,
+        unconfirmed=unconfirm,
+    )
+    return _dog_to_schema(dog)
+
+
 # --- Bark Tagging Endpoints ---
 
 

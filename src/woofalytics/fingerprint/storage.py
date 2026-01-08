@@ -543,6 +543,58 @@ class FingerprintStore:
         logger.info("dog_unconfirmed", dog_id=dog_id)
         return self.get_dog(dog_id)
 
+    def reset_dog_embedding(self, dog_id: str, unconfirm: bool = True) -> DogProfile | None:
+        """Reset a dog's acoustic embedding to start fresh.
+
+        This clears the contaminated embedding so the profile can be rebuilt
+        from correctly tagged barks. Useful when a dog's profile has been
+        polluted with barks from other dogs.
+
+        Args:
+            dog_id: The dog's unique ID.
+            unconfirm: If True (default), also disable auto-tagging until
+                the profile is manually confirmed again.
+
+        Returns:
+            Updated DogProfile if found, None otherwise.
+        """
+        profile = self.get_dog(dog_id)
+        if not profile:
+            return None
+
+        now = datetime.now(timezone.utc)
+
+        with self._get_connection() as conn:
+            cursor = conn.cursor()
+            if unconfirm:
+                cursor.execute(
+                    """
+                    UPDATE dog_profiles SET
+                        embedding = NULL,
+                        sample_count = 0,
+                        confirmed = 0,
+                        confirmed_at = NULL,
+                        updated_at = ?
+                    WHERE id = ?
+                    """,
+                    (now.isoformat(), dog_id),
+                )
+            else:
+                cursor.execute(
+                    """
+                    UPDATE dog_profiles SET
+                        embedding = NULL,
+                        sample_count = 0,
+                        updated_at = ?
+                    WHERE id = ?
+                    """,
+                    (now.isoformat(), dog_id),
+                )
+            conn.commit()
+
+        logger.info("dog_embedding_reset", dog_id=dog_id, unconfirmed=unconfirm)
+        return self.get_dog(dog_id)
+
     # --- Fingerprint Operations ---
 
     def save_fingerprint(self, fingerprint: BarkFingerprint) -> None:
