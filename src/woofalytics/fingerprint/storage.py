@@ -27,6 +27,49 @@ logger = structlog.get_logger(__name__)
 # CLAP embedding dimension
 EMBEDDING_DIM = 512
 
+
+def _row_to_fingerprint(row: sqlite3.Row) -> BarkFingerprint:
+    """Convert a database row to a BarkFingerprint model."""
+    return BarkFingerprint(
+        id=row["id"],
+        timestamp=datetime.fromisoformat(row["timestamp"]),
+        embedding=_deserialize_embedding(row["embedding"]),
+        dog_id=row["dog_id"],
+        match_confidence=row["match_confidence"],
+        cluster_id=row["cluster_id"],
+        evidence_filename=row["evidence_filename"],
+        rejection_reason=row["rejection_reason"],
+        confirmed=bool(row["confirmed"]) if row["confirmed"] is not None else None,
+        confirmed_at=datetime.fromisoformat(row["confirmed_at"]) if row["confirmed_at"] else None,
+        detection_probability=row["detection_probability"],
+        doa_degrees=row["doa_degrees"],
+        duration_ms=row["duration_ms"],
+        pitch_hz=row["pitch_hz"],
+        spectral_centroid_hz=row["spectral_centroid_hz"],
+        mfcc_mean=_deserialize_embedding(row["mfcc_mean"], (13,)) if row["mfcc_mean"] else None,
+    )
+
+
+def _row_to_dog_profile(row: sqlite3.Row) -> DogProfile:
+    """Convert a database row to a DogProfile model."""
+    return DogProfile(
+        id=row["id"],
+        name=row["name"],
+        notes=row["notes"],
+        created_at=datetime.fromisoformat(row["created_at"]),
+        updated_at=datetime.fromisoformat(row["updated_at"]),
+        confirmed=bool(row["confirmed"]),
+        confirmed_at=datetime.fromisoformat(row["confirmed_at"]) if row["confirmed_at"] else None,
+        min_samples_for_auto_tag=row["min_samples_for_auto_tag"],
+        embedding=_deserialize_embedding(row["embedding"]),
+        sample_count=row["sample_count"],
+        first_seen=datetime.fromisoformat(row["first_seen"]) if row["first_seen"] else None,
+        last_seen=datetime.fromisoformat(row["last_seen"]) if row["last_seen"] else None,
+        total_barks=row["total_barks"],
+        avg_duration_ms=row["avg_duration_ms"],
+        avg_pitch_hz=row["avg_pitch_hz"],
+    )
+
 # Schema version for migrations
 SCHEMA_VERSION = 4
 
@@ -274,23 +317,7 @@ class FingerprintStore:
             if not row:
                 return None
 
-            return DogProfile(
-                id=row["id"],
-                name=row["name"],
-                notes=row["notes"],
-                created_at=datetime.fromisoformat(row["created_at"]),
-                updated_at=datetime.fromisoformat(row["updated_at"]),
-                confirmed=bool(row["confirmed"]),
-                confirmed_at=datetime.fromisoformat(row["confirmed_at"]) if row["confirmed_at"] else None,
-                min_samples_for_auto_tag=row["min_samples_for_auto_tag"],
-                embedding=_deserialize_embedding(row["embedding"]),
-                sample_count=row["sample_count"],
-                first_seen=datetime.fromisoformat(row["first_seen"]) if row["first_seen"] else None,
-                last_seen=datetime.fromisoformat(row["last_seen"]) if row["last_seen"] else None,
-                total_barks=row["total_barks"],
-                avg_duration_ms=row["avg_duration_ms"],
-                avg_pitch_hz=row["avg_pitch_hz"],
-            )
+            return _row_to_dog_profile(row)
 
     def list_dogs(self) -> list[DogProfile]:
         """List all dog profiles.
@@ -304,25 +331,7 @@ class FingerprintStore:
             cursor.execute("SELECT * FROM dog_profiles ORDER BY name")
 
             for row in cursor.fetchall():
-                dogs.append(
-                    DogProfile(
-                        id=row["id"],
-                        name=row["name"],
-                        notes=row["notes"],
-                        created_at=datetime.fromisoformat(row["created_at"]),
-                        updated_at=datetime.fromisoformat(row["updated_at"]),
-                        confirmed=bool(row["confirmed"]),
-                        confirmed_at=datetime.fromisoformat(row["confirmed_at"]) if row["confirmed_at"] else None,
-                        min_samples_for_auto_tag=row["min_samples_for_auto_tag"],
-                        embedding=_deserialize_embedding(row["embedding"]),
-                        sample_count=row["sample_count"],
-                        first_seen=datetime.fromisoformat(row["first_seen"]) if row["first_seen"] else None,
-                        last_seen=datetime.fromisoformat(row["last_seen"]) if row["last_seen"] else None,
-                        total_barks=row["total_barks"],
-                        avg_duration_ms=row["avg_duration_ms"],
-                        avg_pitch_hz=row["avg_pitch_hz"],
-                    )
-                )
+                dogs.append(_row_to_dog_profile(row))
 
         return dogs
 
@@ -648,24 +657,7 @@ class FingerprintStore:
             if not row:
                 return None
 
-            return BarkFingerprint(
-                id=row["id"],
-                timestamp=datetime.fromisoformat(row["timestamp"]),
-                embedding=_deserialize_embedding(row["embedding"]),
-                dog_id=row["dog_id"],
-                match_confidence=row["match_confidence"],
-                cluster_id=row["cluster_id"],
-                evidence_filename=row["evidence_filename"],
-                rejection_reason=row["rejection_reason"],
-                confirmed=bool(row["confirmed"]) if row["confirmed"] is not None else None,
-                confirmed_at=datetime.fromisoformat(row["confirmed_at"]) if row["confirmed_at"] else None,
-                detection_probability=row["detection_probability"],
-                doa_degrees=row["doa_degrees"],
-                duration_ms=row["duration_ms"],
-                pitch_hz=row["pitch_hz"],
-                spectral_centroid_hz=row["spectral_centroid_hz"],
-                mfcc_mean=_deserialize_embedding(row["mfcc_mean"], (13,)) if row["mfcc_mean"] else None,
-            )
+            return _row_to_fingerprint(row)
 
     def get_untagged_fingerprints(self, limit: int = 100) -> list[BarkFingerprint]:
         """Get fingerprints that haven't been tagged to a dog.
@@ -692,26 +684,7 @@ class FingerprintStore:
             )
 
             for row in cursor.fetchall():
-                fingerprints.append(
-                    BarkFingerprint(
-                        id=row["id"],
-                        timestamp=datetime.fromisoformat(row["timestamp"]),
-                        embedding=_deserialize_embedding(row["embedding"]),
-                        dog_id=row["dog_id"],
-                        match_confidence=row["match_confidence"],
-                        cluster_id=row["cluster_id"],
-                        evidence_filename=row["evidence_filename"],
-                        rejection_reason=row["rejection_reason"],
-                        confirmed=bool(row["confirmed"]) if row["confirmed"] is not None else None,
-                        confirmed_at=datetime.fromisoformat(row["confirmed_at"]) if row["confirmed_at"] else None,
-                        detection_probability=row["detection_probability"],
-                        doa_degrees=row["doa_degrees"],
-                        duration_ms=row["duration_ms"],
-                        pitch_hz=row["pitch_hz"],
-                        spectral_centroid_hz=row["spectral_centroid_hz"],
-                        mfcc_mean=_deserialize_embedding(row["mfcc_mean"], (13,)) if row["mfcc_mean"] else None,
-                    )
-                )
+                fingerprints.append(_row_to_fingerprint(row))
 
         return fingerprints
 
@@ -947,26 +920,7 @@ class FingerprintStore:
             )
 
             for row in cursor.fetchall():
-                fingerprints.append(
-                    BarkFingerprint(
-                        id=row["id"],
-                        timestamp=datetime.fromisoformat(row["timestamp"]),
-                        embedding=_deserialize_embedding(row["embedding"]),
-                        dog_id=row["dog_id"],
-                        match_confidence=row["match_confidence"],
-                        cluster_id=row["cluster_id"],
-                        evidence_filename=row["evidence_filename"],
-                        rejection_reason=row["rejection_reason"],
-                        confirmed=bool(row["confirmed"]) if row["confirmed"] is not None else None,
-                        confirmed_at=datetime.fromisoformat(row["confirmed_at"]) if row["confirmed_at"] else None,
-                        detection_probability=row["detection_probability"],
-                        doa_degrees=row["doa_degrees"],
-                        duration_ms=row["duration_ms"],
-                        pitch_hz=row["pitch_hz"],
-                        spectral_centroid_hz=row["spectral_centroid_hz"],
-                        mfcc_mean=_deserialize_embedding(row["mfcc_mean"], (13,)) if row["mfcc_mean"] else None,
-                    )
-                )
+                fingerprints.append(_row_to_fingerprint(row))
 
         return fingerprints
 
@@ -1173,26 +1127,7 @@ class FingerprintStore:
             )
 
             for row in cursor.fetchall():
-                fingerprints.append(
-                    BarkFingerprint(
-                        id=row["id"],
-                        timestamp=datetime.fromisoformat(row["timestamp"]),
-                        embedding=_deserialize_embedding(row["embedding"]),
-                        dog_id=row["dog_id"],
-                        match_confidence=row["match_confidence"],
-                        cluster_id=row["cluster_id"],
-                        evidence_filename=row["evidence_filename"],
-                        rejection_reason=row["rejection_reason"],
-                        confirmed=bool(row["confirmed"]) if row["confirmed"] is not None else None,
-                        confirmed_at=datetime.fromisoformat(row["confirmed_at"]) if row["confirmed_at"] else None,
-                        detection_probability=row["detection_probability"],
-                        doa_degrees=row["doa_degrees"],
-                        duration_ms=row["duration_ms"],
-                        pitch_hz=row["pitch_hz"],
-                        spectral_centroid_hz=row["spectral_centroid_hz"],
-                        mfcc_mean=_deserialize_embedding(row["mfcc_mean"], (13,)) if row["mfcc_mean"] else None,
-                    )
-                )
+                fingerprints.append(_row_to_fingerprint(row))
 
         return fingerprints, total
 
