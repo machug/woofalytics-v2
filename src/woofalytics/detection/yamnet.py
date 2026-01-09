@@ -22,9 +22,13 @@ Usage:
 from __future__ import annotations
 
 from dataclasses import dataclass, field
+from typing import TYPE_CHECKING
 
 import numpy as np
 import structlog
+
+if TYPE_CHECKING:
+    from woofalytics.detection.resample_cache import AudioResampleCache
 
 logger = structlog.get_logger(__name__)
 
@@ -109,13 +113,20 @@ class YAMNetGate:
         """Check if model is loaded."""
         return self._loaded
 
-    def is_dog_sound(self, audio: np.ndarray, sample_rate: int = 44100) -> bool:
+    def is_dog_sound(
+        self,
+        audio: np.ndarray,
+        sample_rate: int = 44100,
+        resample_cache: AudioResampleCache | None = None,
+    ) -> bool:
         """Check if audio likely contains dog sounds.
 
         Args:
             audio: Audio array of shape (samples,) or (channels, samples).
                    Can be int16 or float32.
             sample_rate: Sample rate of the audio.
+            resample_cache: Optional cache for resampled audio to avoid
+                           redundant conversions.
 
         Returns:
             True if audio should proceed to CLAP (dog probability >= threshold
@@ -127,7 +138,7 @@ class YAMNetGate:
         try:
             import tensorflow as tf
 
-            audio_16k = self._preprocess(audio, sample_rate)
+            audio_16k = self._preprocess(audio, sample_rate, resample_cache)
             # Force CPU execution to avoid CUDA/XLA JIT issues
             with tf.device('/CPU:0'):
                 scores, _, _ = self._model(audio_16k)
@@ -145,19 +156,23 @@ class YAMNetGate:
             logger.warning("yamnet_inference_error", error=str(e), error_type=type(e).__name__)
             return True  # Fallback: pass to CLAP
 
-    def _preprocess(self, audio: np.ndarray, sample_rate: int) -> np.ndarray:
+    def _preprocess(
+        self,
+        audio: np.ndarray,
+        sample_rate: int,
+        resample_cache: AudioResampleCache | None = None,
+    ) -> np.ndarray:
         """Preprocess audio for YAMNet: resample to 16kHz mono float32.
 
         Args:
             audio: Audio array of shape (samples,) or (channels, samples).
             sample_rate: Current sample rate.
+            resample_cache: Optional cache for resampled audio to avoid
+                           redundant conversions.
 
         Returns:
             Audio resampled to 16kHz mono float32 in range [-1, 1].
         """
-        import torch
-        import torchaudio.functional as F
-
         # Normalize int16 to float32 [-1, 1] BEFORE mono conversion
         # (mean on int16 produces float64, losing dtype info)
         if audio.dtype == np.int16:
@@ -171,8 +186,16 @@ class YAMNetGate:
 
         # Resample to 16kHz if needed
         if sample_rate != 16000:
-            tensor = torch.from_numpy(audio).unsqueeze(0)
-            audio = F.resample(tensor, sample_rate, 16000).squeeze(0).numpy()
+            if resample_cache is not None:
+                # Use cache to avoid redundant resampling
+                audio = resample_cache.get_resampled(audio, sample_rate, 16000)
+            else:
+                # Fallback to direct resampling
+                import torch
+                import torchaudio.functional as F
+
+                tensor = torch.from_numpy(audio).unsqueeze(0)
+                audio = F.resample(tensor, sample_rate, 16000).squeeze(0).numpy()
 
         return audio
 

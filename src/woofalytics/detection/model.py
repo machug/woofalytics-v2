@@ -24,6 +24,7 @@ from woofalytics.config import Settings
 from woofalytics.detection.clap import CLAPConfig, CLAPDetector
 from woofalytics.detection.doa import DirectionEstimator
 from woofalytics.detection.features import FeatureExtractor, create_default_extractor
+from woofalytics.detection.resample_cache import AudioResampleCache
 from woofalytics.detection.vad import VADConfig, VADGate
 from woofalytics.detection.yamnet import YAMNetConfig, YAMNetGate
 from woofalytics.observability.metrics import get_metrics
@@ -93,6 +94,9 @@ class BarkDetector:
 
     # Live pipeline state for real-time monitoring
     _pipeline_state: dict = field(default_factory=dict, init=False)
+
+    # Audio resampling cache to avoid redundant conversions
+    _resample_cache: AudioResampleCache = field(default_factory=AudioResampleCache, init=False)
 
     def __post_init__(self) -> None:
         if self.settings.model.use_clap:
@@ -281,6 +285,9 @@ class BarkDetector:
         channels = self.settings.audio.channels
         audio_array = audio_array.reshape((channels, -1), order="F")
 
+        # Clear resample cache for new audio frame to avoid using stale data
+        self._resample_cache.clear()
+
         # Get metrics registry
         metrics = get_metrics()
 
@@ -313,6 +320,7 @@ class BarkDetector:
                 is_dog = self._yamnet_gate.is_dog_sound(
                     audio_array,
                     sample_rate=self.settings.audio.sample_rate,
+                    resample_cache=self._resample_cache,
                 )
                 yamnet_success = True
             except Exception as e:
@@ -353,6 +361,7 @@ class BarkDetector:
             probability, is_barking, label_scores = self._clap_detector.detect(
                 audio_array,
                 sample_rate=self.settings.audio.sample_rate,
+                resample_cache=self._resample_cache,
             )
         except Exception as e:
             logger.warning("clap_inference_error", error=str(e), error_type=type(e).__name__)
@@ -576,6 +585,9 @@ class BarkDetector:
         # Include YAMNet stats if enabled
         if self._yamnet_gate:
             status["yamnet_stats"] = self._yamnet_gate.stats
+
+        # Include resample cache stats
+        status["resample_cache_stats"] = self._resample_cache.stats
 
         return status
 
