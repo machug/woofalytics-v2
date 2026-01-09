@@ -22,6 +22,7 @@ model:
   vad_enabled: true
   yamnet_enabled: true
   yamnet_threshold: 0.05
+  clap_min_harmonic_ratio: 0.0
 doa:
   enabled: true
   element_spacing: 0.1
