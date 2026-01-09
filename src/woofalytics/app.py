@@ -123,29 +123,38 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
     evidence.add_on_saved_callback(on_evidence_saved)
 
     # Fingerprint callback - process detected barks for dog identification
-    def on_bark_for_fingerprint(event: BarkEvent) -> None:
-        if event.is_barking and event.audio is not None:
-            try:
-                fingerprint, matches = fingerprint_matcher.process_bark(
-                    audio=event.audio,
-                    sample_rate=event.sample_rate,
-                    detection_prob=event.probability,
-                    doa=event.doa_bartlett,
+    # This is offloaded to a thread pool to avoid blocking the event loop
+    # since fingerprint processing involves heavy CPU-bound computation
+    # (CLAP embedding extraction, acoustic feature extraction)
+    def _process_fingerprint_sync(event: BarkEvent) -> None:
+        """Synchronous fingerprint processing - runs in thread pool."""
+        try:
+            fingerprint, matches = fingerprint_matcher.process_bark(
+                audio=event.audio,
+                sample_rate=event.sample_rate,
+                detection_prob=event.probability,
+                doa=event.doa_bartlett,
+            )
+            if matches:
+                logger.info(
+                    "bark_identified",
+                    dog_name=matches[0].dog_name,
+                    confidence=f"{matches[0].confidence:.3f}",
                 )
-                if matches:
-                    logger.info(
-                        "bark_identified",
-                        dog_name=matches[0].dog_name,
-                        confidence=f"{matches[0].confidence:.3f}",
-                    )
-            except Exception as e:
-                logger.warning("fingerprint_processing_error", error=str(e))
+        except Exception as e:
+            logger.warning("fingerprint_processing_error", error=str(e))
+
+    async def on_bark_for_fingerprint(event: BarkEvent) -> None:
+        """Async callback that offloads fingerprint processing to thread pool."""
+        if event.is_barking and event.audio is not None:
+            loop = asyncio.get_event_loop()
+            await loop.run_in_executor(None, _process_fingerprint_sync, event)
 
     # Register callbacks
     detector.add_callback(lambda event: asyncio.create_task(evidence.on_bark_event(event)))
     # Broadcast bark events ONLY to bark WebSocket clients (not pipeline/audio)
     detector.add_callback(lambda event: asyncio.create_task(broadcast_bark_event(event, ws_managers.bark)))
-    detector.add_callback(on_bark_for_fingerprint)
+    detector.add_callback(lambda event: asyncio.create_task(on_bark_for_fingerprint(event)))
 
     # Store in app.state for dependency injection
     app.state.settings = settings
