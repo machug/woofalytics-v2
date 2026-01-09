@@ -189,7 +189,7 @@ def mock_fingerprint_store() -> MagicMock:
         "dogs": 5,
         "fingerprints": 100,
         "untagged": 20,
-        "clusters": 3,
+        "rejected": 2,
     }
     store.get_dog_acoustic_aggregates.return_value = [
         {
@@ -791,7 +791,7 @@ class TestFingerprintEndpoints:
         assert data["dogs"] == 5
         assert data["fingerprints"] == 100
         assert data["untagged"] == 20
-        assert data["clusters"] == 3
+        assert data["rejected"] == 2
 
     def test_get_fingerprint_aggregates(self, api_client: TestClient) -> None:
         """Test getting fingerprint aggregates."""

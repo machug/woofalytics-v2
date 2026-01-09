@@ -273,7 +273,7 @@
 	};
 
 	// Computed stats display values
-	// API returns { dogs, fingerprints, untagged, rejected, clusters }
+	// API returns { dogs, fingerprints, untagged, rejected }
 	const statsTotal = $derived(stats?.fingerprints ?? 0);
 	const statsTagged = $derived((stats?.fingerprints ?? 0) - (stats?.untagged ?? 0) - (stats?.rejected ?? 0));
 	const statsUntagged = $derived(stats?.untagged ?? 0);
