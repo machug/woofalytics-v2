@@ -9,10 +9,13 @@ from __future__ import annotations
 
 from collections import deque
 from dataclasses import dataclass, field
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 import numpy as np
 import structlog
+
+if TYPE_CHECKING:
+    from woofalytics.detection.resample_cache import AudioResampleCache
 
 logger = structlog.get_logger(__name__)
 
@@ -285,6 +288,7 @@ class CLAPDetector:
         self,
         audio: np.ndarray,
         sample_rate: int = 48000,
+        resample_cache: AudioResampleCache | None = None,
     ) -> tuple[float, bool, dict[str, float]]:
         """Run bark detection on audio using cached text embeddings.
 
@@ -292,6 +296,8 @@ class CLAPDetector:
             audio: Audio array of shape (samples,) or (channels, samples).
                    Should be float32 in range [-1, 1] or int16.
             sample_rate: Sample rate of the audio.
+            resample_cache: Optional cache for resampled audio to avoid
+                           redundant conversions.
 
         Returns:
             Tuple of:
@@ -318,11 +324,16 @@ class CLAPDetector:
         # CLAP requires 48000 Hz - resample if needed
         target_sr = 48000
         if sample_rate != target_sr:
-            import torchaudio.functional as F
-            import torch as torch_resample
-            audio_tensor = torch_resample.from_numpy(audio).unsqueeze(0)
-            audio_resampled = F.resample(audio_tensor, sample_rate, target_sr)
-            audio = audio_resampled.squeeze(0).numpy()
+            if resample_cache is not None:
+                # Use cache to avoid redundant resampling
+                audio = resample_cache.get_resampled(audio, sample_rate, target_sr)
+            else:
+                # Fallback to direct resampling
+                import torchaudio.functional as F
+                import torch as torch_resample
+                audio_tensor = torch_resample.from_numpy(audio).unsqueeze(0)
+                audio_resampled = F.resample(audio_tensor, sample_rate, target_sr)
+                audio = audio_resampled.squeeze(0).numpy()
             sample_rate = target_sr
 
         # Process audio to get audio embeddings
