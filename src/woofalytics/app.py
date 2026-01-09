@@ -27,7 +27,7 @@ from woofalytics.detection.model import BarkDetector, BarkEvent
 from woofalytics.evidence.storage import EvidenceStorage
 from woofalytics.api.websocket import broadcast_bark_event, WebSocketManagers
 from woofalytics.api.ratelimit import setup_rate_limiting, configure_rate_limits
-from woofalytics.api.auth import setup_auth, configure_auth
+from woofalytics.api.auth import setup_auth, configure_auth, get_auth_status
 from woofalytics.fingerprint.storage import FingerprintStore
 from woofalytics.fingerprint.matcher import FingerprintMatcher
 
@@ -85,6 +85,15 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
 
     # Configure authentication
     configure_auth(settings.server.api_key)
+
+    # Warn prominently if authentication is disabled
+    auth_status = get_auth_status()
+    if not auth_status["enabled"]:
+        logger.warning(
+            "security_warning",
+            message="No API key configured - authentication is DISABLED. "
+            "Set WOOFALYTICS__SERVER__API_KEY or api_key in config.yaml for production use.",
+        )
 
     # Initialize detector
     detector = BarkDetector(settings)
