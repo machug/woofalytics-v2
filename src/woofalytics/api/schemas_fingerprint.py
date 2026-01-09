@@ -85,7 +85,6 @@ class FingerprintStatsSchema(BaseModel):
     fingerprints: int = Field(description="Total number of bark fingerprints")
     untagged: int = Field(description="Number of fingerprints not yet tagged to a dog")
     rejected: int = Field(default=0, description="Number of fingerprints marked as false positives")
-    clusters: int = Field(description="Number of auto-detected clusters")
 
 
 class TagBarkRequestSchema(BaseModel):

@@ -17,7 +17,6 @@ import structlog
 
 from woofalytics.fingerprint.models import (
     BarkFingerprint,
-    ClusterInfo,
     DogProfile,
     FingerprintMatch,
 )
@@ -48,8 +47,8 @@ def _deserialize_embedding(data: bytes | None, shape: tuple[int, ...] = (EMBEDDI
 class FingerprintStore:
     """SQLite-based storage for fingerprints and dog profiles.
 
-    Provides CRUD operations for dog profiles, bark fingerprints,
-    and cluster management with efficient embedding vector storage.
+    Provides CRUD operations for dog profiles and bark fingerprints
+    with efficient embedding vector storage.
     """
 
     def __init__(self, db_path: Path | str) -> None:
@@ -119,20 +118,8 @@ class FingerprintStore:
                 )
             """)
 
-            # Clusters table
-            cursor.execute("""
-                CREATE TABLE IF NOT EXISTS clusters (
-                    id TEXT PRIMARY KEY,
-                    created_at TEXT NOT NULL,
-                    centroid BLOB,
-                    bark_count INTEGER NOT NULL DEFAULT 0,
-                    first_seen TEXT,
-                    last_seen TEXT,
-                    suggested_name TEXT NOT NULL DEFAULT '',
-                    avg_pitch_hz REAL,
-                    avg_duration_ms REAL
-                )
-            """)
+            # Note: clusters table kept for backwards compatibility but not actively used
+            # The ClusterInfo model was removed as YAGNI - clustering feature was never implemented
 
             # Schema version table - handle legacy format migration
             # Old format: version INTEGER PRIMARY KEY (version is the PK)
@@ -211,7 +198,6 @@ class FingerprintStore:
 
             # Indexes for common queries
             cursor.execute("CREATE INDEX IF NOT EXISTS idx_fingerprints_dog_id ON bark_fingerprints(dog_id)")
-            cursor.execute("CREATE INDEX IF NOT EXISTS idx_fingerprints_cluster_id ON bark_fingerprints(cluster_id)")
             cursor.execute("CREATE INDEX IF NOT EXISTS idx_fingerprints_timestamp ON bark_fingerprints(timestamp)")
             cursor.execute("CREATE INDEX IF NOT EXISTS idx_fingerprints_untagged ON bark_fingerprints(dog_id) WHERE dog_id IS NULL")
             cursor.execute("CREATE INDEX IF NOT EXISTS idx_fingerprints_rejected ON bark_fingerprints(rejection_reason) WHERE rejection_reason IS NOT NULL")
@@ -1284,7 +1270,7 @@ class FingerprintStore:
         """Get summary statistics.
 
         Returns:
-            Dictionary with counts of dogs, fingerprints, untagged, rejected, etc.
+            Dictionary with counts of dogs, fingerprints, untagged, rejected.
         """
         with self._get_connection() as conn:
             cursor = conn.cursor()
@@ -1302,15 +1288,11 @@ class FingerprintStore:
             cursor.execute("SELECT COUNT(*) FROM bark_fingerprints WHERE rejection_reason IS NOT NULL")
             rejected_count = cursor.fetchone()[0]
 
-            cursor.execute("SELECT COUNT(*) FROM clusters")
-            cluster_count = cursor.fetchone()[0]
-
             return {
                 "dogs": dog_count,
                 "fingerprints": fingerprint_count,
                 "untagged": untagged_count,
                 "rejected": rejected_count,
-                "clusters": cluster_count,
             }
 
     # --- Maintenance Operations ---

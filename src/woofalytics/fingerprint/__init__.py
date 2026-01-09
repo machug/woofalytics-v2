@@ -16,7 +16,6 @@ from woofalytics.fingerprint.acoustic_matcher import (
 )
 from woofalytics.fingerprint.models import (
     BarkFingerprint,
-    ClusterInfo,
     DogProfile,
     FingerprintMatch,
 )
@@ -29,7 +28,6 @@ __all__ = [
     "AcousticFeatures",
     "AcousticMatcher",
     "BarkFingerprint",
-    "ClusterInfo",
     "DogProfile",
     "FeatureWeights",
     "FingerprintMatch",

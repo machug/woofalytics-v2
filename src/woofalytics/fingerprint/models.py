@@ -249,39 +249,3 @@ class FingerprintMatch:
         }
 
 
-@dataclass
-class ClusterInfo:
-    """Information about an auto-detected cluster of similar barks."""
-
-    id: str = field(default_factory=_generate_id)
-    created_at: datetime = field(default_factory=lambda: datetime.now(timezone.utc))
-
-    # Centroid embedding (average of all fingerprints in cluster)
-    centroid: np.ndarray | None = None
-
-    # Number of barks in this cluster
-    bark_count: int = 0
-
-    # Time range
-    first_seen: datetime | None = None
-    last_seen: datetime | None = None
-
-    # Suggested characteristics
-    suggested_name: str = ""  # e.g., "High-pitched evening barker"
-
-    # Average acoustic features for description
-    avg_pitch_hz: float | None = None
-    avg_duration_ms: float | None = None
-
-    def to_dict(self) -> dict[str, Any]:
-        """Convert to dictionary."""
-        return {
-            "id": self.id,
-            "created_at": self.created_at.isoformat(),
-            "bark_count": self.bark_count,
-            "first_seen": self.first_seen.isoformat() if self.first_seen else None,
-            "last_seen": self.last_seen.isoformat() if self.last_seen else None,
-            "suggested_name": self.suggested_name,
-            "avg_pitch_hz": self.avg_pitch_hz,
-            "avg_duration_ms": self.avg_duration_ms,
-        }

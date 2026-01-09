@@ -1632,11 +1632,6 @@ export interface components {
              * @default 0
              */
             rejected: number;
-            /**
-             * Clusters
-             * @description Number of auto-detected clusters
-             */
-            clusters: number;
         };
         /**
          * GateStatsSchema
