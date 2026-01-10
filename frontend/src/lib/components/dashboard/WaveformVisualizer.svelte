@@ -34,8 +34,9 @@
 			analyser = audioContext.createAnalyser();
 			analyser.fftSize = 512; // 256 frequency bins
 			analyser.smoothingTimeConstant = 0.3;
-			analyser.minDecibels = -90;
-			analyser.maxDecibels = -10;
+			// Tighter decibel range for better visual dynamic range
+			analyser.minDecibels = -70;
+			analyser.maxDecibels = -20;
 
 			const source = audioContext.createMediaStreamSource(stream);
 			source.connect(analyser);
@@ -65,7 +66,7 @@
 	}
 
 	function draw() {
-		if (!canvas || !analyser || !dataArray || !isRunning) return;
+		if (!canvas || !analyser || !dataArray || !isRunning || containerWidth === 0) return;
 
 		const ctx = canvas.getContext('2d');
 		if (!ctx) return;
@@ -94,22 +95,21 @@
 
 			// Draw from bottom (low freq) to top (high freq)
 			const y = canvas.height - (i + 1) * binHeight;
-			ctx.fillRect(canvas.width - 1, y, 1, binHeight);
+			ctx.fillRect(canvas.width - 1, y, 1, Math.ceil(binHeight));
 		}
 
 		animationId = requestAnimationFrame(draw);
 	}
 
-	// Setup canvas dimensions
+	// Setup canvas dimensions - use CSS pixels directly, browser handles DPR scaling
 	$effect(() => {
 		if (canvas && containerWidth > 0) {
-			const dpr = window.devicePixelRatio || 1;
-			canvas.width = containerWidth * dpr;
-			canvas.height = height * dpr;
+			// Set canvas resolution to match display size
+			canvas.width = containerWidth;
+			canvas.height = height;
 
 			const ctx = canvas.getContext('2d');
 			if (ctx) {
-				ctx.scale(dpr, dpr);
 				// Fill with dark background initially
 				ctx.fillStyle = '#0d1117';
 				ctx.fillRect(0, 0, containerWidth, height);
