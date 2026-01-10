@@ -1,4 +1,4 @@
-# 🐕 Woofalytics v2.0
+# 🐕 Woofalytics v2.4.0
 
 **AI-powered dog bark detection and cataloging for Raspberry Pi**
 
