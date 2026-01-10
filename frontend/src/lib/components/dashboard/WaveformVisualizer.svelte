@@ -86,12 +86,29 @@
 			const value = dataArray[i];
 			const percent = value / 255;
 
-			// Color gradient: dark blue -> cyan -> yellow -> red
-			const r = Math.min(255, percent * 2 * 255);
-			const g = percent > 0.5 ? 255 - (percent - 0.5) * 2 * 255 : percent * 2 * 255;
-			const b = percent < 0.5 ? 255 - percent * 2 * 255 : 0;
+			// NASA Teal colormap: dark -> deep teal -> bright cyan -> white
+			let r, g, b;
+			if (percent < 0.33) {
+				// Dark to deep teal
+				const t = percent / 0.33;
+				r = Math.floor(13 + t * 20);      // 13 -> 33
+				g = Math.floor(17 + t * 60);      // 17 -> 77
+				b = Math.floor(23 + t * 70);      // 23 -> 93
+			} else if (percent < 0.66) {
+				// Deep teal to bright cyan
+				const t = (percent - 0.33) / 0.33;
+				r = Math.floor(33 + t * 55);      // 33 -> 88
+				g = Math.floor(77 + t * 89);      // 77 -> 166
+				b = Math.floor(93 + t * 162);     // 93 -> 255
+			} else {
+				// Bright cyan to white
+				const t = (percent - 0.66) / 0.34;
+				r = Math.floor(88 + t * 167);     // 88 -> 255
+				g = Math.floor(166 + t * 89);     // 166 -> 255
+				b = 255;                          // stays 255
+			}
 
-			ctx.fillStyle = `rgb(${Math.floor(r)}, ${Math.floor(g)}, ${Math.floor(b)})`;
+			ctx.fillStyle = `rgb(${r}, ${g}, ${b})`;
 
 			// Draw from bottom (low freq) to top (high freq)
 			const y = canvas.height - (i + 1) * binHeight;
