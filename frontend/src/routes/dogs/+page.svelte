@@ -6,6 +6,7 @@
 	import DogForm from '$lib/components/dogs/DogForm.svelte';
 	import BarkModal from '$lib/components/dogs/BarkModal.svelte';
 	import UntaggedBarkList from '$lib/components/dogs/UntaggedBarkList.svelte';
+	import { toast } from '$lib/stores/toast';
 
 	// State
 	let dogs = $state<Dog[]>([]);
@@ -92,7 +93,7 @@
 			await loadStats();
 		} catch (e) {
 			console.error('Error adding dog:', e);
-			alert('Failed to add dog. Please try again.');
+			toast.show('error', 'Failed to add dog. Please try again.');
 		} finally {
 			addingDog = false;
 		}
@@ -121,7 +122,7 @@
 			await loadDogs();
 		} catch (e) {
 			console.error('Error updating dog:', e);
-			alert('Failed to update dog. Please try again.');
+			toast.show('error', 'Failed to update dog. Please try again.');
 		}
 	}
 
@@ -162,7 +163,7 @@
 			await Promise.all([loadDogs(), loadStats(), loadUntaggedBarks()]);
 		} catch (e) {
 			console.error('Error deleting dog:', e);
-			alert('Failed to delete dog. Please try again.');
+			toast.show('error', 'Failed to delete dog. Please try again.');
 		}
 	}
 
@@ -217,7 +218,7 @@
 			await loadDogs();
 		} catch (e) {
 			console.error('Error toggling confirm:', e);
-			alert('Failed to update dog confirmation. Please try again.');
+			toast.show('error', 'Failed to update dog confirmation. Please try again.');
 		}
 	}
 
@@ -235,7 +236,7 @@
 			await Promise.all([loadUntaggedBarks(), loadDogs(), loadStats()]);
 		} catch (e) {
 			console.error('Error tagging bark:', e);
-			alert('Failed to tag bark. Please try again.');
+			toast.show('error', 'Failed to tag bark. Please try again.');
 		}
 	}
 
@@ -257,7 +258,7 @@
 			await Promise.all([loadUntaggedBarks(), loadDogs(), loadStats()]);
 		} catch (e) {
 			console.error('Error bulk tagging barks:', e);
-			alert('Failed to tag barks. Please try again.');
+			toast.show('error', 'Failed to tag barks. Please try again.');
 		}
 	}
 

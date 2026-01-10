@@ -3,6 +3,7 @@
 	import { onMount } from 'svelte';
 	import { page } from '$app/stores';
 	import { uptimeSeconds, startBarkListener, stopBarkListener } from '$lib/stores/bark';
+	import ToastContainer from '$lib/components/ui/ToastContainer.svelte';
 
 	let { children } = $props();
 
@@ -59,6 +60,8 @@
 		<a href="https://github.com/machug/woofalytics-v2">GitHub</a>
 	</footer>
 </div>
+
+<ToastContainer />
 
 <style>
 	.nav-links {
