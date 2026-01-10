@@ -16,6 +16,10 @@
 	let isRunning = $state(false);
 	let error = $state<string | null>(null);
 
+	// Accessibility: Check for reduced motion preference
+	const prefersReducedMotion =
+		typeof window !== 'undefined' && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+
 	async function startCapture() {
 		try {
 			error = null;
@@ -73,6 +77,47 @@
 
 		// Get frequency data
 		analyser.getByteFrequencyData(dataArray);
+
+		// Accessibility: For reduced motion, show static bar visualization instead of scrolling
+		if (prefersReducedMotion) {
+			// Clear and draw static frequency bars
+			ctx.fillStyle = '#0d1117';
+			ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+			const binCount = dataArray.length;
+			const barWidth = canvas.width / binCount;
+
+			for (let i = 0; i < binCount; i++) {
+				const value = dataArray[i];
+				const percent = value / 255;
+				const barHeight = percent * canvas.height;
+
+				// Use same NASA Teal colormap
+				let r, g, b;
+				if (percent < 0.33) {
+					const t = percent / 0.33;
+					r = Math.floor(13 + t * 20);
+					g = Math.floor(17 + t * 60);
+					b = Math.floor(23 + t * 70);
+				} else if (percent < 0.66) {
+					const t = (percent - 0.33) / 0.33;
+					r = Math.floor(33 + t * 55);
+					g = Math.floor(77 + t * 89);
+					b = Math.floor(93 + t * 162);
+				} else {
+					const t = (percent - 0.66) / 0.34;
+					r = Math.floor(88 + t * 167);
+					g = Math.floor(166 + t * 89);
+					b = 255;
+				}
+
+				ctx.fillStyle = `rgb(${r}, ${g}, ${b})`;
+				ctx.fillRect(i * barWidth, canvas.height - barHeight, barWidth - 1, barHeight);
+			}
+
+			animationId = requestAnimationFrame(draw);
+			return;
+		}
 
 		// Shift existing image left by 1 pixel
 		const imageData = ctx.getImageData(1, 0, canvas.width - 1, canvas.height);
