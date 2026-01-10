@@ -1,5 +1,5 @@
 <script lang="ts">
-	import { isDetecting, lastBark, sessionBarkCount } from '$lib/stores/bark';
+	import { isDetecting, lastBark, todayBarkCount } from '$lib/stores/bark';
 	import { formatTime, formatNumber } from '$lib/utils/format';
 	import type { Dog, FingerprintStats } from '$lib/api/types';
 
@@ -11,7 +11,7 @@
 	let { fingerprintStats = null, dogs = [] }: Props = $props();
 
 	let detecting = $derived($isDetecting);
-	let sessionCount = $derived($sessionBarkCount);
+	let todayCount = $derived($todayBarkCount);
 	let recentBark = $derived($lastBark);
 
 	let totalCount = $derived(fingerprintStats?.fingerprints ?? 0);
@@ -45,8 +45,8 @@
 			</div>
 		</div>
 		<div class="session-metric">
-			<span class="metric-value">{sessionCount}</span>
-			<span class="metric-label">Barks this session</span>
+			<span class="metric-value">{todayCount}</span>
+			<span class="metric-label">Barks today</span>
 		</div>
 	</div>
 

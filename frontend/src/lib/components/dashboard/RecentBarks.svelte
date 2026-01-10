@@ -1,9 +1,10 @@
 <script lang="ts">
-	import { recentBarks, type BarkEvent } from '$lib/stores/bark';
+	import { recentFingerprints, fingerprintsLoading, type Fingerprint } from '$lib/stores/fingerprints';
 	import { formatTime } from '$lib/utils/format';
 
-	// Get recent barks (limit to 10 most recent)
-	let barks = $derived($recentBarks.slice(0, 10));
+	// Get recent fingerprints (already limited to 5)
+	let fingerprints = $derived($recentFingerprints);
+	let loading = $derived($fingerprintsLoading);
 
 	function formatConfidence(confidence: number): string {
 		return Math.round(confidence * 100) + '%';
@@ -14,36 +15,45 @@
 		if (confidence >= 0.5) return 'medium';
 		return 'low';
 	}
+
+	// Get display confidence (prefer match_confidence, fallback to detection_probability)
+	function getConfidence(fp: Fingerprint): number {
+		return fp.match_confidence ?? fp.detection_probability ?? 0;
+	}
 </script>
 
 <div class="recent-barks">
 	<div class="header">
 		<h3 class="title">Recent Detections</h3>
-		<span class="count">{barks.length} shown</span>
+		<span class="count">{fingerprints.length} shown</span>
 	</div>
 
-	{#if barks.length === 0}
+	{#if loading}
+		<div class="empty-state">
+			<span class="text">Loading...</span>
+		</div>
+	{:else if fingerprints.length === 0}
 		<div class="empty-state">
 			<span class="emoji">🔇</span>
 			<span class="text">No barks detected yet</span>
 		</div>
 	{:else}
 		<div class="bark-list">
-			{#each barks as bark (bark.id)}
-				<div class="bark-item" class:new={Date.now() - bark.timestamp.getTime() < 3000}>
-					<div class="bark-time">{formatTime(bark.timestamp)}</div>
+			{#each fingerprints as fp (fp.id)}
+				<div class="bark-item" class:new={Date.now() - fp.timestamp.getTime() < 3000}>
+					<div class="bark-time">{formatTime(fp.timestamp)}</div>
 					<div class="bark-details">
-						{#if bark.dog_name}
-							<span class="dog-name">{bark.dog_name}</span>
+						{#if fp.dog_name}
+							<span class="dog-name">{fp.dog_name}</span>
 						{:else}
 							<span class="untagged">Untagged</span>
 						{/if}
-						<span class="confidence {getConfidenceClass(bark.confidence)}">
-							{formatConfidence(bark.confidence)}
+						<span class="confidence {getConfidenceClass(getConfidence(fp))}">
+							{formatConfidence(getConfidence(fp))}
 						</span>
 					</div>
-					{#if bark.duration_ms}
-						<div class="bark-duration">{bark.duration_ms}ms</div>
+					{#if fp.duration_ms}
+						<div class="bark-duration">{Math.round(fp.duration_ms)}ms</div>
 					{/if}
 				</div>
 			{/each}

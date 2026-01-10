@@ -1,10 +1,10 @@
 <script lang="ts">
-	import { isDetecting, sessionBarkCount, lastBark } from '$lib/stores/bark';
+	import { isDetecting, todayBarkCount, lastBark } from '$lib/stores/bark';
 	import { formatTime } from '$lib/utils/format';
 
 	// Derived display values
 	let detecting = $derived($isDetecting);
-	let barkCount = $derived($sessionBarkCount);
+	let barkCount = $derived($todayBarkCount);
 	let recentBark = $derived($lastBark);
 
 	// Time since last bark
@@ -46,7 +46,7 @@
 
 	<div class="bark-count-display">
 		<span class="count-value">{barkCount}</span>
-		<span class="count-label">barks this session</span>
+		<span class="count-label">barks today</span>
 	</div>
 
 	<div class="last-bark-info">

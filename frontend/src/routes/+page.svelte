@@ -5,7 +5,8 @@
 	import { api, fetchApi } from '$lib/api/client';
 	import { formatNumber } from '$lib/utils/format';
 	import type { Dog, FingerprintStats, EvidenceStats } from '$lib/api/types';
-	import { startBarkListener, stopBarkListener, barkStore } from '$lib/stores/bark';
+	import { startBarkListener, stopBarkListener, barkStore, fetchTodayStats } from '$lib/stores/bark';
+	import { fetchRecentFingerprints } from '$lib/stores/fingerprints';
 	import { startAudioListener, stopAudioListener } from '$lib/stores/audio';
 	import { audioConnectionState } from '$lib/stores/websocket';
 
@@ -56,6 +57,9 @@
 
 	onMount(() => {
 		loadData();
+		// Fetch persistent stats before connecting WebSocket
+		fetchTodayStats();
+		fetchRecentFingerprints();
 		startBarkListener();
 		startAudioListener();
 	});

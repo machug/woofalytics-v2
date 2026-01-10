@@ -20,7 +20,7 @@ export interface BarkEvent {
 interface BarkState {
 	recentBarks: BarkEvent[];
 	totalCount: number;
-	sessionCount: number;
+	todayCount: number;
 	lastBark: BarkEvent | null;
 	isDetecting: boolean;
 	uptimeSeconds: number;
@@ -32,7 +32,7 @@ function createBarkStore() {
 	const { subscribe, update, set } = writable<BarkState>({
 		recentBarks: [],
 		totalCount: 0,
-		sessionCount: 0,
+		todayCount: 0,
 		lastBark: null,
 		isDetecting: false,
 		uptimeSeconds: 0
@@ -45,7 +45,7 @@ function createBarkStore() {
 				...state,
 				recentBarks: [bark, ...state.recentBarks].slice(0, MAX_RECENT_BARKS),
 				totalCount: state.totalCount + 1,
-				sessionCount: state.sessionCount + 1,
+				todayCount: state.todayCount + 1,
 				lastBark: bark
 			}));
 		},
@@ -54,6 +54,9 @@ function createBarkStore() {
 		},
 		setTotalCount: (count: number) => {
 			update((state) => ({ ...state, totalCount: count }));
+		},
+		setTodayCount: (count: number) => {
+			update((state) => ({ ...state, todayCount: count }));
 		},
 		setUptime: (seconds: number) => {
 			update((state) => ({ ...state, uptimeSeconds: seconds }));
@@ -64,7 +67,7 @@ function createBarkStore() {
 		resetSession: () => {
 			update((state) => ({
 				...state,
-				sessionCount: 0,
+				todayCount: 0,
 				recentBarks: []
 			}));
 		},
@@ -72,7 +75,7 @@ function createBarkStore() {
 			set({
 				recentBarks: [],
 				totalCount: 0,
-				sessionCount: 0,
+				todayCount: 0,
 				lastBark: null,
 				isDetecting: false,
 				uptimeSeconds: 0
@@ -90,9 +93,9 @@ export const recentBarks: Readable<BarkEvent[]> = derived(
 
 export const lastBark: Readable<BarkEvent | null> = derived(barkStore, ($state) => $state.lastBark);
 
-export const sessionBarkCount: Readable<number> = derived(
+export const todayBarkCount: Readable<number> = derived(
 	barkStore,
-	($state) => $state.sessionCount
+	($state) => $state.todayCount
 );
 
 export const totalBarkCount: Readable<number> = derived(
@@ -173,4 +176,20 @@ export function stopBarkListener() {
 		uptimeInterval = null;
 	}
 	barkWebSocket.disconnect();
+}
+
+/**
+ * Fetch today's bark count from the server
+ * Called on page load to persist count across refreshes
+ */
+export async function fetchTodayStats(): Promise<void> {
+	try {
+		const response = await fetch('/api/summary/daily');
+		if (response.ok) {
+			const data = await response.json();
+			barkStore.setTodayCount(data.total_barks ?? 0);
+		}
+	} catch (e) {
+		console.error('[BarkStore] Failed to fetch today stats:', e);
+	}
 }
