@@ -336,16 +336,20 @@
 
 				<!-- Add Dog Form -->
 				<form class="add-dog-form" onsubmit={handleAddDog}>
+					<label for="new-dog-name" class="visually-hidden">Dog name</label>
 					<input
 						type="text"
+						id="new-dog-name"
 						class="form-input"
 						bind:value={newDogName}
 						placeholder="Dog name..."
 						required
 						disabled={addingDog}
 					/>
+					<label for="new-dog-notes" class="visually-hidden">Notes (optional)</label>
 					<input
 						type="text"
+						id="new-dog-notes"
 						class="form-input form-input--notes"
 						bind:value={newDogNotes}
 						placeholder="Notes (optional)"
