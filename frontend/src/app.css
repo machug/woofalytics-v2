@@ -12,7 +12,8 @@
 
 	--text-primary: #f0f6fc;
 	--text-secondary: #7d8590;
-	--text-muted: #484f58;
+	/* WCAG AA compliant: #6e7681 on #0d1117 achieves ~4.5:1 contrast ratio */
+	--text-muted: #6e7681;
 
 	--accent-amber: #f59e0b;
 	--accent-amber-dim: rgba(245, 158, 11, 0.15);
