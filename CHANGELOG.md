@@ -4,6 +4,21 @@ All notable changes to Woofalytics will be documented in this file.
 
 Format based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
+## [2.3.0] - 2026-01-10
+
+### Added
+- Audio resampling cache to eliminate redundant sample rate conversions
+- Startup warning when authentication is disabled
+
+### Changed
+- Default server binding changed from 0.0.0.0 to 127.0.0.1 (security hardening)
+- Fingerprint processing now runs in thread pool (no longer blocks event loop)
+
+### Removed
+- Unused ClusterInfo class and clusters table (YAGNI cleanup)
+- Unused describe_bark() and get_feature_comparison() methods
+- Duplicate BarkFingerprint construction code (extracted to helper)
+
 ## [2.2.0] - 2026-01-07
 
 ### Added

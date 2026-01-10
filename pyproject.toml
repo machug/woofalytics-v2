@@ -1,6 +1,6 @@
 [project]
 name = "woofalytics"
-version = "2.2.0"
+version = "2.3.0"
 description = "AI-powered dog bark detection with evidence collection for Raspberry Pi"
 readme = "README.md"
 license = { text = "MIT" }
