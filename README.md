@@ -44,6 +44,7 @@ This project was created with specific intentions:
 - **Direction of Arrival (DOA)** - Know which direction barks come from using stereo microphones
 - **Evidence Recording** - Automatic 30-second clips with JSON metadata sidecars
 - **Modern Web UI** - Real-time dashboard with WebSocket updates
+- **Accessible by Design** - WCAG AA compliant, screen reader support, respects motion preferences
 - **REST API** - Full OpenAPI documentation at `/api/docs`
 - **Docker Support** - Easy deployment with Docker Compose
 - **Flexible Configuration** - YAML config with environment variable overrides
@@ -483,6 +484,9 @@ The frontend is a **SvelteKit SPA** with a NASA Mission Control-inspired theme (
 - **Svelte 5 Runes** - Modern reactive state with `$state`, `$derived`, `$effect`
 - **Responsive Design** - Works on desktop and tablet
 - **Evidence Playback** - Listen to recorded bark clips directly in the browser
+- **Toast Notifications** - Non-blocking feedback replacing browser alerts
+- **Active Navigation** - Clear indication of current page with amber highlight
+- **Accessibility** - WCAG AA text contrast, labeled form inputs, `prefers-reduced-motion` support
 
 ### Production Serving
 
