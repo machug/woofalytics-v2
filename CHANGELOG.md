@@ -4,6 +4,22 @@ All notable changes to Woofalytics will be documented in this file.
 
 Format based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
+## [2.4.0] - 2026-01-10
+
+### Added
+- Toast notification system replacing browser alert() dialogs
+- Active navigation state indicator with amber highlight
+- `prefers-reduced-motion` support for users with vestibular disorders
+- Accessible form labels (visually hidden where appropriate)
+
+### Fixed
+- Text contrast now meets WCAG AA compliance (--text-muted: 4.5:1 ratio)
+
+### Accessibility
+- Screen reader support: `aria-current="page"` on active nav links
+- Form inputs properly labeled for assistive technology
+- Animations respect OS-level motion preferences
+
 ## [2.3.0] - 2026-01-10
 
 ### Added
