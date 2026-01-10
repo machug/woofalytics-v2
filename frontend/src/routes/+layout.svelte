@@ -1,6 +1,7 @@
 <script lang="ts">
 	import '../app.css';
 	import { onMount } from 'svelte';
+	import { page } from '$app/stores';
 	import { uptimeSeconds, startBarkListener, stopBarkListener } from '$lib/stores/bark';
 
 	let { children } = $props();
@@ -35,11 +36,11 @@
 		</div>
 
 		<div class="nav-links">
-			<a href="/" class="nav-link">Dashboard</a>
-			<a href="/reports" class="nav-link">Reports</a>
-			<a href="/dogs" class="nav-link">Dogs</a>
-			<a href="/fingerprints" class="nav-link">Fingerprints</a>
-			<a href="/settings" class="nav-link">Settings</a>
+			<a href="/" class="nav-link" class:active={$page.url.pathname === '/'} aria-current={$page.url.pathname === '/' ? 'page' : undefined}>Dashboard</a>
+			<a href="/reports" class="nav-link" class:active={$page.url.pathname === '/reports'} aria-current={$page.url.pathname === '/reports' ? 'page' : undefined}>Reports</a>
+			<a href="/dogs" class="nav-link" class:active={$page.url.pathname === '/dogs'} aria-current={$page.url.pathname === '/dogs' ? 'page' : undefined}>Dogs</a>
+			<a href="/fingerprints" class="nav-link" class:active={$page.url.pathname === '/fingerprints'} aria-current={$page.url.pathname === '/fingerprints' ? 'page' : undefined}>Fingerprints</a>
+			<a href="/settings" class="nav-link" class:active={$page.url.pathname === '/settings'} aria-current={$page.url.pathname === '/settings' ? 'page' : undefined}>Settings</a>
 		</div>
 
 		<div class="telemetry-clock">
