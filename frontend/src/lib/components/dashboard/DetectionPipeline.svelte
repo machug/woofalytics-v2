@@ -2,7 +2,6 @@
 	import { onMount, onDestroy } from 'svelte';
 	import {
 		pipelineStore,
-		pipelineStage,
 		vadState,
 		yamnetState,
 		clapState,
@@ -10,7 +9,6 @@
 		pipelineConnected
 	} from '$lib/stores/pipeline';
 
-	let stage = $derived($pipelineStage);
 	let vad = $derived($vadState);
 	let yamnet = $derived($yamnetState);
 	let clap = $derived($clapState);
@@ -25,21 +23,6 @@
 		pipelineStore.disconnect();
 	});
 
-	function getStageColor(stage: string | null): string {
-		switch (stage) {
-			case 'bark_detected':
-				return 'var(--status-success)';
-			case 'clap_rejected':
-				return 'var(--accent-amber)';
-			case 'yamnet_rejected':
-				return 'var(--accent-teal)';
-			case 'vad_rejected':
-				return 'var(--text-muted)';
-			default:
-				return 'var(--text-muted)';
-		}
-	}
-
 	function formatDb(db: number | undefined | null): string {
 		if (db === undefined || db === null || !isFinite(db)) return '--';
 		return `${db.toFixed(1)} dB`;
@@ -48,12 +31,6 @@
 	function formatPercent(value: number | undefined | null): string {
 		if (value === undefined || value === null) return '--';
 		return `${(value * 100).toFixed(1)}%`;
-	}
-
-	function truncateLabel(label: string, maxLen: number = 20): string {
-		if (!label) return '--';
-		if (label.length <= maxLen) return label;
-		return label.slice(0, maxLen - 2) + '...';
 	}
 </script>
 
@@ -141,7 +118,7 @@
 				<span class="meter-value">{formatPercent(clap?.probability)}</span>
 			</div>
 			<div class="clap-label">
-				{truncateLabel(clap?.top_label ?? '', 25)}
+				{clap?.top_label ?? '--'}
 			</div>
 		</div>
 	</div>

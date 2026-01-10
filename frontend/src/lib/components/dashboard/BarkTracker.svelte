@@ -1,5 +1,6 @@
 <script lang="ts">
 	import { isDetecting, lastBark, sessionBarkCount } from '$lib/stores/bark';
+	import { formatTime, formatNumber } from '$lib/utils/format';
 	import type { Dog, FingerprintStats } from '$lib/api/types';
 
 	interface Props {
@@ -21,21 +22,6 @@
 	let unassignedRate = $derived(
 		totalCount > 0 ? Math.round((untaggedCount / totalCount) * 100) : 0
 	);
-
-	function formatTime(date: Date | null): string {
-		if (!date) return '--:--:--';
-		return date.toLocaleTimeString('en-US', {
-			hour12: false,
-			hour: '2-digit',
-			minute: '2-digit',
-			second: '2-digit'
-		});
-	}
-
-	function formatNumber(value: number | null | undefined): string {
-		if (typeof value !== 'number') return '--';
-		return value.toLocaleString();
-	}
 
 	function countNewDogs(list: Dog[]): number {
 		const now = Date.now();

@@ -1,21 +1,11 @@
 <script lang="ts">
 	import { isDetecting, sessionBarkCount, lastBark } from '$lib/stores/bark';
+	import { formatTime } from '$lib/utils/format';
 
 	// Derived display values
 	let detecting = $derived($isDetecting);
 	let barkCount = $derived($sessionBarkCount);
 	let recentBark = $derived($lastBark);
-
-	// Format timestamp for display
-	function formatTime(date: Date | null): string {
-		if (!date) return '--:--:--';
-		return date.toLocaleTimeString('en-US', {
-			hour12: false,
-			hour: '2-digit',
-			minute: '2-digit',
-			second: '2-digit'
-		});
-	}
 
 	// Time since last bark
 	function getTimeSince(date: Date | null): string {

@@ -3,6 +3,7 @@
 	import { WaveformVisualizer, BarkGauge, BarkTracker, RecentBarks, DetectionPipeline } from '$lib/components/dashboard';
 	import { Card } from '$lib/components/ui';
 	import { api, fetchApi } from '$lib/api/client';
+	import { formatNumber } from '$lib/utils/format';
 	import type { Dog, FingerprintStats, EvidenceStats } from '$lib/api/types';
 	import { startBarkListener, stopBarkListener, barkStore } from '$lib/stores/bark';
 	import { startAudioListener, stopAudioListener } from '$lib/stores/audio';
@@ -42,10 +43,6 @@
 		} finally {
 			loading = false;
 		}
-	}
-
-	function formatNumber(num: number | undefined | null): string {
-		return (num ?? 0).toLocaleString();
 	}
 
 	function formatDuration(seconds: number): string {

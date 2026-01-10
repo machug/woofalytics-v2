@@ -1,17 +1,9 @@
 <script lang="ts">
 	import { recentBarks, type BarkEvent } from '$lib/stores/bark';
+	import { formatTime } from '$lib/utils/format';
 
 	// Get recent barks (limit to 10 most recent)
 	let barks = $derived($recentBarks.slice(0, 10));
-
-	function formatTime(date: Date): string {
-		return date.toLocaleTimeString('en-US', {
-			hour12: false,
-			hour: '2-digit',
-			minute: '2-digit',
-			second: '2-digit'
-		});
-	}
 
 	function formatConfidence(confidence: number): string {
 		return Math.round(confidence * 100) + '%';
