@@ -1,11 +1,17 @@
 <script lang="ts">
 	import { isDetecting, todayBarkCount, lastBark } from '$lib/stores/bark';
+	import { recentFingerprints } from '$lib/stores/fingerprints';
 	import { formatTime } from '$lib/utils/format';
 
 	// Derived display values
 	let detecting = $derived($isDetecting);
 	let barkCount = $derived($todayBarkCount);
-	let recentBark = $derived($lastBark);
+	// Use lastBark from WebSocket, fallback to first persisted fingerprint
+	let recentBark = $derived($lastBark ?? ($recentFingerprints[0] ? {
+		timestamp: $recentFingerprints[0].timestamp,
+		confidence: $recentFingerprints[0].match_confidence ?? $recentFingerprints[0].detection_probability,
+		dog_name: $recentFingerprints[0].dog_name
+	} : null));
 
 	// Time since last bark
 	function getTimeSince(date: Date | null): string {
