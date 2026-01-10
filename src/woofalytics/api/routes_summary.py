@@ -25,7 +25,9 @@ from fastapi import APIRouter, Depends, HTTPException, Query, Request
 from woofalytics.api.schemas_summary import (
     AISummarySchema,
     DailySummarySchema,
+    DogBreakdownItem,
     MonthlySummarySchema,
+    RangeSummarySchema,
     WeeklySummarySchema,
 )
 from woofalytics.evidence.metadata import EvidenceMetadata
@@ -70,6 +72,40 @@ def _get_per_dog_bark_counts(
             (start.isoformat(), end.isoformat()),
         )
         return [(row["name"], row["bark_count"]) for row in cursor.fetchall()]
+
+
+def _get_per_dog_bark_counts_with_ids(
+    store: FingerprintStore,
+    start: datetime,
+    end: datetime,
+) -> list[DogBreakdownItem]:
+    """Query per-dog bark counts with IDs for confirmed dogs in a date range.
+
+    Returns:
+        List of DogBreakdownItem sorted by count descending.
+    """
+    with store._get_connection() as conn:
+        cursor = conn.cursor()
+        cursor.execute(
+            """
+            SELECT dp.id, dp.name, COUNT(bf.id) as bark_count
+            FROM bark_fingerprints bf
+            JOIN dog_profiles dp ON bf.dog_id = dp.id
+            WHERE bf.timestamp >= ? AND bf.timestamp < ?
+              AND dp.confirmed = 1
+            GROUP BY dp.id, dp.name
+            ORDER BY bark_count DESC
+            """,
+            (start.isoformat(), end.isoformat()),
+        )
+        return [
+            DogBreakdownItem(
+                dog_id=row["id"],
+                dog_name=row["name"],
+                bark_count=row["bark_count"],
+            )
+            for row in cursor.fetchall()
+        ]
 
 
 def _calculate_period_stats(
@@ -285,6 +321,83 @@ async def monthly_summary(
     )
 
 
+@router.get("/range", response_model=RangeSummarySchema)
+async def range_summary(
+    request: Request,
+    evidence: EvidenceStorage = Depends(get_evidence),
+    start_date: str = Query(
+        description="Start date in YYYY-MM-DD format.",
+    ),
+    end_date: str = Query(
+        description="End date in YYYY-MM-DD format (inclusive).",
+    ),
+) -> RangeSummarySchema:
+    """Get bark summary for a custom date range.
+
+    Returns total barks, events, duration, average confidence,
+    peak hour, daily breakdown, hourly breakdown (aggregated across all days),
+    and per-dog bark counts for the specified date range.
+    """
+    # Parse and validate dates
+    try:
+        range_start = datetime.strptime(start_date, "%Y-%m-%d").replace(tzinfo=timezone.utc)
+    except ValueError:
+        raise HTTPException(
+            status_code=400,
+            detail=f"Invalid start_date format: {start_date}. Use YYYY-MM-DD.",
+        )
+
+    try:
+        range_end = datetime.strptime(end_date, "%Y-%m-%d").replace(tzinfo=timezone.utc)
+        # End date is inclusive, so add 1 day for filtering
+        range_end_exclusive = range_end + timedelta(days=1)
+    except ValueError:
+        raise HTTPException(
+            status_code=400,
+            detail=f"Invalid end_date format: {end_date}. Use YYYY-MM-DD.",
+        )
+
+    # Validate range
+    if range_start > range_end:
+        raise HTTPException(
+            status_code=400,
+            detail="start_date must be before or equal to end_date.",
+        )
+
+    # Filter entries for this range
+    entries = _filter_by_date_range(evidence._index.entries, range_start, range_end_exclusive)
+
+    total_barks, total_events, total_duration, avg_confidence, peak_hour, hourly = (
+        _calculate_period_stats(entries)
+    )
+
+    # Calculate daily breakdown (in local time)
+    daily: dict[str, int] = defaultdict(int)
+    for entry in entries:
+        local_time = entry.timestamp_utc.astimezone(LOCAL_TZ)
+        day_str = local_time.strftime("%Y-%m-%d")
+        daily[day_str] += entry.detection.bark_count_in_clip
+
+    # Get per-dog breakdown from fingerprint store
+    fingerprint_store = get_fingerprint_store(request)
+    dog_breakdown = _get_per_dog_bark_counts_with_ids(
+        fingerprint_store, range_start, range_end_exclusive
+    )
+
+    return RangeSummarySchema(
+        start_date=start_date,
+        end_date=end_date,
+        total_barks=total_barks,
+        total_events=total_events,
+        total_duration_seconds=total_duration,
+        avg_confidence=round(avg_confidence, 4),
+        peak_hour=peak_hour,
+        daily_breakdown=dict(daily),
+        hourly_breakdown=hourly,
+        dog_breakdown=dog_breakdown,
+    )
+
+
 # Ollama configuration
 OLLAMA_URL = os.getenv("OLLAMA_URL", "http://localhost:11434")
 OLLAMA_MODEL = os.getenv("OLLAMA_MODEL", "qwen2.5:3b")
@@ -443,4 +556,183 @@ async def weekly_ai_summary(
         model=OLLAMA_MODEL,
         generation_time_ms=generation_time,
         data_period=f"{week_start.strftime('%Y-%m-%d')} to {(week_end - timedelta(seconds=1)).strftime('%Y-%m-%d')}",
+    )
+
+
+def _format_range_prompt(
+    start_date: str,
+    end_date: str,
+    total_barks: int,
+    total_events: int,
+    total_duration_seconds: float,
+    avg_confidence: float,
+    peak_hour: int | None,
+    daily_breakdown: dict[str, int],
+    per_dog_counts: list[tuple[str, int]] | None = None,
+) -> str:
+    """Format custom range data as a prompt for the LLM."""
+    # Format peak hour
+    peak_hour_str = f"{peak_hour}:00-{peak_hour + 1}:00" if peak_hour is not None else "N/A"
+
+    # Calculate total hours of disturbance
+    total_seconds = total_duration_seconds
+    hours = int(total_seconds // 3600)
+    minutes = int((total_seconds % 3600) // 60)
+    if hours > 0 and minutes > 0:
+        total_hours_str = f"{hours} hour{'s' if hours != 1 else ''} {minutes} minutes"
+    elif hours > 0:
+        total_hours_str = f"{hours} hour{'s' if hours != 1 else ''}"
+    else:
+        total_hours_str = f"{minutes} minutes"
+
+    # Format daily breakdown as readable text
+    daily_lines = []
+    for day, count in sorted(daily_breakdown.items()):
+        try:
+            day_date = datetime.strptime(day, "%Y-%m-%d")
+            day_name = day_date.strftime("%A, %B %d")
+        except ValueError:
+            day_name = day
+        daily_lines.append(f"- {day_name}: {count} barks")
+    daily_breakdown_text = "\n".join(daily_lines) if daily_lines else "No data recorded"
+
+    # Format per-dog breakdown as a table
+    if per_dog_counts:
+        dog_lines = ["| Dog Name | Barks |", "|----------|-------|"]
+        for dog_name, bark_count in per_dog_counts:
+            dog_lines.append(f"| {dog_name} | {bark_count} |")
+        per_dog_text = "\n".join(dog_lines)
+    else:
+        per_dog_text = "No individual dogs identified yet."
+
+    # Parse dates for display
+    try:
+        start_display = datetime.strptime(start_date, "%Y-%m-%d").strftime("%B %d")
+        end_display = datetime.strptime(end_date, "%Y-%m-%d").strftime("%B %d, %Y")
+    except ValueError:
+        start_display = start_date
+        end_display = end_date
+
+    # Load and render the prompty template
+    prompty_obj = _get_weekly_summary_prompty()
+    renderer = Jinja2Renderer(prompty=prompty_obj)
+
+    rendered = renderer.invoke({
+        "week_start": start_display,
+        "week_end": end_display,
+        "total_barks": total_barks,
+        "total_events": total_events,
+        "total_hours": total_hours_str,
+        "daily_breakdown": daily_breakdown_text,
+        "per_dog_breakdown": per_dog_text,
+        "peak_hour_str": peak_hour_str,
+        "avg_confidence": f"{avg_confidence:.0%}",
+    })
+
+    return rendered
+
+
+@router.get("/ai", response_model=AISummarySchema)
+async def range_ai_summary(
+    request: Request,
+    evidence: EvidenceStorage = Depends(get_evidence),
+    start_date: str = Query(
+        description="Start date in YYYY-MM-DD format.",
+    ),
+    end_date: str = Query(
+        description="End date in YYYY-MM-DD format (inclusive).",
+    ),
+) -> AISummarySchema:
+    """Get AI-generated natural language summary for a custom date range.
+
+    Uses a local LLM (Ollama) to generate a formal council complaint report
+    about the bark activity patterns. Requires Ollama to be running locally.
+    """
+    # Parse and validate dates
+    try:
+        range_start = datetime.strptime(start_date, "%Y-%m-%d").replace(tzinfo=timezone.utc)
+    except ValueError:
+        raise HTTPException(
+            status_code=400,
+            detail=f"Invalid start_date format: {start_date}. Use YYYY-MM-DD.",
+        )
+
+    try:
+        range_end = datetime.strptime(end_date, "%Y-%m-%d").replace(tzinfo=timezone.utc)
+        range_end_exclusive = range_end + timedelta(days=1)
+    except ValueError:
+        raise HTTPException(
+            status_code=400,
+            detail=f"Invalid end_date format: {end_date}. Use YYYY-MM-DD.",
+        )
+
+    if range_start > range_end:
+        raise HTTPException(
+            status_code=400,
+            detail="start_date must be before or equal to end_date.",
+        )
+
+    # Get statistics for the range
+    entries = _filter_by_date_range(evidence._index.entries, range_start, range_end_exclusive)
+
+    total_barks, total_events, total_duration, avg_confidence, peak_hour, _ = (
+        _calculate_period_stats(entries)
+    )
+
+    # Calculate daily breakdown
+    daily: dict[str, int] = defaultdict(int)
+    for entry in entries:
+        local_time = entry.timestamp_utc.astimezone(LOCAL_TZ)
+        day_str = local_time.strftime("%Y-%m-%d")
+        daily[day_str] += entry.detection.bark_count_in_clip
+
+    # Get per-dog bark counts
+    fingerprint_store = get_fingerprint_store(request)
+    per_dog_counts = _get_per_dog_bark_counts(fingerprint_store, range_start, range_end_exclusive)
+
+    # Generate the prompt
+    prompt = _format_range_prompt(
+        start_date=start_date,
+        end_date=end_date,
+        total_barks=total_barks,
+        total_events=total_events,
+        total_duration_seconds=total_duration,
+        avg_confidence=avg_confidence,
+        peak_hour=peak_hour,
+        daily_breakdown=dict(daily),
+        per_dog_counts=per_dog_counts,
+    )
+
+    # Call Ollama
+    start_time = time.time()
+    try:
+        async with httpx.AsyncClient(timeout=60.0) as client:
+            response = await client.post(
+                f"{OLLAMA_URL}/api/generate",
+                json={
+                    "model": OLLAMA_MODEL,
+                    "prompt": prompt,
+                    "stream": False,
+                },
+            )
+            response.raise_for_status()
+            result = response.json()
+    except httpx.ConnectError:
+        raise HTTPException(
+            status_code=503,
+            detail="Ollama service not available. Is it running?",
+        )
+    except httpx.HTTPStatusError as e:
+        raise HTTPException(
+            status_code=502,
+            detail=f"Ollama error: {e.response.text}",
+        )
+
+    generation_time = int((time.time() - start_time) * 1000)
+
+    return AISummarySchema(
+        summary=result.get("response", "").strip(),
+        model=OLLAMA_MODEL,
+        generation_time_ms=generation_time,
+        data_period=f"{start_date} to {end_date}",
     )

@@ -3308,6 +3308,27 @@ export type FingerprintAggregates = components["schemas"]["FingerprintAggregates
 export type DailySummary = components["schemas"]["DailySummarySchema"];
 export type WeeklySummary = components["schemas"]["WeeklySummarySchema"];
 export type MonthlySummary = components["schemas"]["MonthlySummarySchema"];
+export type AISummary = components["schemas"]["AISummarySchema"];
+
+// Range summary types (manually defined until openapi spec regeneration)
+export interface DogBreakdownItem {
+  dog_id: string;
+  dog_name: string;
+  bark_count: number;
+}
+
+export interface RangeSummary {
+  start_date: string;
+  end_date: string;
+  total_barks: number;
+  total_events: number;
+  total_duration_seconds: number;
+  avg_confidence: number;
+  peak_hour: number | null;
+  daily_breakdown: Record<string, number>;
+  hourly_breakdown: Record<number, number>;
+  dog_breakdown: DogBreakdownItem[];
+}
 
 // Export types
 export type ExportStats = components["schemas"]["ExportStatsSchema"];

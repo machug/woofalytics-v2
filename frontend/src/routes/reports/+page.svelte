@@ -8,7 +8,7 @@
 	import { page } from '$app/stores';
 	import { goto } from '$app/navigation';
 	import { api } from '$lib/api/client';
-	import type { DailySummary, MonthlySummary } from '$lib/api/types';
+	import type { RangeSummary } from '$lib/api/types';
 
 	import DateRangePicker from '$lib/components/reports/DateRangePicker.svelte';
 	import SummaryStats from '$lib/components/reports/SummaryStats.svelte';
@@ -24,9 +24,8 @@
 	let error = $state<string | null>(null);
 	let showExportModal = $state(false);
 
-	// Data
-	let dailySummary = $state<DailySummary | null>(null);
-	let monthlySummary = $state<MonthlySummary | null>(null);
+	// Data - now using range summary for all stats
+	let rangeSummary = $state<RangeSummary | null>(null);
 	let trendData = $state<{ date: string; count: number }[]>([]);
 
 	// Initialize dates from URL or defaults
@@ -57,40 +56,28 @@
 		goto(url.toString(), { replaceState: true, keepFocus: true });
 	}
 
-	// Fetch summary data
+	// Fetch summary data for the selected date range
 	async function fetchData() {
 		loading = true;
 		error = null;
 
 		try {
-			// Fetch daily summary for today (for hourly breakdown)
-			const dailyResponse = await api.GET('/api/summary/daily', {
-				params: { query: { date: endDate } }
-			});
+			// Fetch range summary - includes all breakdowns for selected period
+			const response = await fetch(
+				`/api/summary/range?start_date=${startDate}&end_date=${endDate}`
+			);
 
-			if (dailyResponse.data) {
-				dailySummary = dailyResponse.data;
+			if (!response.ok) {
+				throw new Error(`HTTP error! status: ${response.status}`);
 			}
 
-			// Fetch monthly summary for trend data
-			const month = endDate.substring(0, 7); // YYYY-MM
-			const monthlyResponse = await api.GET('/api/summary/monthly', {
-				params: { query: { month } }
-			});
+			const data: RangeSummary = await response.json();
+			rangeSummary = data;
 
-			if (monthlyResponse.data) {
-				monthlySummary = monthlyResponse.data;
-
-				// Convert daily breakdown to trend data array
-				const breakdown = monthlyResponse.data.daily_breakdown || {};
-				trendData = Object.entries(breakdown)
-					.map(([date, count]) => ({ date, count: count as number }))
-					.filter((d) => {
-						// Filter to selected date range
-						return d.date >= startDate && d.date <= endDate;
-					})
-					.sort((a, b) => a.date.localeCompare(b.date));
-			}
+			// Convert daily breakdown to trend data array
+			trendData = Object.entries(data.daily_breakdown)
+				.map(([date, count]) => ({ date, count }))
+				.sort((a, b) => a.date.localeCompare(b.date));
 		} catch (err) {
 			error = 'Failed to load report data. Please try again.';
 			console.error('Failed to fetch report data:', err);
@@ -113,21 +100,24 @@
 		fetchData();
 	});
 
-	// Derived stats for SummaryStats component
+	// Derived stats for SummaryStats component - uses range summary
 	const summaryData = $derived(
-		monthlySummary
+		rangeSummary
 			? {
-					total_barks: monthlySummary.total_barks,
-					total_events: monthlySummary.total_events,
-					total_duration_seconds: monthlySummary.total_duration_seconds,
-					avg_confidence: monthlySummary.avg_confidence,
-					peak_hour: dailySummary?.peak_hour ?? monthlySummary.peak_hour
+					total_barks: rangeSummary.total_barks,
+					total_events: rangeSummary.total_events,
+					total_duration_seconds: rangeSummary.total_duration_seconds,
+					avg_confidence: rangeSummary.avg_confidence,
+					peak_hour: rangeSummary.peak_hour
 				}
 			: null
 	);
 
-	// Hourly data from daily summary
-	const hourlyData = $derived(dailySummary?.hourly_breakdown ?? {});
+	// Hourly data aggregated across the entire date range
+	const hourlyData = $derived(rangeSummary?.hourly_breakdown ?? {});
+
+	// Per-dog breakdown from range summary
+	const dogBreakdown = $derived(rangeSummary?.dog_breakdown ?? []);
 </script>
 
 <svelte:head>
@@ -163,16 +153,16 @@
 
 	<section class="stats-section">
 		<h2 class="section-title">Summary Statistics</h2>
-		{#if monthlySummary}
+		{#if rangeSummary}
 			<p class="section-subtitle">
-				Monthly totals for {new Date(endDate).toLocaleDateString('en-US', { month: 'long', year: 'numeric' })}
+				{startDate} to {endDate}
 			</p>
 		{/if}
 		<SummaryStats data={summaryData} {loading} />
 	</section>
 
 	<section class="ai-section">
-		<AISummary date={endDate} />
+		<AISummary {startDate} {endDate} />
 	</section>
 
 	<div class="charts-grid">
@@ -184,10 +174,25 @@
 
 		<section class="chart-section">
 			<h2 class="section-title">Hourly Distribution</h2>
-			<p class="section-subtitle">Bark counts by hour of day (latest day)</p>
+			<p class="section-subtitle">Bark counts by hour (aggregated across period)</p>
 			<HourlyBarChart data={hourlyData} {loading} />
 		</section>
 	</div>
+
+	{#if dogBreakdown.length > 0}
+		<section class="dog-breakdown-section">
+			<h2 class="section-title">Per-Dog Breakdown</h2>
+			<p class="section-subtitle">Bark counts by identified dog</p>
+			<div class="dog-breakdown-grid">
+				{#each dogBreakdown as dog}
+					<a href="/dogs/{dog.dog_id}" class="dog-card">
+						<span class="dog-name">{dog.dog_name}</span>
+						<span class="dog-count">{dog.bark_count} barks</span>
+					</a>
+				{/each}
+			</div>
+		</section>
+	{/if}
 </div>
 
 <ExportPreviewModal bind:open={showExportModal} {startDate} {endDate} />
@@ -296,6 +301,47 @@
 		gap: var(--space-sm);
 	}
 
+	.dog-breakdown-section {
+		display: flex;
+		flex-direction: column;
+		gap: var(--space-md);
+	}
+
+	.dog-breakdown-grid {
+		display: grid;
+		grid-template-columns: repeat(auto-fill, minmax(180px, 1fr));
+		gap: var(--space-md);
+	}
+
+	.dog-card {
+		display: flex;
+		flex-direction: column;
+		gap: var(--space-xs);
+		padding: var(--space-md);
+		background: var(--bg-surface);
+		border: 1px solid var(--border-default);
+		border-radius: var(--radius-md);
+		text-decoration: none;
+		transition: border-color 0.15s, background 0.15s;
+	}
+
+	.dog-card:hover {
+		border-color: var(--accent-teal);
+		background: var(--bg-elevated);
+	}
+
+	.dog-name {
+		font-weight: 600;
+		color: var(--text-primary);
+		font-size: 0.95rem;
+	}
+
+	.dog-count {
+		font-family: 'JetBrains Mono', monospace;
+		font-size: 0.8rem;
+		color: var(--accent-teal);
+	}
+
 	@media (max-width: 768px) {
 		.page-header {
 			flex-direction: column;
@@ -304,6 +350,10 @@
 
 		.charts-grid {
 			grid-template-columns: 1fr;
+		}
+
+		.dog-breakdown-grid {
+			grid-template-columns: repeat(auto-fill, minmax(140px, 1fr));
 		}
 	}
 </style>

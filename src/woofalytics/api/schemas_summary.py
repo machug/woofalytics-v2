@@ -43,6 +43,24 @@ class MonthlySummarySchema(PeriodSummarySchema):
     daily_breakdown: dict[str, int]  # date (YYYY-MM-DD) -> bark count
 
 
+class DogBreakdownItem(BaseModel):
+    """Bark count for a specific dog."""
+
+    dog_id: str
+    dog_name: str
+    bark_count: int
+
+
+class RangeSummarySchema(PeriodSummarySchema):
+    """Custom date range summary with all breakdowns."""
+
+    start_date: str  # YYYY-MM-DD format
+    end_date: str  # YYYY-MM-DD format
+    daily_breakdown: dict[str, int]  # date (YYYY-MM-DD) -> bark count
+    hourly_breakdown: dict[int, int]  # hour (0-23) -> bark count (aggregated)
+    dog_breakdown: list[DogBreakdownItem]  # per-dog bark counts
+
+
 class AISummarySchema(BaseModel):
     """AI-generated natural language summary of bark data."""
 
