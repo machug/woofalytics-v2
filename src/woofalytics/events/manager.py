@@ -118,6 +118,12 @@ class NotificationManager:
         Safe to do blocking operations here.
         """
         try:
+            # Check quiet hours first (cheapest check)
+            quiet_hours = self.settings.quiet_hours
+            if quiet_hours.is_active() and not quiet_hours.notifications:
+                logger.debug("notification_suppressed_quiet_hours")
+                return
+
             # Check debouncing
             if not self._debouncer.should_notify(event.dog_id, event.timestamp):
                 return

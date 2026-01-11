@@ -21,12 +21,17 @@ Examples:
 from __future__ import annotations
 
 import ipaddress
+from datetime import datetime, time
 from pathlib import Path
 from typing import Literal
 from urllib.parse import urlparse
+from zoneinfo import ZoneInfo
 
+import structlog
 from pydantic import BaseModel, Field, SecretStr, field_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
+
+logger = structlog.get_logger(__name__)
 
 
 class AudioConfig(BaseModel):
@@ -322,6 +327,90 @@ class EvidenceConfig(BaseModel):
     )
 
 
+class QuietHoursConfig(BaseModel):
+    """Quiet hours configuration for scheduled sensitivity adjustment.
+
+    During quiet hours (e.g., overnight), detection threshold can be raised
+    to reduce false positives, and notifications can be suppressed.
+    Evidence is always recorded regardless of quiet hours.
+
+    Time ranges can cross midnight (e.g., 22:00-06:00).
+    """
+
+    enabled: bool = Field(
+        default=False,
+        description="Enable quiet hours mode.",
+    )
+    start: time = Field(
+        default=time(22, 0),  # 10 PM
+        description="Start time for quiet hours (HH:MM format in config).",
+    )
+    end: time = Field(
+        default=time(6, 0),  # 6 AM
+        description="End time for quiet hours (HH:MM format in config).",
+    )
+    threshold: float = Field(
+        default=0.9,
+        ge=0.0,
+        le=1.0,
+        description="Higher detection threshold during quiet hours (reduces sensitivity).",
+    )
+    notifications: bool = Field(
+        default=False,
+        description="Whether to send notifications during quiet hours.",
+    )
+    timezone: str = Field(
+        default="UTC",
+        description="IANA timezone for evaluating quiet hours (e.g., 'Australia/Sydney').",
+    )
+
+    @field_validator("start", "end", mode="before")
+    @classmethod
+    def parse_time_string(cls, v: str | time) -> time:
+        """Parse HH:MM string to time object."""
+        if isinstance(v, time):
+            return v
+        try:
+            return datetime.strptime(v, "%H:%M").time()
+        except ValueError as e:
+            raise ValueError(f"Invalid time format: {v}. Use HH:MM (e.g., '22:00')") from e
+
+    @field_validator("timezone")
+    @classmethod
+    def validate_timezone(cls, v: str) -> str:
+        """Validate timezone is a valid IANA timezone."""
+        try:
+            ZoneInfo(v)
+        except Exception as e:
+            raise ValueError(f"Invalid timezone: {v}. Use IANA timezone names like 'Australia/Sydney'") from e
+        return v
+
+    def is_active(self) -> bool:
+        """Check if current time is within quiet hours.
+
+        Handles time ranges that cross midnight (e.g., 22:00-06:00).
+        Returns False on any error (fail safe - don't suppress notifications).
+        """
+        if not self.enabled:
+            return False
+
+        try:
+            now = datetime.now(ZoneInfo(self.timezone)).time()
+            if self.start <= self.end:
+                # Same day range (e.g., 09:00-17:00)
+                return self.start <= now < self.end
+            else:
+                # Crosses midnight (e.g., 22:00-06:00)
+                return now >= self.start or now < self.end
+        except Exception as e:
+            logger.warning("quiet_hours_check_failed", error=str(e))
+            return False  # Fail safe: not in quiet hours
+
+    def get_threshold(self, default: float) -> float:
+        """Return quiet hours threshold if active, else default threshold."""
+        return self.threshold if self.is_active() else default
+
+
 class RateLimitConfig(BaseModel):
     """Rate limiting configuration to prevent DoS attacks."""
 
@@ -410,6 +499,7 @@ class Settings(BaseSettings):
     notification: NotificationConfig = Field(default_factory=NotificationConfig)
     webhook: WebhookConfig = Field(default_factory=WebhookConfig)
     evidence: EvidenceConfig = Field(default_factory=EvidenceConfig)
+    quiet_hours: QuietHoursConfig = Field(default_factory=QuietHoursConfig)
     server: ServerConfig = Field(default_factory=ServerConfig)
 
     # Top-level settings

@@ -15,6 +15,7 @@ import numpy as np
 import structlog
 
 if TYPE_CHECKING:
+    from woofalytics.config import QuietHoursConfig
     from woofalytics.detection.resample_cache import AudioResampleCache
 
 logger = structlog.get_logger(__name__)
@@ -118,13 +119,19 @@ class CLAPDetector:
     redundant computation on every detect() call.
     """
 
-    def __init__(self, config: CLAPConfig | None = None) -> None:
+    def __init__(
+        self,
+        config: CLAPConfig | None = None,
+        quiet_hours: QuietHoursConfig | None = None,
+    ) -> None:
         """Initialize the CLAP detector.
 
         Args:
             config: Configuration for the detector. Uses defaults if None.
+            quiet_hours: Optional quiet hours config for time-based threshold adjustment.
         """
         self.config = config or CLAPConfig()
+        self._quiet_hours = quiet_hours
         self._model: Any = None
         self._processor: Any = None
         self._device: Any = None
@@ -439,8 +446,14 @@ class CLAPDetector:
 
         # Apply detection logic with speech, percussive, bird veto, margin, duration, and HPSS check
         # This is the "raw" detection before rolling window confirmation
+        # Threshold may be adjusted during quiet hours for reduced sensitivity
+        threshold = (
+            self._quiet_hours.get_threshold(self.config.threshold)
+            if self._quiet_hours
+            else self.config.threshold
+        )
         raw_detection = (
-            bark_prob >= self.config.threshold
+            bark_prob >= threshold
             and not speech_detected
             and not percussive_detected
             and not bird_detected
