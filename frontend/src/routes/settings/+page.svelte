@@ -112,7 +112,8 @@
 				body: {
 					model: settings.model,
 					evidence: settings.evidence,
-					webhook: settings.webhook
+					webhook: settings.webhook,
+					quiet_hours: settings.quiet_hours
 				}
 			});
 
@@ -549,6 +550,82 @@
 												bind:value={settings.webhook.ifttt_key}
 											/>
 											<div class="form-hint">Leave empty to keep existing key</div>
+										</div>
+									</div>
+								{/if}
+							</div>
+
+							<!-- Quiet Hours Settings -->
+							<div class="settings-group">
+								<h3 class="settings-group-title">Quiet Hours</h3>
+								<div class="form-hint" style="margin-bottom: 1rem;">
+									Reduce notification spam during sleeping hours by raising detection threshold
+								</div>
+
+								<div class="checkbox-row">
+									<div class="checkbox-group">
+										<input type="checkbox" id="quietHoursEnabled" bind:checked={settings.quiet_hours.enabled} />
+										<label for="quietHoursEnabled">Enable quiet hours mode</label>
+									</div>
+								</div>
+
+								{#if settings.quiet_hours.enabled}
+									<div class="settings-row">
+										<div class="setting-field">
+											<label class="form-label" for="quietStart">Start Time</label>
+											<input
+												type="time"
+												class="form-input"
+												id="quietStart"
+												bind:value={settings.quiet_hours.start}
+											/>
+											<div class="form-hint">When quiet hours begin (e.g., 22:00)</div>
+										</div>
+
+										<div class="setting-field">
+											<label class="form-label" for="quietEnd">End Time</label>
+											<input
+												type="time"
+												class="form-input"
+												id="quietEnd"
+												bind:value={settings.quiet_hours.end}
+											/>
+											<div class="form-hint">When quiet hours end (e.g., 06:00)</div>
+										</div>
+									</div>
+
+									<div class="settings-row">
+										<div class="setting-field">
+											<label class="form-label" for="quietThreshold">Detection Threshold</label>
+											<input
+												type="number"
+												class="form-input"
+												id="quietThreshold"
+												min="0"
+												max="1"
+												step="0.05"
+												bind:value={settings.quiet_hours.threshold}
+											/>
+											<div class="form-hint">Higher = less sensitive (0.8-0.95 recommended)</div>
+										</div>
+
+										<div class="setting-field">
+											<label class="form-label" for="quietTimezone">Timezone</label>
+											<input
+												type="text"
+												class="form-input"
+												id="quietTimezone"
+												bind:value={settings.quiet_hours.timezone}
+												placeholder="Australia/Sydney"
+											/>
+											<div class="form-hint">IANA timezone for schedule evaluation</div>
+										</div>
+									</div>
+
+									<div class="checkbox-row">
+										<div class="checkbox-group">
+											<input type="checkbox" id="quietNotifications" bind:checked={settings.quiet_hours.notifications} />
+											<label for="quietNotifications">Send notifications during quiet hours</label>
 										</div>
 									</div>
 								{/if}

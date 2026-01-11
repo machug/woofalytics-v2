@@ -68,12 +68,26 @@ class WebhookSettingsSchema(BaseModel):
     ifttt_key: str = Field(default="", description="IFTTT API key (write-only)")
 
 
+class QuietHoursSettingsSchema(BaseModel):
+    """Quiet hours / scheduled sensitivity settings."""
+
+    enabled: bool = Field(description="Enable quiet hours mode")
+    start: str = Field(description="Start time (HH:MM format, e.g., '22:00')")
+    end: str = Field(description="End time (HH:MM format, e.g., '06:00')")
+    threshold: float = Field(
+        ge=0.0, le=1.0, description="Detection threshold during quiet hours (higher = less sensitive)"
+    )
+    notifications: bool = Field(description="Send notifications during quiet hours")
+    timezone: str = Field(description="IANA timezone (e.g., 'Australia/Sydney', 'America/New_York')")
+
+
 class AllSettingsSchema(BaseModel):
     """Complete editable settings."""
 
     model: ModelSettingsSchema
     evidence: EvidenceSettingsSchema
     webhook: WebhookSettingsSchema
+    quiet_hours: QuietHoursSettingsSchema
 
 
 class SettingsUpdateSchema(BaseModel):
@@ -82,6 +96,7 @@ class SettingsUpdateSchema(BaseModel):
     model: ModelSettingsSchema | None = None
     evidence: EvidenceSettingsSchema | None = None
     webhook: WebhookSettingsSchema | None = None
+    quiet_hours: QuietHoursSettingsSchema | None = None
 
 
 class SettingsResponseSchema(BaseModel):
@@ -123,6 +138,14 @@ def _settings_to_schema(settings: Settings) -> AllSettingsSchema:
             ifttt_event=settings.webhook.ifttt_event,
             # Don't expose the actual key, just show if it's set
             ifttt_key="••••••••" if settings.webhook.ifttt_key else "",
+        ),
+        quiet_hours=QuietHoursSettingsSchema(
+            enabled=settings.quiet_hours.enabled,
+            start=settings.quiet_hours.start.strftime("%H:%M"),
+            end=settings.quiet_hours.end.strftime("%H:%M"),
+            threshold=settings.quiet_hours.threshold,
+            notifications=settings.quiet_hours.notifications,
+            timezone=settings.quiet_hours.timezone,
         ),
     )
 
@@ -229,6 +252,18 @@ async def update_settings(
                 # Don't log sensitive values
                 log_value = "***" if key == "ifttt_key" else value
                 logger.info("settings_updated", section="webhook", key=key, value=log_value)
+
+    # Update quiet hours settings
+    if update.quiet_hours is not None:
+        if "quiet_hours" not in config:
+            config["quiet_hours"] = {}
+
+        quiet_hours_updates = update.quiet_hours.model_dump()
+        for key, value in quiet_hours_updates.items():
+            if config["quiet_hours"].get(key) != value:
+                config["quiet_hours"][key] = value
+                changes_made = True
+                logger.info("settings_updated", section="quiet_hours", key=key, value=value)
 
     # Save to file
     if changes_made:

@@ -966,6 +966,7 @@ export interface components {
             model: components["schemas"]["ModelSettingsSchema"];
             evidence: components["schemas"]["EvidenceSettingsSchema"];
             webhook: components["schemas"]["WebhookSettingsSchema"];
+            quiet_hours: components["schemas"]["QuietHoursSettingsSchema"];
         };
         /**
          * BarkEventSchema
@@ -1825,6 +1826,7 @@ export interface components {
             model?: components["schemas"]["ModelSettingsSchema"] | null;
             evidence?: components["schemas"]["EvidenceSettingsSchema"] | null;
             webhook?: components["schemas"]["WebhookSettingsSchema"] | null;
+            quiet_hours?: components["schemas"]["QuietHoursSettingsSchema"] | null;
         };
         /**
          * TagBarkRequestSchema
@@ -1894,6 +1896,42 @@ export interface components {
              * @default
              */
             ifttt_key: string;
+        };
+        /**
+         * QuietHoursSettingsSchema
+         * @description Quiet hours / scheduled sensitivity settings.
+         */
+        QuietHoursSettingsSchema: {
+            /**
+             * Enabled
+             * @description Enable quiet hours mode
+             */
+            enabled: boolean;
+            /**
+             * Start
+             * @description Start time (HH:MM format, e.g., '22:00')
+             */
+            start: string;
+            /**
+             * End
+             * @description End time (HH:MM format, e.g., '06:00')
+             */
+            end: string;
+            /**
+             * Threshold
+             * @description Detection threshold during quiet hours (higher = less sensitive)
+             */
+            threshold: number;
+            /**
+             * Notifications
+             * @description Send notifications during quiet hours
+             */
+            notifications: boolean;
+            /**
+             * Timezone
+             * @description IANA timezone (e.g., 'Australia/Sydney', 'America/New_York')
+             */
+            timezone: string;
         };
         /**
          * WeeklySummarySchema
