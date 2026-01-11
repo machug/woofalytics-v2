@@ -9,27 +9,28 @@ This module provides the main web application with:
 from __future__ import annotations
 
 import asyncio
+from collections.abc import AsyncGenerator
 from contextlib import asynccontextmanager
 from datetime import datetime
 from pathlib import Path
-from typing import AsyncGenerator
 
+import structlog
 from fastapi import FastAPI, Request, Response
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse
 from fastapi.staticfiles import StaticFiles
 from starlette.middleware.base import BaseHTTPMiddleware
-import structlog
 
 from woofalytics import __version__
-from woofalytics.config import Settings, load_settings, configure_logging
+from woofalytics.api.auth import configure_auth, get_auth_status, setup_auth
+from woofalytics.api.ratelimit import configure_rate_limits, setup_rate_limiting
+from woofalytics.api.websocket import WebSocketManagers, broadcast_bark_event
+from woofalytics.config import configure_logging, load_settings
 from woofalytics.detection.model import BarkDetector, BarkEvent
+from woofalytics.events import NotificationManager
 from woofalytics.evidence.storage import EvidenceStorage
-from woofalytics.api.websocket import broadcast_bark_event, WebSocketManagers
-from woofalytics.api.ratelimit import setup_rate_limiting, configure_rate_limits
-from woofalytics.api.auth import setup_auth, configure_auth, get_auth_status
-from woofalytics.fingerprint.storage import FingerprintStore
 from woofalytics.fingerprint.matcher import FingerprintMatcher
+from woofalytics.fingerprint.storage import FingerprintStore
 
 logger = structlog.get_logger(__name__)
 
@@ -124,6 +125,10 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
     )
     logger.info("fingerprint_system_initialized", db_path=str(fingerprint_db_path))
 
+    # Initialize notification manager for bark alerts
+    notification_manager = NotificationManager(settings=settings)
+    notification_manager.start()
+
     # Link evidence files to fingerprints when saved
     def on_evidence_saved(filename: str, first_bark: datetime, last_bark: datetime) -> None:
         """Link saved evidence file to fingerprints created during that time."""
@@ -138,18 +143,38 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
     def _process_fingerprint_sync(event: BarkEvent) -> None:
         """Synchronous fingerprint processing - runs in thread pool."""
         try:
-            fingerprint, matches = fingerprint_matcher.process_bark(
+            _fingerprint, matches = fingerprint_matcher.process_bark(
                 audio=event.audio,
                 sample_rate=event.sample_rate,
                 detection_prob=event.probability,
                 doa=event.doa_bartlett,
             )
+
+            # Extract dog context for notification
+            dog_id: str | None = None
+            dog_name: str | None = None
+            match_confidence: float | None = None
+
             if matches:
+                dog_id = matches[0].dog_id
+                dog_name = matches[0].dog_name
+                match_confidence = matches[0].confidence
                 logger.info(
                     "bark_identified",
-                    dog_name=matches[0].dog_name,
-                    confidence=f"{matches[0].confidence:.3f}",
+                    dog_name=dog_name,
+                    confidence=f"{match_confidence:.3f}",
                 )
+
+            # Trigger notification with dog context (non-blocking, offloads to its own thread pool)
+            notification_manager.notify(
+                timestamp=event.timestamp,
+                probability=event.probability,
+                doa_degrees=event.doa_bartlett,
+                dog_id=dog_id,
+                dog_name=dog_name,
+                match_confidence=match_confidence,
+            )
+
         except Exception as e:
             logger.warning("fingerprint_processing_error", error=str(e))
 
@@ -172,6 +197,7 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
     app.state.ws_managers = ws_managers  # Separate managers for bark/pipeline/audio
     app.state.fingerprint_store = fingerprint_store
     app.state.fingerprint_matcher = fingerprint_matcher
+    app.state.notification_manager = notification_manager
 
     # Start background task for evidence saving
     async def evidence_saver() -> None:
@@ -194,6 +220,7 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
     except asyncio.CancelledError:
         pass
 
+    notification_manager.stop()
     await detector.stop()
 
     logger.info("woofalytics_stopped")

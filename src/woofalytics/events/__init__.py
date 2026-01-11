@@ -1,7 +1,11 @@
-"""Event filtering and webhook modules.
+"""Event notification modules for bark alerts.
 
-TODO: Implement EventFilter and WebhookNotifier when webhook
-functionality is needed. Configuration exists in config.WebhookConfig.
+This package provides webhook notifications for bark events via:
+- IFTTT Maker Webhooks (push, email, SMS via IFTTT applets)
+- Custom webhooks (Home Assistant, Slack, etc.)
 """
 
-__all__: list[str] = []
+from woofalytics.events.manager import NotificationManager
+from woofalytics.events.models import NotificationEvent
+
+__all__ = ["NotificationEvent", "NotificationManager"]

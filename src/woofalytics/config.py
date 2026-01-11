@@ -20,10 +20,12 @@ Examples:
 
 from __future__ import annotations
 
+import ipaddress
 from pathlib import Path
 from typing import Literal
+from urllib.parse import urlparse
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, SecretStr, field_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
@@ -193,25 +195,102 @@ class DOAConfig(BaseModel):
     )
 
 
+class NotificationConfig(BaseModel):
+    """Top-level notification system settings."""
+
+    enabled: bool = Field(
+        default=False,
+        description="Enable notification system.",
+    )
+
+
 class WebhookConfig(BaseModel):
-    """Webhook/IFTTT notification configuration."""
+    """Webhook notification configuration with security hardening."""
 
     enabled: bool = Field(
         default=False,
         description="Enable webhook notifications on bark detection.",
     )
+
+    # IFTTT Maker Webhooks
     ifttt_event: str = Field(
         default="woof",
         description="IFTTT Maker Webhooks event name.",
     )
-    ifttt_key: str = Field(
-        default="",
+    ifttt_key: SecretStr = Field(
+        default=SecretStr(""),
         description="IFTTT Maker Webhooks API key (use env var WOOFALYTICS__WEBHOOK__IFTTT_KEY).",
     )
+
+    # Custom webhook
     custom_url: str | None = Field(
         default=None,
-        description="Custom webhook URL (alternative to IFTTT).",
+        description="Custom webhook URL (must be HTTPS, no private IPs).",
     )
+    custom_headers: dict[str, str] = Field(
+        default_factory=dict,
+        description="Custom headers for webhook requests.",
+    )
+    custom_auth_token: SecretStr = Field(
+        default=SecretStr(""),
+        description="Bearer token for custom webhook (optional).",
+    )
+
+    # Delivery settings
+    timeout_seconds: float = Field(
+        default=10.0,
+        ge=1.0,
+        le=30.0,
+        description="HTTP request timeout.",
+    )
+    retry_count: int = Field(
+        default=2,
+        ge=0,
+        le=5,
+        description="Number of retry attempts on failure.",
+    )
+
+    # Debouncing
+    debounce_seconds: int = Field(
+        default=300,  # 5 minutes
+        ge=60,
+        le=3600,
+        description="Minimum seconds between notifications for same dog.",
+    )
+
+    @field_validator("custom_url")
+    @classmethod
+    def validate_custom_url(cls, v: str | None) -> str | None:
+        """Validate custom URL for SSRF protection."""
+        if v is None:
+            return None
+
+        parsed = urlparse(v)
+
+        # Must be HTTPS
+        if parsed.scheme != "https":
+            raise ValueError("Custom webhook URL must use HTTPS")
+
+        # Check for private/loopback IPs
+        hostname = parsed.hostname
+        if hostname:
+            try:
+                # Try to parse as IP address
+                ip = ipaddress.ip_address(hostname)
+            except ValueError:
+                # Not an IP address, hostname is fine (checked below for blocked names)
+                pass
+            else:
+                # Valid IP - check if private/internal
+                if ip.is_private or ip.is_loopback or ip.is_reserved:
+                    raise ValueError("Custom webhook URL cannot point to private/internal IPs")
+
+        # Block common internal hostnames
+        blocked_hosts = {"localhost", "127.0.0.1", "0.0.0.0", "metadata.google", "169.254.169.254"}
+        if hostname and hostname.lower() in blocked_hosts:
+            raise ValueError("Custom webhook URL cannot point to internal hosts")
+
+        return v
 
 
 class EvidenceConfig(BaseModel):
@@ -328,6 +407,7 @@ class Settings(BaseSettings):
     audio: AudioConfig = Field(default_factory=AudioConfig)
     model: ModelConfig = Field(default_factory=ModelConfig)
     doa: DOAConfig = Field(default_factory=DOAConfig)
+    notification: NotificationConfig = Field(default_factory=NotificationConfig)
     webhook: WebhookConfig = Field(default_factory=WebhookConfig)
     evidence: EvidenceConfig = Field(default_factory=EvidenceConfig)
     server: ServerConfig = Field(default_factory=ServerConfig)
