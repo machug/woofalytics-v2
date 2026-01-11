@@ -14,11 +14,13 @@ from datetime import datetime, timedelta
 from pathlib import Path
 from typing import Annotated
 
+import structlog
 from fastapi import APIRouter, Depends, HTTPException, Query, Request
 from fastapi.responses import FileResponse, Response
 
 from woofalytics.api.routes_export import router as export_router
 from woofalytics.api.routes_fingerprint import router as fingerprint_router
+from woofalytics.api.routes_notification import router as notification_router
 from woofalytics.api.routes_settings import router as settings_router
 from woofalytics.api.routes_summary import router as summary_router
 from woofalytics.api.schemas import (
@@ -36,13 +38,11 @@ from woofalytics.api.schemas import (
     RecentEventsSchema,
 )
 from woofalytics.config import Settings
-from woofalytics.detection.model import BarkDetector, BarkEvent
 from woofalytics.detection.doa import angle_to_direction
+from woofalytics.detection.model import BarkDetector, BarkEvent
 from woofalytics.evidence.storage import EvidenceStorage
 from woofalytics.fingerprint.storage import FingerprintStore
 from woofalytics.observability.metrics import generate_latest, get_metrics
-
-import structlog
 
 logger = structlog.get_logger(__name__)
 
@@ -53,6 +53,7 @@ router.include_router(fingerprint_router)
 
 # Include export routes for CSV/JSON data export
 router.include_router(export_router)
+router.include_router(notification_router)
 router.include_router(summary_router)
 router.include_router(settings_router)
 
