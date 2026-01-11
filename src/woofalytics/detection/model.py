@@ -114,7 +114,10 @@ class BarkDetector:
             min_harmonic_ratio=self.settings.model.clap_min_harmonic_ratio,
             device=self.settings.model.clap_device,
         )
-        self._clap_detector = CLAPDetector(config)
+        self._clap_detector = CLAPDetector(
+            config,
+            quiet_hours=self.settings.quiet_hours,
+        )
         # Lazy loading - model loads on first inference
         logger.info(
             "clap_detector_configured",
