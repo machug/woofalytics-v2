@@ -11,6 +11,7 @@
 	import FilterPanel, { type Filters } from '$lib/components/fingerprints/FilterPanel.svelte';
 	import FingerprintTable from '$lib/components/fingerprints/FingerprintTable.svelte';
 	import Pagination from '$lib/components/fingerprints/Pagination.svelte';
+	import { ClusterSection } from '$lib/components/clustering';
 
 	// State
 	let fingerprints = $state<Fingerprint[]>([]);
@@ -279,6 +280,11 @@
 	const statsUntagged = $derived(stats?.untagged ?? 0);
 	const statsRejected = $derived(stats?.rejected ?? 0);
 	const statsDogs = $derived(stats?.dogs ?? 0);
+
+	// Handler for cluster section data refresh
+	const handleClusterDataRefresh = async () => {
+		await Promise.all([loadStats(), loadDogs(), loadFingerprints()]);
+	};
 </script>
 
 <svelte:head>
@@ -321,6 +327,14 @@
 			<span class="stat-pill-label">Dogs</span>
 		</div>
 	</div>
+
+	<!-- Clustering Section (show when there are untagged barks) -->
+	{#if stats && stats.untagged > 0}
+		<ClusterSection
+			untaggedCount={stats.untagged}
+			onDataRefresh={handleClusterDataRefresh}
+		/>
+	{/if}
 
 	<!-- Main Content -->
 	<main class="fingerprints-layout">

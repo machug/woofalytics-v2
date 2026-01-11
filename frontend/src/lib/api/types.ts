@@ -3374,3 +3374,23 @@ export type ExportStats = components["schemas"]["ExportStatsSchema"];
 // Evidence types
 export type EvidenceStats = components["schemas"]["EvidenceStatsSchema"];
 export type PurgeResult = components["schemas"]["PurgeResultSchema"];
+
+// Clustering types (manually defined until openapi spec regeneration)
+export interface ClusterSuggestion {
+  cluster_id: string;
+  fingerprint_ids: string[];
+  size: number;
+  avg_pitch_hz: number | null;
+  avg_duration_ms: number | null;
+  first_seen: string | null;
+  last_seen: string | null;
+  coherence_score: number;
+  sample_ids: string[];
+}
+
+export interface ClusterResult {
+  cluster_count: number;
+  total_untagged: number;
+  noise_count: number;
+  suggestions: ClusterSuggestion[];
+}
