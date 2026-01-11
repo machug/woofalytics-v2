@@ -1633,6 +1633,12 @@ export interface components {
              * @default 0
              */
             rejected: number;
+            /**
+             * Without Evidence
+             * @description Number of untagged fingerprints missing audio evidence
+             * @default 0
+             */
+            without_evidence: number;
         };
         /**
          * GateStatsSchema

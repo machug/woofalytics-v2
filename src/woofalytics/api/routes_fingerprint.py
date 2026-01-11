@@ -31,6 +31,7 @@ from woofalytics.api.schemas_fingerprint import (
     FingerprintAggregatesSchema,
     FingerprintListSchema,
     FingerprintStatsSchema,
+    PurgeResultSchema,
     RejectBarkRequestSchema,
     TagBarkRequestSchema,
     UntaggedBarksListSchema,
@@ -941,3 +942,27 @@ async def create_dog_from_cluster(
     )
 
     return _dog_to_schema(dog)
+
+
+@router.post(
+    "/fingerprints/purge-without-evidence",
+    response_model=PurgeResultSchema,
+    summary="Purge fingerprints without audio evidence",
+    description="Deletes all untagged fingerprints that have no associated audio "
+    "evidence file. These fingerprints cannot be verified or used for clustering.",
+)
+async def purge_fingerprints_without_evidence(
+    store: Annotated[FingerprintStore, Depends(get_fingerprint_store)],
+) -> PurgeResultSchema:
+    """Purge untagged fingerprints that have no audio evidence."""
+    deleted = store.purge_fingerprints(untagged_only=True, without_evidence=True)
+
+    logger.info(
+        "fingerprints_purged_without_evidence",
+        deleted_count=deleted,
+    )
+
+    return PurgeResultSchema(
+        deleted_count=deleted,
+        message=f"Deleted {deleted} untagged fingerprints without audio evidence",
+    )

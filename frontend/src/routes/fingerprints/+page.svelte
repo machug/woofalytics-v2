@@ -274,16 +274,43 @@
 	};
 
 	// Computed stats display values
-	// API returns { dogs, fingerprints, untagged, rejected }
+	// API returns { dogs, fingerprints, untagged, rejected, without_evidence }
 	const statsTotal = $derived(stats?.fingerprints ?? 0);
 	const statsTagged = $derived((stats?.fingerprints ?? 0) - (stats?.untagged ?? 0) - (stats?.rejected ?? 0));
 	const statsUntagged = $derived(stats?.untagged ?? 0);
 	const statsRejected = $derived(stats?.rejected ?? 0);
 	const statsDogs = $derived(stats?.dogs ?? 0);
+	const statsWithoutEvidence = $derived(stats?.without_evidence ?? 0);
 
 	// Handler for cluster section data refresh
 	const handleClusterDataRefresh = async () => {
 		await Promise.all([loadStats(), loadDogs(), loadFingerprints()]);
+	};
+
+	// Purge fingerprints without evidence
+	let isPurging = $state(false);
+	let purgeError = $state<string | null>(null);
+
+	const handlePurgeWithoutEvidence = async () => {
+		if (!confirm(`Delete ${statsWithoutEvidence} untagged fingerprints without audio evidence? This cannot be undone.`)) {
+			return;
+		}
+
+		isPurging = true;
+		purgeError = null;
+
+		try {
+			const response = await api.POST('/api/fingerprints/purge-without-evidence');
+			if (response.data) {
+				// Refresh all data after purge
+				await Promise.all([loadStats(), loadFingerprints()]);
+			}
+		} catch (e) {
+			console.error('Failed to purge fingerprints:', e);
+			purgeError = 'Failed to purge fingerprints. Please try again.';
+		} finally {
+			isPurging = false;
+		}
 	};
 </script>
 
@@ -327,6 +354,35 @@
 			<span class="stat-pill-label">Dogs</span>
 		</div>
 	</div>
+
+	<!-- Purge Warning (show when there are fingerprints without evidence) -->
+	{#if statsWithoutEvidence > 0}
+		<div class="purge-warning">
+			<div class="purge-warning-content">
+				<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+					<path d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
+				</svg>
+				<div class="purge-warning-text">
+					<strong>{statsWithoutEvidence} untagged fingerprints</strong> have no audio evidence and cannot be verified.
+				</div>
+			</div>
+			<button
+				class="purge-btn"
+				onclick={handlePurgeWithoutEvidence}
+				disabled={isPurging}
+			>
+				{#if isPurging}
+					<div class="spinner"></div>
+					Purging...
+				{:else}
+					<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+						<path d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+					</svg>
+					Purge Without Evidence
+				{/if}
+			</button>
+		</div>
+	{/if}
 
 	<!-- Clustering Section (show when there are untagged barks) -->
 	{#if stats && stats.untagged > 0}
@@ -556,6 +612,83 @@
 
 	.error-banner span {
 		flex: 1;
+	}
+
+	/* Purge Warning */
+	.purge-warning {
+		display: flex;
+		justify-content: space-between;
+		align-items: center;
+		gap: var(--space-md);
+		padding: var(--space-md) var(--space-lg);
+		background: rgba(251, 191, 36, 0.1);
+		border: 1px solid rgba(251, 191, 36, 0.3);
+		border-radius: var(--radius-lg);
+		margin-bottom: var(--space-lg);
+	}
+
+	.purge-warning-content {
+		display: flex;
+		align-items: center;
+		gap: var(--space-md);
+		color: var(--accent-amber);
+		font-size: 0.875rem;
+	}
+
+	.purge-warning-content svg {
+		width: 24px;
+		height: 24px;
+		flex-shrink: 0;
+	}
+
+	.purge-warning-text strong {
+		font-weight: 600;
+	}
+
+	.purge-btn {
+		display: flex;
+		align-items: center;
+		gap: var(--space-xs);
+		padding: var(--space-xs) var(--space-md);
+		background: transparent;
+		border: 1px solid var(--accent-coral);
+		border-radius: var(--radius-sm);
+		color: var(--accent-coral);
+		font-size: 0.8rem;
+		font-weight: 500;
+		cursor: pointer;
+		transition: all var(--transition-fast);
+		white-space: nowrap;
+	}
+
+	.purge-btn:hover:not(:disabled) {
+		background: var(--accent-coral);
+		color: var(--bg-base);
+	}
+
+	.purge-btn:disabled {
+		opacity: 0.5;
+		cursor: not-allowed;
+	}
+
+	.purge-btn svg {
+		width: 16px;
+		height: 16px;
+	}
+
+	.purge-btn .spinner {
+		width: 14px;
+		height: 14px;
+		border: 2px solid var(--border-default);
+		border-top-color: var(--accent-coral);
+		border-radius: 50%;
+		animation: spin 0.8s linear infinite;
+	}
+
+	@keyframes spin {
+		to {
+			transform: rotate(360deg);
+		}
 	}
 
 	/* Responsive */

@@ -85,6 +85,7 @@ class FingerprintStatsSchema(BaseModel):
     fingerprints: int = Field(description="Total number of bark fingerprints")
     untagged: int = Field(description="Number of fingerprints not yet tagged to a dog")
     rejected: int = Field(default=0, description="Number of fingerprints marked as false positives")
+    without_evidence: int = Field(default=0, description="Number of untagged fingerprints missing audio evidence")
 
 
 class TagBarkRequestSchema(BaseModel):
@@ -246,3 +247,10 @@ class CreateDogFromClusterRequestSchema(BaseModel):
 
     name: str = Field(default="", description="Name for the new dog profile")
     notes: str = Field(default="", description="Optional notes about the dog")
+
+
+class PurgeResultSchema(BaseModel):
+    """Result of a fingerprint purge operation."""
+
+    deleted_count: int = Field(description="Number of fingerprints deleted")
+    message: str = Field(description="Description of the purge operation")

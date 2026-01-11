@@ -1223,11 +1223,19 @@ class FingerprintStore:
             cursor.execute("SELECT COUNT(*) FROM bark_fingerprints WHERE rejection_reason IS NOT NULL")
             rejected_count = cursor.fetchone()[0]
 
+            # Untagged fingerprints without audio evidence (candidates for purge)
+            cursor.execute(
+                "SELECT COUNT(*) FROM bark_fingerprints "
+                "WHERE dog_id IS NULL AND rejection_reason IS NULL AND evidence_filename IS NULL"
+            )
+            without_evidence_count = cursor.fetchone()[0]
+
             return {
                 "dogs": dog_count,
                 "fingerprints": fingerprint_count,
                 "untagged": untagged_count,
                 "rejected": rejected_count,
+                "without_evidence": without_evidence_count,
             }
 
     # --- Maintenance Operations ---
@@ -1256,12 +1264,14 @@ class FingerprintStore:
         self,
         before: datetime | None = None,
         untagged_only: bool = False,
+        without_evidence: bool = False,
     ) -> int:
         """Purge fingerprints matching criteria.
 
         Args:
             before: Delete fingerprints older than this timestamp.
             untagged_only: If True, only delete untagged fingerprints.
+            without_evidence: If True, only delete fingerprints without audio evidence.
 
         Returns:
             Number of fingerprints deleted.
@@ -1275,6 +1285,9 @@ class FingerprintStore:
 
         if untagged_only:
             conditions.append("dog_id IS NULL")
+
+        if without_evidence:
+            conditions.append("evidence_filename IS NULL")
 
         if not conditions:
             # Safety: require at least one condition
@@ -1298,6 +1311,7 @@ class FingerprintStore:
                     count=count,
                     before=before.isoformat() if before else None,
                     untagged_only=untagged_only,
+                    without_evidence=without_evidence,
                 )
 
         return count
