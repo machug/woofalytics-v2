@@ -18,8 +18,11 @@ from woofalytics.api.schemas_fingerprint import (
     BarkFingerprintSchema,
     BulkTagRequestSchema,
     BulkTagResultSchema,
+    ClusterResultSchema,
+    ClusterSuggestionSchema,
     ConfirmDogRequestSchema,
     CorrectBarkRequestSchema,
+    CreateDogFromClusterRequestSchema,
     DogAcousticStatsSchema,
     DogBarksListSchema,
     DogProfileCreateSchema,
@@ -31,6 +34,11 @@ from woofalytics.api.schemas_fingerprint import (
     RejectBarkRequestSchema,
     TagBarkRequestSchema,
     UntaggedBarksListSchema,
+)
+from woofalytics.fingerprint.clustering import (
+    ClusterSuggestion,
+    create_clusterer,
+    is_clustering_available,
 )
 from woofalytics.config import Settings
 from woofalytics.fingerprint.models import BarkFingerprint, DogProfile
@@ -784,3 +792,152 @@ async def get_fingerprint_stats(
     stats = store.get_stats()
     logger.debug("fingerprint_stats_retrieved", **stats)
     return FingerprintStatsSchema(**stats)
+
+
+# --- Clustering Endpoints ---
+
+
+def _cluster_to_schema(
+    suggestion: ClusterSuggestion,
+    sample_ids: list[str] | None = None,
+) -> ClusterSuggestionSchema:
+    """Convert ClusterSuggestion to API schema."""
+    return ClusterSuggestionSchema(
+        cluster_id=suggestion.cluster_id,
+        fingerprint_ids=suggestion.fingerprint_ids,
+        size=suggestion.size,
+        avg_pitch_hz=suggestion.avg_pitch_hz,
+        avg_duration_ms=suggestion.avg_duration_ms,
+        first_seen=suggestion.first_seen,
+        last_seen=suggestion.last_seen,
+        coherence_score=suggestion.coherence_score,
+        sample_ids=sample_ids or [],
+    )
+
+
+@router.post(
+    "/fingerprints/cluster",
+    response_model=ClusterResultSchema,
+    summary="Cluster untagged barks",
+    description="Runs HDBSCAN clustering on untagged fingerprints to identify "
+    "potential dog profiles. Returns cluster suggestions that can be reviewed "
+    "and converted to dog profiles. Requires the 'hdbscan' package to be installed.",
+)
+async def cluster_untagged_barks(
+    store: Annotated[FingerprintStore, Depends(get_fingerprint_store)],
+    min_cluster_size: Annotated[
+        int, Query(ge=2, le=20, description="Minimum barks to form a cluster")
+    ] = 3,
+    max_fingerprints: Annotated[
+        int, Query(ge=10, le=5000, description="Maximum fingerprints to process")
+    ] = 1000,
+) -> ClusterResultSchema:
+    """Cluster untagged barks to suggest new dog profiles."""
+    if not is_clustering_available():
+        raise HTTPException(
+            status_code=501,
+            detail="Clustering requires the hdbscan package. "
+            "Install with: pip install woofalytics[clustering]",
+        )
+
+    try:
+        clusterer = create_clusterer(store, min_cluster_size=min_cluster_size)
+    except ImportError as e:
+        raise HTTPException(status_code=501, detail=str(e)) from e
+
+    suggestions = clusterer.cluster_untagged(max_fingerprints=max_fingerprints)
+
+    # Get representative samples for each cluster
+    suggestion_schemas = []
+    for s in suggestions:
+        sample_ids = clusterer.get_cluster_samples(s, count=3)
+        suggestion_schemas.append(_cluster_to_schema(s, sample_ids))
+
+    # Calculate noise count
+    stats = store.get_stats()
+    total_untagged = min(stats["untagged"], max_fingerprints)
+    clustered_count = sum(s.size for s in suggestions)
+    noise_count = total_untagged - clustered_count
+
+    logger.info(
+        "clustering_completed",
+        cluster_count=len(suggestions),
+        total_processed=total_untagged,
+        clustered_count=clustered_count,
+        noise_count=noise_count,
+    )
+
+    return ClusterResultSchema(
+        cluster_count=len(suggestions),
+        total_untagged=total_untagged,
+        noise_count=max(0, noise_count),
+        suggestions=suggestion_schemas,
+    )
+
+
+@router.post(
+    "/fingerprints/cluster/{cluster_id}/create-dog",
+    response_model=DogProfileSchema,
+    status_code=201,
+    summary="Create dog from cluster",
+    description="Creates a new dog profile from a previously identified cluster. "
+    "All fingerprints in the cluster will be tagged to the new dog. The cluster "
+    "must be re-fetched if clustering has been run again.",
+)
+async def create_dog_from_cluster(
+    cluster_id: str,
+    data: CreateDogFromClusterRequestSchema,
+    store: Annotated[FingerprintStore, Depends(get_fingerprint_store)],
+    min_cluster_size: Annotated[
+        int, Query(ge=2, le=20, description="Minimum barks to form a cluster")
+    ] = 3,
+) -> DogProfileSchema:
+    """Create a dog profile from a cluster suggestion."""
+    if not is_clustering_available():
+        raise HTTPException(
+            status_code=501,
+            detail="Clustering requires the hdbscan package. "
+            "Install with: pip install woofalytics[clustering]",
+        )
+
+    try:
+        clusterer = create_clusterer(store, min_cluster_size=min_cluster_size)
+    except ImportError as e:
+        raise HTTPException(status_code=501, detail=str(e)) from e
+
+    # Re-run clustering to get the cluster data
+    # (Clusters are ephemeral - they exist only during clustering)
+    suggestions = clusterer.cluster_untagged()
+
+    # Find the requested cluster
+    target: ClusterSuggestion | None = None
+    for s in suggestions:
+        if s.cluster_id == cluster_id:
+            target = s
+            break
+
+    if not target:
+        raise HTTPException(
+            status_code=404,
+            detail=f"Cluster '{cluster_id}' not found. "
+            "Clusters may have changed since last query. "
+            "Run clustering again to get updated clusters.",
+        )
+
+    # Create the dog from the cluster
+    dog_id = clusterer.create_dog_from_cluster(target, name=data.name, notes=data.notes)
+
+    # Get the created dog
+    dog = store.get_dog(dog_id)
+    if not dog:
+        raise HTTPException(status_code=500, detail="Failed to retrieve created dog")
+
+    logger.info(
+        "dog_created_from_cluster",
+        dog_id=dog_id,
+        dog_name=data.name,
+        cluster_id=cluster_id,
+        fingerprint_count=target.size,
+    )
+
+    return _dog_to_schema(dog)

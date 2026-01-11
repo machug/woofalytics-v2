@@ -205,3 +205,44 @@ class FingerprintAggregatesSchema(BaseModel):
     dogs: list[DogAcousticStatsSchema] = Field(
         description="Acoustic statistics per dog"
     )
+
+
+# --- Clustering Schemas ---
+
+
+class ClusterSuggestionSchema(BaseModel):
+    """A suggested dog profile from clustered barks."""
+
+    cluster_id: str = Field(description="Unique identifier for this cluster")
+    fingerprint_ids: list[str] = Field(description="IDs of fingerprints in this cluster")
+    size: int = Field(description="Number of barks in this cluster")
+    avg_pitch_hz: float | None = Field(default=None, description="Average pitch of barks in Hz")
+    avg_duration_ms: float | None = Field(default=None, description="Average duration of barks in ms")
+    first_seen: datetime | None = Field(default=None, description="Earliest bark in cluster")
+    last_seen: datetime | None = Field(default=None, description="Latest bark in cluster")
+    coherence_score: float = Field(
+        ge=0.0, le=1.0,
+        description="How coherent/tight the cluster is (0-1). Higher = more similar barks.",
+    )
+    sample_ids: list[str] = Field(
+        default_factory=list,
+        description="Representative fingerprint IDs for previewing",
+    )
+
+
+class ClusterResultSchema(BaseModel):
+    """Result of clustering untagged barks."""
+
+    cluster_count: int = Field(description="Number of clusters identified")
+    total_untagged: int = Field(description="Total untagged fingerprints processed")
+    noise_count: int = Field(description="Fingerprints that didn't fit any cluster")
+    suggestions: list[ClusterSuggestionSchema] = Field(
+        description="List of cluster suggestions for new dog profiles",
+    )
+
+
+class CreateDogFromClusterRequestSchema(BaseModel):
+    """Request to create a dog profile from a cluster."""
+
+    name: str = Field(default="", description="Name for the new dog profile")
+    notes: str = Field(default="", description="Optional notes about the dog")

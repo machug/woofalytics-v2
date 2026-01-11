@@ -8,10 +8,23 @@ from __future__ import annotations
 
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
+from enum import Enum
 from typing import Any
 from uuid import uuid4
 
 import numpy as np
+
+
+class ConfidenceTier(str, Enum):
+    """Confidence tier for match classification.
+
+    Determines auto-tagging behavior based on match confidence.
+    """
+
+    HIGH = "high"  # >= 0.90: Strong match, auto-tag unconditionally
+    MEDIUM = "medium"  # 0.78-0.90: Good match, require margin check
+    LOW = "low"  # 0.65-0.78: Weak match, suggest but don't auto-tag
+    NONE = "none"  # < 0.65: No viable match
 
 
 def _generate_id() -> str:
@@ -238,6 +251,8 @@ class FingerprintMatch:
     dog_name: str
     confidence: float  # 0-1, cosine similarity
     sample_count: int  # How many samples built this profile
+    confidence_tier: ConfidenceTier = ConfidenceTier.NONE
+    acoustic_score: float | None = None  # Score from AcousticMatcher (if computed)
 
     def to_dict(self) -> dict[str, Any]:
         """Convert to dictionary."""
@@ -246,6 +261,8 @@ class FingerprintMatch:
             "dog_name": self.dog_name,
             "confidence": round(self.confidence, 4),
             "sample_count": self.sample_count,
+            "confidence_tier": self.confidence_tier.value,
+            "acoustic_score": round(self.acoustic_score, 4) if self.acoustic_score else None,
         }
 
 

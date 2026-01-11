@@ -13,26 +13,59 @@ from typing import TYPE_CHECKING
 import numpy as np
 import structlog
 
-from woofalytics.fingerprint.acoustic_features import AcousticFeatureExtractor
+from woofalytics.fingerprint.acoustic_features import (
+    AcousticFeatureExtractor,
+    AcousticFeatures,
+)
+from woofalytics.fingerprint.acoustic_matcher import AcousticMatcher, create_acoustic_matcher
 from woofalytics.fingerprint.extractor import FingerprintExtractor
-from woofalytics.fingerprint.models import BarkFingerprint, FingerprintMatch
+from woofalytics.fingerprint.models import BarkFingerprint, ConfidenceTier, FingerprintMatch
 from woofalytics.fingerprint.storage import FingerprintStore
+
+
+def _get_confidence_tier(confidence: float) -> ConfidenceTier:
+    """Classify confidence score into a tier.
+
+    Args:
+        confidence: Cosine similarity score (0-1).
+
+    Returns:
+        ConfidenceTier based on thresholds.
+    """
+    # Import here to avoid circular import at module level
+    if confidence >= HIGH_CONFIDENCE_THRESHOLD:
+        return ConfidenceTier.HIGH
+    elif confidence >= MEDIUM_CONFIDENCE_THRESHOLD:
+        return ConfidenceTier.MEDIUM
+    elif confidence >= LOW_CONFIDENCE_THRESHOLD:
+        return ConfidenceTier.LOW
+    else:
+        return ConfidenceTier.NONE
 
 if TYPE_CHECKING:
     from woofalytics.detection.clap import CLAPDetector
 
 logger = structlog.get_logger(__name__)
 
-# Default similarity threshold for matching (raised from 0.75 to reduce false positives)
-DEFAULT_THRESHOLD = 0.85
+# Confidence tier thresholds for auto-tagging decisions
+HIGH_CONFIDENCE_THRESHOLD = 0.90  # Auto-tag unconditionally
+MEDIUM_CONFIDENCE_THRESHOLD = 0.78  # Auto-tag with margin check
+LOW_CONFIDENCE_THRESHOLD = 0.65  # Suggest but don't auto-tag
+
+# Default similarity threshold for matching (lowered from 0.85 to reduce false negatives)
+DEFAULT_THRESHOLD = MEDIUM_CONFIDENCE_THRESHOLD
 
 # Minimum margin between best and second-best match required for auto-tagging
-# Prevents tagging when multiple dogs have similar confidence scores
-MIN_AUTO_TAG_MARGIN = 0.10
+# Only applies to medium-confidence matches (high-confidence skips margin check)
+MIN_AUTO_TAG_MARGIN = 0.08
 
 # Minimum acoustic score difference to use as tie-breaker
 # When CLAP margin is insufficient, use acoustic features if they clearly differ
-MIN_ACOUSTIC_TIE_BREAK_MARGIN = 0.15
+MIN_ACOUSTIC_TIE_BREAK_MARGIN = 0.12
+
+# Minimum confidence required to update dog profile embedding
+# Prevents profile contamination from low-confidence matches
+MIN_CONFIDENCE_FOR_EMBEDDING_UPDATE = 0.80
 
 
 class FingerprintMatcher:
@@ -62,6 +95,7 @@ class FingerprintMatcher:
         """
         self._extractor = FingerprintExtractor(detector)
         self._acoustic_extractor = AcousticFeatureExtractor(sample_rate=sample_rate)
+        self._acoustic_matcher = create_acoustic_matcher()
         self._store = store
         self._threshold = threshold
         self._sample_rate = sample_rate
@@ -92,36 +126,91 @@ class FingerprintMatcher:
 
     def _compute_acoustic_score(
         self,
-        bark_pitch: float | None,
-        dog_stats: dict | None,
+        bark_features: AcousticFeatures,
+        dog_id: str,
     ) -> float:
         """Compute acoustic similarity between bark and dog profile.
 
-        Uses pitch as the primary distinguishing feature.
+        Uses multiple acoustic features weighted by discriminative power:
+        - Pitch (20%): Highly discriminative for different dogs
+        - Duration (15%): Varies by dog size/temperament
+        - Spectral centroid (15%): "Brightness" of bark
+        - MFCCs (50%): Timbre fingerprint (most informative)
 
         Args:
-            bark_pitch: Pitch of the current bark in Hz (or None).
-            dog_stats: Acoustic stats for the dog (from get_dog_acoustic_stats).
+            bark_features: Acoustic features of the current bark.
+            dog_id: ID of the dog to compare against.
 
         Returns:
             Similarity score from 0.0 to 1.0.
         """
-        if bark_pitch is None or dog_stats is None:
-            return 0.5  # Neutral score when we can't compare
+        # Get recent fingerprints for this dog to build acoustic reference
+        dog_fingerprints = self._store.get_fingerprints_for_dog(dog_id, limit=10)
+        if not dog_fingerprints:
+            return 0.5  # Neutral score when no reference data
 
-        avg_pitch = dog_stats.get("avg_pitch_hz")
-        if avg_pitch is None:
-            return 0.5
+        # Feature weights
+        WEIGHT_PITCH = 0.20
+        WEIGHT_DURATION = 0.15
+        WEIGHT_CENTROID = 0.15
+        WEIGHT_MFCC = 0.50
 
-        # Compute pitch similarity using exponential decay
-        # Typical dog bark range is ~200-2000 Hz
-        pitch_range = 1800.0  # Expected range
-        pitch_diff = abs(bark_pitch - avg_pitch) / pitch_range
+        total_weight = 0.0
+        weighted_sum = 0.0
 
-        # Exponential decay: diff=0 -> 1.0, diff=0.5 -> ~0.37, diff=1.0 -> ~0.14
-        similarity = float(np.exp(-pitch_diff * 2.0))
+        # Collect reference values from dog's history
+        ref_pitches = [fp.pitch_hz for fp in dog_fingerprints if fp.pitch_hz is not None]
+        ref_durations = [fp.duration_ms for fp in dog_fingerprints if fp.duration_ms is not None]
+        ref_centroids = [fp.spectral_centroid_hz for fp in dog_fingerprints if fp.spectral_centroid_hz is not None]
+        ref_mfccs = [fp.mfcc_mean for fp in dog_fingerprints if fp.mfcc_mean is not None]
 
-        return similarity
+        # Pitch similarity
+        if bark_features.pitch_hz is not None and ref_pitches:
+            avg_pitch = np.mean(ref_pitches)
+            pitch_range = 1800.0  # 200-2000 Hz typical range
+            pitch_diff = abs(bark_features.pitch_hz - avg_pitch) / pitch_range
+            pitch_sim = float(np.exp(-pitch_diff * 2.0))
+            weighted_sum += pitch_sim * WEIGHT_PITCH
+            total_weight += WEIGHT_PITCH
+
+        # Duration similarity
+        if bark_features.duration_ms is not None and ref_durations:
+            avg_duration = np.mean(ref_durations)
+            duration_range = 450.0  # 50-500 ms typical range
+            duration_diff = abs(bark_features.duration_ms - avg_duration) / duration_range
+            duration_sim = float(np.exp(-duration_diff * 2.0))
+            weighted_sum += duration_sim * WEIGHT_DURATION
+            total_weight += WEIGHT_DURATION
+
+        # Spectral centroid similarity
+        if bark_features.spectral_centroid_hz is not None and ref_centroids:
+            avg_centroid = np.mean(ref_centroids)
+            centroid_range = 4500.0  # 500-5000 Hz typical range
+            centroid_diff = abs(bark_features.spectral_centroid_hz - avg_centroid) / centroid_range
+            centroid_sim = float(np.exp(-centroid_diff * 2.0))
+            weighted_sum += centroid_sim * WEIGHT_CENTROID
+            total_weight += WEIGHT_CENTROID
+
+        # MFCC similarity (cosine similarity)
+        if bark_features.mfcc_mean is not None and ref_mfccs:
+            # Compute average reference MFCC
+            avg_mfcc = np.mean(ref_mfccs, axis=0)
+
+            # Cosine similarity
+            norm1 = np.linalg.norm(bark_features.mfcc_mean)
+            norm2 = np.linalg.norm(avg_mfcc)
+
+            if norm1 > 1e-10 and norm2 > 1e-10:
+                cosine_sim = np.dot(bark_features.mfcc_mean, avg_mfcc) / (norm1 * norm2)
+                # Normalize from [-1, 1] to [0, 1]
+                mfcc_sim = float((cosine_sim + 1.0) / 2.0)
+                weighted_sum += mfcc_sim * WEIGHT_MFCC
+                total_weight += WEIGHT_MFCC
+
+        if total_weight < 1e-10:
+            return 0.5  # No features to compare
+
+        return weighted_sum / total_weight
 
     def match(
         self,
@@ -235,59 +324,90 @@ class FingerprintMatcher:
             mfcc_mean=acoustic_features.mfcc_mean,
         )
 
-        # If we have a match, check margin before auto-tagging
+        # If we have a match, check confidence tier before auto-tagging
         if matches:
             best_match = matches[0]
+            confidence_tier = _get_confidence_tier(best_match.confidence)
+            best_match.confidence_tier = confidence_tier
 
-            # Check margin between best and second-best match
-            # Only auto-tag if the best match is clearly better than alternatives
-            should_tag = True
+            # Assign tiers to all matches
+            for match in matches:
+                match.confidence_tier = _get_confidence_tier(match.confidence)
+
+            # Determine if we should auto-tag based on confidence tier
+            should_tag = False
             margin = None
+            acoustic_margin = None
 
-            if len(matches) > 1:
-                margin = best_match.confidence - matches[1].confidence
-                if margin < MIN_AUTO_TAG_MARGIN:
-                    # CLAP margin insufficient - try acoustic tie-breaking
-                    bark_pitch = acoustic_features.pitch_hz
-
-                    # Get acoustic stats for top candidates
-                    best_stats = self._store.get_dog_acoustic_stats(best_match.dog_id)
-                    second_stats = self._store.get_dog_acoustic_stats(matches[1].dog_id)
-
-                    best_acoustic = self._compute_acoustic_score(bark_pitch, best_stats)
-                    second_acoustic = self._compute_acoustic_score(bark_pitch, second_stats)
-                    acoustic_margin = best_acoustic - second_acoustic
-
-                    if acoustic_margin >= MIN_ACOUSTIC_TIE_BREAK_MARGIN:
-                        # Acoustic features CONFIRM the CLAP winner - allow tagging
-                        logger.info(
-                            "acoustic_tie_break_confirmed",
-                            fingerprint_id=fingerprint.id,
-                            winner=best_match.dog_name,
-                            bark_pitch=f"{bark_pitch:.1f}" if bark_pitch else "None",
-                            best_acoustic=f"{best_acoustic:.3f}",
-                            second_acoustic=f"{second_acoustic:.3f}",
-                            acoustic_margin=f"{acoustic_margin:.3f}",
-                            clap_margin=f"{margin:.3f}",
-                        )
-                        # Keep should_tag = True
+            if confidence_tier == ConfidenceTier.HIGH:
+                # High confidence: auto-tag unconditionally (no margin check needed)
+                should_tag = True
+                logger.info(
+                    "high_confidence_auto_tag",
+                    fingerprint_id=fingerprint.id,
+                    dog_name=best_match.dog_name,
+                    confidence=f"{best_match.confidence:.3f}",
+                )
+            elif confidence_tier == ConfidenceTier.MEDIUM:
+                # Medium confidence: require margin check
+                if len(matches) == 1:
+                    # Only one match - tag it
+                    should_tag = True
+                else:
+                    margin = best_match.confidence - matches[1].confidence
+                    if margin >= MIN_AUTO_TAG_MARGIN:
+                        # Good margin - tag it
+                        should_tag = True
                     else:
-                        # Acoustics don't confirm CLAP winner - skip auto-tag
-                        # (We never swap based on acoustics alone - CLAP embedding is
-                        # more reliable than single-bark pitch which varies naturally)
-                        should_tag = False
-                        logger.info(
-                            "auto_tag_skipped_insufficient_margin",
-                            fingerprint_id=fingerprint.id,
-                            best_dog=best_match.dog_name,
-                            best_confidence=f"{best_match.confidence:.3f}",
-                            second_dog=matches[1].dog_name,
-                            second_confidence=f"{matches[1].confidence:.3f}",
-                            margin=f"{margin:.3f}",
-                            required_margin=MIN_AUTO_TAG_MARGIN,
-                            acoustic_margin=f"{acoustic_margin:.3f}" if bark_pitch else "no_pitch",
-                            acoustic_required=MIN_ACOUSTIC_TIE_BREAK_MARGIN,
+                        # Margin insufficient - try acoustic tie-breaking
+                        # Uses full acoustic comparison (pitch, duration, centroid, MFCCs)
+                        best_acoustic = self._compute_acoustic_score(
+                            acoustic_features, best_match.dog_id
                         )
+                        second_acoustic = self._compute_acoustic_score(
+                            acoustic_features, matches[1].dog_id
+                        )
+                        acoustic_margin = best_acoustic - second_acoustic
+
+                        # Store acoustic scores on matches for API visibility
+                        best_match.acoustic_score = best_acoustic
+                        matches[1].acoustic_score = second_acoustic
+
+                        if acoustic_margin >= MIN_ACOUSTIC_TIE_BREAK_MARGIN:
+                            # Acoustic features CONFIRM the CLAP winner
+                            should_tag = True
+                            logger.info(
+                                "acoustic_tie_break_confirmed",
+                                fingerprint_id=fingerprint.id,
+                                winner=best_match.dog_name,
+                                best_acoustic=f"{best_acoustic:.3f}",
+                                second_acoustic=f"{second_acoustic:.3f}",
+                                acoustic_margin=f"{acoustic_margin:.3f}",
+                                clap_margin=f"{margin:.3f}",
+                            )
+                        else:
+                            # Acoustics don't confirm - skip auto-tag
+                            logger.info(
+                                "auto_tag_skipped_insufficient_margin",
+                                fingerprint_id=fingerprint.id,
+                                best_dog=best_match.dog_name,
+                                best_confidence=f"{best_match.confidence:.3f}",
+                                confidence_tier=confidence_tier.value,
+                                second_dog=matches[1].dog_name,
+                                second_confidence=f"{matches[1].confidence:.3f}",
+                                clap_margin=f"{margin:.3f}",
+                                required_margin=MIN_AUTO_TAG_MARGIN,
+                                acoustic_margin=f"{acoustic_margin:.3f}",
+                            )
+            else:
+                # LOW or NONE confidence: don't auto-tag
+                logger.info(
+                    "auto_tag_skipped_low_confidence",
+                    fingerprint_id=fingerprint.id,
+                    best_dog=best_match.dog_name,
+                    best_confidence=f"{best_match.confidence:.3f}",
+                    confidence_tier=confidence_tier.value,
+                )
 
             if should_tag:
                 fingerprint.dog_id = best_match.dog_id
@@ -299,16 +419,26 @@ class FingerprintMatcher:
                     dog_id=best_match.dog_id,
                     dog_name=best_match.dog_name,
                     confidence=f"{best_match.confidence:.3f}",
+                    confidence_tier=confidence_tier.value,
                     margin=f"{margin:.3f}" if margin else "only_match",
                     detection_prob=f"{detection_prob:.3f}",
                 )
 
-                # Update dog profile statistics
-                self._store.update_dog_stats(
-                    dog_id=best_match.dog_id,
-                    embedding=embedding,
-                    timestamp=timestamp,
-                )
+                # Update dog profile statistics only if confidence is high enough
+                # This prevents profile contamination from borderline matches
+                if best_match.confidence >= MIN_CONFIDENCE_FOR_EMBEDDING_UPDATE:
+                    self._store.update_dog_stats(
+                        dog_id=best_match.dog_id,
+                        embedding=embedding,
+                        timestamp=timestamp,
+                    )
+                else:
+                    logger.debug(
+                        "embedding_update_skipped_low_confidence",
+                        dog_id=best_match.dog_id,
+                        confidence=f"{best_match.confidence:.3f}",
+                        threshold=MIN_CONFIDENCE_FOR_EMBEDDING_UPDATE,
+                    )
         else:
             # No auto-taggable match found - bark will be untagged
             # Check if there are any potential matches (for logging)

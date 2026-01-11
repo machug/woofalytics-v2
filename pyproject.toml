@@ -58,6 +58,9 @@ dev = [
     "pre-commit>=4.0",
     "freezegun>=1.4",
 ]
+clustering = [
+    "hdbscan>=0.8.33",
+]
 
 [project.scripts]
 woofalytics = "woofalytics.__main__:main"
