@@ -43,7 +43,13 @@ This project was created with specific intentions:
 - **Multi-Layer Veto System** - Rejects speech, percussion, and bird sounds to reduce false positives
 - **Direction of Arrival (DOA)** - Know which direction barks come from using stereo microphones
 - **Evidence Recording** - Automatic 30-second clips with JSON metadata sidecars
-- **Modern Web UI** - Real-time dashboard with WebSocket updates
+- **Dog Fingerprinting** - Identify and track individual dogs by bark signature
+- **Bark Management** - Reassign barks to different dogs, untag, or delete directly from dog profiles
+- **Last Heard Tracking** - See when each dog was last detected with accurate timestamps
+- **Webhook Notifications** - Configurable webhooks for bark alerts with customizable payloads
+- **Quiet Hours** - Schedule reduced sensitivity periods (e.g., nighttime) via Settings UI
+- **Clustering Analysis** - Visual interface for analyzing untagged barks and creating dog profiles
+- **Modern Web UI** - Real-time dashboard with WebSocket updates and persistent statistics
 - **Accessible by Design** - WCAG AA compliant, screen reader support, respects motion preferences
 - **REST API** - Full OpenAPI documentation at `/api/docs`
 - **Docker Support** - Easy deployment with Docker Compose
@@ -472,10 +478,11 @@ The frontend is a **SvelteKit SPA** with a NASA Mission Control-inspired theme (
 
 | Route | Description |
 |-------|-------------|
-| `/` | **Dashboard** - Real-time bark probability, DOA compass, VU meter, statistics |
-| `/dogs` | **Dog Management** - View registered dogs, bark counts, manage profiles |
-| `/fingerprints` | **Fingerprints Explorer** - Browse bark fingerprints with filtering and playback |
-| `/settings` | **Settings & Maintenance** - Configuration display, data purge operations |
+| `/` | **Dashboard** - Real-time bark probability, detection pipeline monitor, dog overview with last heard timestamps, persistent statistics |
+| `/dogs` | **Dog Management** - View registered dogs, bark counts, last heard indicators, bark modal with reassign/untag/delete actions |
+| `/fingerprints` | **Fingerprints Explorer** - Browse bark fingerprints with filtering, playback, and clustering analysis |
+| `/reports` | **Reports** - Bark activity reports and trend analysis |
+| `/settings` | **Settings & Maintenance** - Detection parameters, quiet hours, webhooks, fingerprint purge |
 
 ### Features
 
@@ -484,6 +491,10 @@ The frontend is a **SvelteKit SPA** with a NASA Mission Control-inspired theme (
 - **Svelte 5 Runes** - Modern reactive state with `$state`, `$derived`, `$effect`
 - **Responsive Design** - Works on desktop and tablet
 - **Evidence Playback** - Listen to recorded bark clips directly in the browser
+- **Bark Management Modal** - View dog's barks with reassign, untag, and delete controls
+- **Last Heard Indicators** - Teal audio icon showing when each dog was last detected
+- **Clustering UI** - Visual bark clustering for pattern analysis and dog profile creation
+- **Persistent Dashboard Stats** - Bark counts survive page refreshes via API persistence
 - **Toast Notifications** - Non-blocking feedback replacing browser alerts
 - **Active Navigation** - Clear indication of current page with amber highlight
 - **Accessibility** - WCAG AA text contrast, labeled form inputs, `prefers-reduced-motion` support
@@ -787,17 +798,22 @@ For documentation purposes, metadata must be:
 ### Not Yet Implemented
 
 1. **Event Filter** (`events/filter.py`) - Rate limiting/debouncing
-2. **Webhook Notifications** - IFTTT integration
-3. **Evidence Cleanup** - Automatic old file removal
-4. **Audio Spectrogram** - Visual display in web UI
+2. **Evidence Cleanup** - Automatic old file removal
+3. **Audio Spectrogram** - Visual display in web UI
 
 ### Potential Improvements
 
 1. **Prometheus Metrics** - For Grafana dashboards
 2. **Home Assistant Integration** - MQTT or REST
-3. **Multi-Dog Fingerprinting** - Identify individual dogs by bark signature
-4. **SMS/Push Notifications** - Via Pushover/Twilio
-5. **Bark Pattern Analysis** - Track frequency, duration, and timing patterns per dog
+3. **SMS/Push Notifications** - Via Pushover/Twilio
+
+### Recently Implemented (v2.5.0)
+
+1. **Webhook Notifications** - Configurable webhooks for bark alerts
+2. **Multi-Dog Fingerprinting** - Identify individual dogs by bark signature
+3. **Bark Pattern Analysis** - Clustering UI for analyzing bark patterns
+4. **Quiet Hours** - Scheduled reduced sensitivity periods
+5. **Fingerprint Purge** - Remove orphaned fingerprints without audio evidence
 
 ### Known Limitations
 
