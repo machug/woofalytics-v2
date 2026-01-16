@@ -197,6 +197,72 @@
 		dogBarks = [];
 	}
 
+	async function handleReassignBark(barkId: string, newDogId: string) {
+		try {
+			const response = await api.POST('/api/barks/{bark_id}/correct', {
+				params: { path: { bark_id: barkId } },
+				body: { new_dog_id: newDogId }
+			});
+
+			if (response.error) {
+				throw new Error('Failed to reassign bark');
+			}
+
+			// Remove the bark from the current list
+			dogBarks = dogBarks.filter(b => b.id !== barkId);
+			await Promise.all([loadDogs(), loadStats()]);
+			toast.show('success', 'Bark reassigned successfully');
+		} catch (e) {
+			console.error('Error reassigning bark:', e);
+			toast.show('error', 'Failed to reassign bark. Please try again.');
+		}
+	}
+
+	async function handleUntagBark(barkId: string) {
+		try {
+			const response = await api.POST('/api/barks/{bark_id}/untag', {
+				params: { path: { bark_id: barkId } }
+			});
+
+			if (response.error) {
+				throw new Error('Failed to untag bark');
+			}
+
+			// Remove the bark from the current list
+			dogBarks = dogBarks.filter(b => b.id !== barkId);
+			await Promise.all([loadDogs(), loadStats(), loadUntaggedBarks()]);
+			toast.show('success', 'Bark unassigned and moved to untagged');
+		} catch (e) {
+			console.error('Error untagging bark:', e);
+			toast.show('error', 'Failed to untag bark. Please try again.');
+		}
+	}
+
+	async function handleDeleteBark(barkId: string) {
+		if (!confirm('Delete this bark? It will be marked as a false positive and hidden from views.')) {
+			return;
+		}
+
+		try {
+			const response = await api.POST('/api/barks/{bark_id}/reject', {
+				params: { path: { bark_id: barkId } },
+				body: { reason: 'Manually deleted by user' }
+			});
+
+			if (response.error) {
+				throw new Error('Failed to delete bark');
+			}
+
+			// Remove the bark from the current list
+			dogBarks = dogBarks.filter(b => b.id !== barkId);
+			await Promise.all([loadDogs(), loadStats()]);
+			toast.show('success', 'Bark deleted');
+		} catch (e) {
+			console.error('Error deleting bark:', e);
+			toast.show('error', 'Failed to delete bark. Please try again.');
+		}
+	}
+
 	async function handleToggleConfirm(dog: Dog) {
 		try {
 			if (dog.confirmed) {
@@ -440,8 +506,13 @@
 	<BarkModal
 		bind:open={barkModalOpen}
 		dogName={barkModalDog.name}
+		dogId={barkModalDog.id}
 		barks={dogBarks}
+		{dogs}
 		onClose={handleCloseBarkModal}
+		onReassign={handleReassignBark}
+		onUntag={handleUntagBark}
+		onDelete={handleDeleteBark}
 	/>
 {/if}
 

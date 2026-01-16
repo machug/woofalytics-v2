@@ -1,14 +1,24 @@
 <script lang="ts">
-	import type { Fingerprint } from '$lib/api/types';
+	import type { Fingerprint, Dog } from '$lib/api/types';
 
 	interface Props {
 		open: boolean;
 		dogName: string;
+		dogId: string;
 		barks: Fingerprint[];
+		dogs: Dog[];
 		onClose: () => void;
+		onReassign?: (barkId: string, newDogId: string) => void;
+		onUntag?: (barkId: string) => void;
+		onDelete?: (barkId: string) => void;
 	}
 
-	let { open = $bindable(false), dogName, barks, onClose }: Props = $props();
+	let { open = $bindable(false), dogName, dogId, barks, dogs, onClose, onReassign, onUntag, onDelete }: Props = $props();
+
+	let openDropdown = $state<string | null>(null);
+
+	// Filter out the current dog from the reassignment options
+	let otherDogs = $derived(dogs.filter(d => d.id !== dogId));
 
 	let currentlyPlaying = $state<string | null>(null);
 	let audioElement = $state<HTMLAudioElement | null>(null);
@@ -77,6 +87,27 @@
 			playAudio(bark);
 		}
 	}
+
+	function toggleDropdown(barkId: string) {
+		openDropdown = openDropdown === barkId ? null : barkId;
+	}
+
+	function handleReassign(barkId: string, newDogId: string) {
+		openDropdown = null;
+		onReassign?.(barkId, newDogId);
+	}
+
+	function handleUntag(barkId: string) {
+		onUntag?.(barkId);
+	}
+
+	function handleDelete(barkId: string) {
+		onDelete?.(barkId);
+	}
+
+	function closeDropdowns() {
+		openDropdown = null;
+	}
 </script>
 
 <svelte:window onkeydown={handleKeydown} />
@@ -133,24 +164,91 @@
 								</div>
 							</div>
 
-							{#if bark.evidence_filename}
+							<div class="bark-actions">
+								{#if bark.evidence_filename}
+									<button
+										class="btn-action btn-play"
+										class:playing={currentlyPlaying === bark.id}
+										onclick={() => toggleAudio(bark)}
+										title="Play audio"
+									>
+										{#if currentlyPlaying === bark.id}
+											<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+												<rect x="6" y="4" width="4" height="16" />
+												<rect x="14" y="4" width="4" height="16" />
+											</svg>
+										{:else}
+											<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+												<polygon points="5 3 19 12 5 21 5 3" />
+											</svg>
+										{/if}
+									</button>
+								{/if}
+
+								<!-- Reassign Dropdown -->
+								{#if otherDogs.length > 0}
+									<div class="dropdown-container">
+										<button
+											class="btn-action btn-reassign"
+											onclick={() => toggleDropdown(bark.id)}
+											title="Reassign to another dog"
+										>
+											<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+												<path d="M16 3h5v5" />
+												<path d="M4 20L21 3" />
+												<path d="M21 16v5h-5" />
+												<path d="M15 15l6 6" />
+												<path d="M4 4l5 5" />
+											</svg>
+										</button>
+										{#if openDropdown === bark.id}
+											<div class="dropdown-menu">
+												<div class="dropdown-header">Reassign to:</div>
+												{#each otherDogs as dog (dog.id)}
+													<button
+														class="dropdown-item"
+														onclick={() => handleReassign(bark.id, dog.id)}
+													>
+														{dog.name}
+													</button>
+												{/each}
+												<div class="dropdown-divider"></div>
+												<button
+													class="dropdown-item dropdown-item--untag"
+													onclick={() => handleUntag(bark.id)}
+												>
+													Unassign (move to untagged)
+												</button>
+											</div>
+										{/if}
+									</div>
+								{:else}
+									<button
+										class="btn-action btn-untag"
+										onclick={() => handleUntag(bark.id)}
+										title="Unassign bark"
+									>
+										<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+											<path d="M18.36 6.64a9 9 0 11-12.73 0" />
+											<line x1="12" y1="2" x2="12" y2="12" />
+										</svg>
+									</button>
+								{/if}
+
+								<!-- Delete Button -->
 								<button
-									class="btn-play"
-									class:playing={currentlyPlaying === bark.id}
-									onclick={() => toggleAudio(bark)}
+									class="btn-action btn-delete"
+									onclick={() => handleDelete(bark.id)}
+									title="Delete bark (mark as false positive)"
 								>
-									{#if currentlyPlaying === bark.id}
-										<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-											<rect x="6" y="4" width="4" height="16" />
-											<rect x="14" y="4" width="4" height="16" />
-										</svg>
-									{:else}
-										<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-											<polygon points="5 3 19 12 5 21 5 3" />
-										</svg>
-									{/if}
+									<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+										<polyline points="3 6 5 6 21 6" />
+										<path d="M19 6v14a2 2 0 01-2 2H7a2 2 0 01-2-2V6m3 0V4a2 2 0 012-2h4a2 2 0 012 2v2" />
+										<line x1="10" y1="11" x2="10" y2="17" />
+										<line x1="14" y1="11" x2="14" y2="17" />
+									</svg>
 								</button>
-							{/if}
+							</div>
 						</div>
 					{/each}
 				</div>
@@ -351,19 +449,44 @@
 		color: var(--text-muted);
 	}
 
-	.btn-play {
-		width: 36px;
-		height: 36px;
+	/* Action buttons container */
+	.bark-actions {
+		display: flex;
+		align-items: center;
+		gap: var(--space-xs);
+		flex-shrink: 0;
+	}
+
+	.btn-action {
+		width: 32px;
+		height: 32px;
 		display: flex;
 		align-items: center;
 		justify-content: center;
-		background: var(--accent-teal-dim);
-		border: 1px solid var(--accent-teal);
+		background: var(--bg-overlay);
+		border: 1px solid var(--border-default);
 		border-radius: var(--radius-sm);
-		color: var(--accent-teal);
+		color: var(--text-muted);
 		cursor: pointer;
 		transition: all var(--transition-fast);
 		flex-shrink: 0;
+	}
+
+	.btn-action svg {
+		width: 14px;
+		height: 14px;
+	}
+
+	.btn-action:hover {
+		background: var(--bg-surface);
+		color: var(--text-primary);
+		border-color: var(--border-subtle);
+	}
+
+	.btn-play {
+		background: var(--accent-teal-dim);
+		border-color: var(--accent-teal);
+		color: var(--accent-teal);
 	}
 
 	.btn-play:hover {
@@ -377,8 +500,79 @@
 		color: var(--bg-base);
 	}
 
-	.btn-play svg {
-		width: 16px;
-		height: 16px;
+	.btn-reassign:hover {
+		border-color: var(--accent-amber);
+		color: var(--accent-amber);
+	}
+
+	.btn-untag:hover {
+		border-color: var(--accent-amber);
+		color: var(--accent-amber);
+	}
+
+	.btn-delete:hover {
+		border-color: var(--accent-coral);
+		color: var(--accent-coral);
+	}
+
+	/* Dropdown */
+	.dropdown-container {
+		position: relative;
+	}
+
+	.dropdown-menu {
+		position: absolute;
+		top: 100%;
+		right: 0;
+		margin-top: var(--space-xs);
+		min-width: 180px;
+		background: var(--bg-surface);
+		border: 1px solid var(--border-default);
+		border-radius: var(--radius-md);
+		box-shadow: var(--shadow-lg);
+		z-index: 100;
+		overflow: hidden;
+	}
+
+	.dropdown-header {
+		padding: var(--space-xs) var(--space-sm);
+		font-size: 0.65rem;
+		font-weight: 600;
+		color: var(--text-muted);
+		text-transform: uppercase;
+		letter-spacing: 0.05em;
+		background: rgba(0, 0, 0, 0.2);
+		border-bottom: 1px solid var(--border-muted);
+	}
+
+	.dropdown-item {
+		display: block;
+		width: 100%;
+		padding: var(--space-sm) var(--space-md);
+		background: transparent;
+		border: none;
+		text-align: left;
+		font-size: 0.8rem;
+		color: var(--text-primary);
+		cursor: pointer;
+		transition: background var(--transition-fast);
+	}
+
+	.dropdown-item:hover {
+		background: var(--bg-overlay);
+	}
+
+	.dropdown-item--untag {
+		color: var(--accent-amber);
+	}
+
+	.dropdown-item--untag:hover {
+		background: rgba(251, 191, 36, 0.1);
+	}
+
+	.dropdown-divider {
+		height: 1px;
+		background: var(--border-muted);
+		margin: var(--space-xs) 0;
 	}
 </style>
