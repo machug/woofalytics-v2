@@ -4,6 +4,24 @@ All notable changes to Woofalytics will be documented in this file.
 
 Format based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
+## [2.5.0] - 2026-01-16
+
+### Added
+- **Bark Management from Dog Modal**: Reassign barks to different dogs, unassign to move back to untagged queue, or delete (mark as false positive) directly from the dog's bark list
+- **Last Heard Indicator**: Dog profiles now show when each dog was last heard (teal audio icon) on both the Dogs page and Dashboard overview
+- **Webhook Notifications**: Configurable webhook system for bark alerts with customizable payloads
+- **Quiet Hours Mode**: Schedule reduced sensitivity periods (e.g., nighttime) via Settings UI
+- **Clustering UI**: Visual interface for analyzing untagged barks and creating new dog profiles from clusters
+- **Fingerprint Purge**: Remove orphaned fingerprints without audio evidence files
+- **Persistent Dashboard Stats**: Bark counts and recent detections survive page refreshes
+
+### Fixed
+- **Accurate Last Seen Timestamps**: `last_seen` now computed from actual bark timestamps, not profile modification time
+- **Relative Date Display**: Older dates now show "Xd ago" instead of absolute dates
+
+### Changed
+- Dog stats (first_seen, last_seen, total_barks) computed dynamically from fingerprints table
+
 ## [2.4.0] - 2026-01-10
 
 ### Added
