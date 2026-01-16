@@ -55,6 +55,22 @@
 		return `${minutes}m`;
 	}
 
+	function formatRelativeTime(dateStr: string | null | undefined): string {
+		if (!dateStr) return 'Never';
+		const date = new Date(dateStr);
+		const now = new Date();
+		const diff = now.getTime() - date.getTime();
+		const minutes = Math.floor(diff / 60000);
+		const hours = Math.floor(diff / 3600000);
+		const days = Math.floor(diff / 86400000);
+
+		if (minutes < 1) return 'Just now';
+		if (minutes < 60) return `${minutes}m ago`;
+		if (hours < 24) return `${hours}h ago`;
+		if (days < 7) return `${days}d ago`;
+		return date.toLocaleDateString();
+	}
+
 	onMount(() => {
 		loadData();
 		// Fetch persistent stats before connecting WebSocket
@@ -151,6 +167,13 @@
 								<span class="dog-emoji">{dog.emoji || '🐕'}</span>
 								<span class="dog-name">{dog.name}</span>
 								<span class="dog-barks">{formatNumber(dog.total_barks)} barks</span>
+								<span class="dog-last-heard" title="Last bark heard">
+									<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+										<path d="M11 5L6 9H2v6h4l5 4V5z" />
+										<path d="M15.54 8.46a5 5 0 010 7.07" />
+									</svg>
+									{formatRelativeTime(dog.last_seen)}
+								</span>
 							</a>
 						{/each}
 					</div>
@@ -344,6 +367,21 @@
 	.dog-barks {
 		font-size: 0.75rem;
 		color: var(--text-muted);
+	}
+
+	.dog-last-heard {
+		display: flex;
+		align-items: center;
+		gap: 4px;
+		font-size: 0.7rem;
+		color: var(--accent-teal);
+		margin-top: 2px;
+	}
+
+	.dog-last-heard svg {
+		width: 12px;
+		height: 12px;
+		opacity: 0.8;
 	}
 
 	@media (max-width: 1024px) {

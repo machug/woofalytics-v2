@@ -92,13 +92,22 @@
 				</svg>
 				<strong>{dog.total_barks}</strong> barks
 			</div>
-			<div class="dog-stat">
-				<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-					<circle cx="12" cy="12" r="10" />
-					<polyline points="12 6 12 12 16 14" />
-				</svg>
-				{formatRelativeTime(dog.updated_at)}
-			</div>
+			{#if dog.last_seen}
+				<div class="dog-stat dog-stat--heard" title="Last bark heard">
+					<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+						<path d="M11 5L6 9H2v6h4l5 4V5z" />
+						<path d="M15.54 8.46a5 5 0 010 7.07" />
+					</svg>
+					{formatRelativeTime(dog.last_seen)}
+				</div>
+			{:else}
+				<div class="dog-stat" title="No barks recorded yet">
+					<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+						<path d="M11 5L6 9H2v6h4l5 4V5z" />
+					</svg>
+					Never heard
+				</div>
+			{/if}
 		</div>
 	</div>
 
@@ -284,6 +293,15 @@
 		width: 12px;
 		height: 12px;
 		opacity: 0.6;
+	}
+
+	.dog-stat--heard {
+		color: var(--accent-teal);
+	}
+
+	.dog-stat--heard svg {
+		opacity: 0.8;
+		color: var(--accent-teal);
 	}
 
 	.dog-actions {
