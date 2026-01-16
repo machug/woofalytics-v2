@@ -293,31 +293,77 @@ class FingerprintStore:
             dog_id: The dog's unique ID.
 
         Returns:
-            DogProfile if found, None otherwise.
+            DogProfile if found, None otherwise, with accurate first_seen/last_seen/total_barks
+            computed from actual fingerprints.
         """
         with self._get_connection() as conn:
             cursor = conn.cursor()
-            cursor.execute("SELECT * FROM dog_profiles WHERE id = ?", (dog_id,))
+            # Join with fingerprints to get accurate stats
+            cursor.execute("""
+                SELECT
+                    d.*,
+                    MIN(f.timestamp) as computed_first_seen,
+                    MAX(f.timestamp) as computed_last_seen,
+                    COUNT(f.id) as computed_total_barks
+                FROM dog_profiles d
+                LEFT JOIN bark_fingerprints f ON d.id = f.dog_id AND f.rejection_reason IS NULL
+                WHERE d.id = ?
+                GROUP BY d.id
+            """, (dog_id,))
             row = cursor.fetchone()
 
             if not row:
                 return None
 
-            return _row_to_dog_profile(row)
+            profile = _row_to_dog_profile(row)
+            # Override with computed values from actual fingerprints
+            if row["computed_first_seen"]:
+                profile.first_seen = datetime.fromisoformat(row["computed_first_seen"])
+            else:
+                profile.first_seen = None
+            if row["computed_last_seen"]:
+                profile.last_seen = datetime.fromisoformat(row["computed_last_seen"])
+            else:
+                profile.last_seen = None
+            profile.total_barks = row["computed_total_barks"] or 0
+            return profile
 
     def list_dogs(self) -> list[DogProfile]:
         """List all dog profiles.
 
         Returns:
-            List of all DogProfiles.
+            List of all DogProfiles with accurate first_seen/last_seen/total_barks
+            computed from actual fingerprints.
         """
         dogs = []
         with self._get_connection() as conn:
             cursor = conn.cursor()
-            cursor.execute("SELECT * FROM dog_profiles ORDER BY name")
+            # Join with fingerprints to get accurate stats
+            cursor.execute("""
+                SELECT
+                    d.*,
+                    MIN(f.timestamp) as computed_first_seen,
+                    MAX(f.timestamp) as computed_last_seen,
+                    COUNT(f.id) as computed_total_barks
+                FROM dog_profiles d
+                LEFT JOIN bark_fingerprints f ON d.id = f.dog_id AND f.rejection_reason IS NULL
+                GROUP BY d.id
+                ORDER BY d.name
+            """)
 
             for row in cursor.fetchall():
-                dogs.append(_row_to_dog_profile(row))
+                profile = _row_to_dog_profile(row)
+                # Override with computed values from actual fingerprints
+                if row["computed_first_seen"]:
+                    profile.first_seen = datetime.fromisoformat(row["computed_first_seen"])
+                else:
+                    profile.first_seen = None
+                if row["computed_last_seen"]:
+                    profile.last_seen = datetime.fromisoformat(row["computed_last_seen"])
+                else:
+                    profile.last_seen = None
+                profile.total_barks = row["computed_total_barks"] or 0
+                dogs.append(profile)
 
         return dogs
 
