@@ -8,7 +8,7 @@
 audio:
   device_name: pulse
   sample_rate: 44100
-  channels: 2
+  channels: 4
   chunk_size: 441
   volume_percent: 75
 model:
@@ -25,10 +25,13 @@ model:
   clap_min_harmonic_ratio: 0.0
 doa:
   enabled: true
+  array_type: uca
   element_spacing: 0.1
-  num_elements: 2
+  radius: 0.093
+  num_elements: 4
   angle_min: 0
-  angle_max: 180
+  angle_max: 359
+  method: bartlett
 evidence:
   directory: ./evidence
   past_context_seconds: 15

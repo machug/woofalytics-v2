@@ -164,6 +164,8 @@ class BarkDetector:
                 angle_min=self.settings.doa.angle_min,
                 angle_max=self.settings.doa.angle_max,
                 method=self.settings.doa.method,
+                array_type=self.settings.doa.array_type,
+                radius=self.settings.doa.radius,
             )
 
     def _load_model(self) -> None:
@@ -191,6 +193,8 @@ class BarkDetector:
                 angle_min=self.settings.doa.angle_min,
                 angle_max=self.settings.doa.angle_max,
                 method=self.settings.doa.method,
+                array_type=self.settings.doa.array_type,
+                radius=self.settings.doa.radius,
             )
 
     @property

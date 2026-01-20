@@ -187,7 +187,13 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
     # Register callbacks
     detector.add_callback(lambda event: asyncio.create_task(evidence.on_bark_event(event)))
     # Broadcast bark events ONLY to bark WebSocket clients (not pipeline/audio)
-    detector.add_callback(lambda event: asyncio.create_task(broadcast_bark_event(event, ws_managers.bark)))
+    # Pass is_circular for correct direction labels based on array geometry
+    is_circular = settings.doa.array_type == "uca"
+    detector.add_callback(
+        lambda event, circular=is_circular: asyncio.create_task(
+            broadcast_bark_event(event, ws_managers.bark, is_circular=circular)
+        )
+    )
     detector.add_callback(lambda event: asyncio.create_task(on_bark_for_fingerprint(event)))
 
     # Store in app.state for dependency injection

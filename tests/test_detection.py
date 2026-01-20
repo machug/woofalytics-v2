@@ -41,21 +41,21 @@ class TestDirectionEstimator:
 
     def test_insufficient_channels(self):
         """Test behavior with single channel audio."""
-        estimator = DirectionEstimator()
+        estimator = DirectionEstimator()  # Default method is bartlett
 
         # Single channel audio
         audio = np.random.randn(1, 1000).astype(np.float32)
 
         bartlett, capon, mem = estimator.estimate(audio)
 
-        # Should return default front-facing angle
-        assert bartlett == 90
-        assert capon == 90
-        assert mem == 90
+        # Should return default front-facing angle for configured method only
+        assert bartlett == 90  # bartlett is the default method
+        assert capon is None
+        assert mem is None
 
     def test_estimate_multichannel(self):
         """Test estimation with multichannel audio."""
-        estimator = DirectionEstimator(num_elements=2)
+        estimator = DirectionEstimator(num_elements=2)  # Default method is bartlett
 
         # Generate stereo audio with slight phase shift
         samples = 4410
@@ -63,10 +63,10 @@ class TestDirectionEstimator:
 
         bartlett, capon, mem = estimator.estimate(audio)
 
-        # Should return valid angles
-        assert 0 <= bartlett <= 180
-        assert 0 <= capon <= 180
-        assert 0 <= mem <= 180
+        # Should return valid angle for configured method only
+        assert 0 <= bartlett <= 180  # bartlett is the default method
+        assert capon is None
+        assert mem is None
 
     def test_get_spectrum(self):
         """Test spectrum retrieval."""
@@ -78,6 +78,39 @@ class TestDirectionEstimator:
 
         assert len(angles) == len(spectrum)
         assert len(angles) == 181
+
+    def test_uca_initialization(self):
+        """Test UCA (Uniform Circular Array) initialization."""
+        estimator = DirectionEstimator(
+            array_type="uca",
+            num_elements=4,
+            radius=0.093,
+            angle_min=0,
+            angle_max=359,
+        )
+
+        assert estimator.array_type == "uca"
+        assert estimator.num_elements == 4
+        assert estimator.radius == 0.093
+        assert len(estimator._incident_angles) == 360
+
+    def test_uca_estimate(self):
+        """Test UCA DOA estimation with 4-mic array."""
+        estimator = DirectionEstimator(
+            array_type="uca",
+            num_elements=4,
+            radius=0.093,
+            angle_min=0,
+            angle_max=359,
+        )
+
+        # 4-channel audio
+        audio = np.random.randn(4, 4410).astype(np.float32)
+
+        angle = estimator.estimate_single(audio)
+
+        # Should return valid 360° angle
+        assert 0 <= angle <= 359
 
 
 class TestAngleToDirection:
@@ -107,6 +140,30 @@ class TestAngleToDirection:
         assert angle_to_direction(150) == "far right"
         assert angle_to_direction(165) == "far right"
         assert angle_to_direction(180) == "far right"
+
+    def test_circular_front(self):
+        """Test 360° circular directions - front."""
+        assert angle_to_direction(0, is_circular=True) == "front"
+        assert angle_to_direction(350, is_circular=True) == "front"
+        assert angle_to_direction(10, is_circular=True) == "front"
+
+    def test_circular_sides(self):
+        """Test 360° circular directions - sides."""
+        assert angle_to_direction(90, is_circular=True) == "right"
+        assert angle_to_direction(270, is_circular=True) == "left"
+
+    def test_circular_back(self):
+        """Test 360° circular directions - back."""
+        assert angle_to_direction(180, is_circular=True) == "back"
+        assert angle_to_direction(170, is_circular=True) == "back"
+        assert angle_to_direction(190, is_circular=True) == "back"
+
+    def test_circular_diagonals(self):
+        """Test 360° circular directions - diagonals."""
+        assert angle_to_direction(45, is_circular=True) == "front-right"
+        assert angle_to_direction(135, is_circular=True) == "back-right"
+        assert angle_to_direction(225, is_circular=True) == "back-left"
+        assert angle_to_direction(315, is_circular=True) == "front-left"
 
 
 class TestBarkEvent:

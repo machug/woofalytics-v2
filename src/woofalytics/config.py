@@ -170,11 +170,21 @@ class DOAConfig(BaseModel):
         default=True,
         description="Enable direction of arrival estimation.",
     )
+    array_type: Literal["ula", "uca"] = Field(
+        default="ula",
+        description="Array geometry: 'ula' (Uniform Linear Array) or 'uca' (Uniform Circular Array).",
+    )
     element_spacing: float = Field(
         default=0.1,
         ge=0.01,
         le=1.0,
-        description="Inter-element spacing in wavelengths (lambda).",
+        description="Inter-element spacing in wavelengths for ULA.",
+    )
+    radius: float = Field(
+        default=0.1,
+        ge=0.01,
+        le=1.0,
+        description="Array radius in wavelengths for UCA. ReSpeaker 4-Mic ~= 0.093 at 1kHz.",
     )
     num_elements: int = Field(
         default=2,
@@ -192,7 +202,7 @@ class DOAConfig(BaseModel):
         default=180,
         ge=0,
         le=360,
-        description="Maximum scanning angle in degrees.",
+        description="Maximum scanning angle in degrees (use 360 for UCA).",
     )
     method: str = Field(
         default="bartlett",

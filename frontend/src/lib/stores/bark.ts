@@ -15,6 +15,8 @@ export interface BarkEvent {
 	dog_id: string | null;
 	dog_name: string | null;
 	evidence_file: string | null;
+	doa_degrees: number | null;
+	doa_direction: string | null;
 }
 
 interface BarkState {
@@ -130,6 +132,7 @@ export function startBarkListener() {
 
 			// Backend sends: {type: "bark_event", data: {timestamp, probability, is_barking, doa?}}
 			if (data.type === 'bark_event' && data.data?.is_barking) {
+				const doa = data.data.doa;
 				const bark: BarkEvent = {
 					id: crypto.randomUUID(),
 					timestamp: new Date(data.data.timestamp || Date.now()),
@@ -138,7 +141,9 @@ export function startBarkListener() {
 					pitch_hz: null,
 					dog_id: null,
 					dog_name: null,
-					evidence_file: null
+					evidence_file: null,
+					doa_degrees: doa?.bartlett ?? null,
+					doa_direction: doa?.direction ?? null
 				};
 				barkStore.addBark(bark);
 			} else if (data.type === 'status') {

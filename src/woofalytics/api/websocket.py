@@ -122,8 +122,13 @@ class ConnectionManager:
         return len(self.active_connections)
 
 
-def bark_event_to_message(event: BarkEvent) -> dict[str, Any]:
-    """Convert a BarkEvent to a WebSocket message."""
+def bark_event_to_message(event: BarkEvent, is_circular: bool = False) -> dict[str, Any]:
+    """Convert a BarkEvent to a WebSocket message.
+
+    Args:
+        event: The bark detection event.
+        is_circular: Whether the DOA uses a circular array (UCA) for 360° directions.
+    """
     message: dict[str, Any] = {
         "type": "bark_event",
         "data": {
@@ -139,21 +144,26 @@ def bark_event_to_message(event: BarkEvent) -> dict[str, Any]:
             "bartlett": event.doa_bartlett,
             "capon": event.doa_capon,
             "mem": event.doa_mem,
-            "direction": angle_to_direction(event.doa_bartlett),
+            "direction": angle_to_direction(event.doa_bartlett, is_circular=is_circular),
         }
 
     return message
 
 
-async def broadcast_bark_event(event: BarkEvent, manager: ConnectionManager) -> None:
+async def broadcast_bark_event(
+    event: BarkEvent,
+    manager: ConnectionManager,
+    is_circular: bool = False,
+) -> None:
     """Broadcast a bark event to all connected WebSocket clients.
 
     Args:
         event: The bark detection event to broadcast.
         manager: The WebSocket connection manager from app.state.
+        is_circular: Whether the DOA uses a circular array (UCA) for 360° directions.
     """
     if manager.connection_count > 0:
-        message = bark_event_to_message(event)
+        message = bark_event_to_message(event, is_circular=is_circular)
         await manager.broadcast(message)
 
 

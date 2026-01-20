@@ -2,6 +2,7 @@
 	import { isDetecting, todayBarkCount, lastBark } from '$lib/stores/bark';
 	import { recentFingerprints } from '$lib/stores/fingerprints';
 	import { formatTime } from '$lib/utils/format';
+	import DOACompass from './DOACompass.svelte';
 
 	// Derived display values
 	let detecting = $derived($isDetecting);
@@ -10,7 +11,9 @@
 	let recentBark = $derived($lastBark ?? ($recentFingerprints[0] ? {
 		timestamp: $recentFingerprints[0].timestamp,
 		confidence: $recentFingerprints[0].match_confidence ?? $recentFingerprints[0].detection_probability,
-		dog_name: $recentFingerprints[0].dog_name
+		dog_name: $recentFingerprints[0].dog_name,
+		doa_degrees: $recentFingerprints[0].doa_degrees ?? null,
+		doa_direction: null // Fingerprints don't have direction label
 	} : null));
 
 	// Time since last bark
@@ -47,6 +50,13 @@
 				<span class="status-dot"></span>
 				<span class="status-text">{detecting ? 'BARK!' : 'LISTENING'}</span>
 			</div>
+		</div>
+		<div class="doa-section">
+			<DOACompass
+				degrees={recentBark?.doa_degrees ?? null}
+				direction={recentBark?.doa_direction ?? null}
+				size={70}
+			/>
 		</div>
 	</div>
 
@@ -100,6 +110,11 @@
 	.gauge-header {
 		display: flex;
 		justify-content: space-between;
+		align-items: flex-start;
+	}
+
+	.doa-section {
+		display: flex;
 		align-items: center;
 	}
 

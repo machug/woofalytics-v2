@@ -2,14 +2,20 @@
 
 This module implements DOA estimation using the pyargus library,
 supporting Bartlett, Capon (MVDR), and Maximum Entropy methods.
+
+Supports both Uniform Linear Array (ULA) and Uniform Circular Array (UCA)
+geometries for different microphone hardware configurations.
 """
 
 from __future__ import annotations
+
+from typing import Literal
 
 import numpy as np
 import structlog
 from pyargus.directionEstimation import (
     gen_ula_scanning_vectors,
+    gen_uca_scanning_vectors,
     corr_matrix_estimate,
     DOA_Bartlett,
     DOA_Capon,
@@ -27,7 +33,9 @@ class DirectionEstimator:
     - Capon (MVDR): Minimum variance, higher resolution
     - MEM: Maximum entropy, best for closely-spaced sources
 
-    The estimator assumes a Uniform Linear Array (ULA) geometry.
+    Supports two array geometries:
+    - ULA (Uniform Linear Array): Linear mic arrangement, 0-180° coverage
+    - UCA (Uniform Circular Array): Circular mic arrangement, 0-360° coverage
     """
 
     def __init__(
@@ -37,41 +45,62 @@ class DirectionEstimator:
         angle_min: int = 0,
         angle_max: int = 180,
         method: str = "bartlett",
+        array_type: Literal["ula", "uca"] = "ula",
+        radius: float = 0.1,
     ) -> None:
         """Initialize direction estimator.
 
         Args:
-            element_spacing: Inter-element spacing in wavelengths (lambda).
+            element_spacing: Inter-element spacing in wavelengths for ULA.
                            For sound at 1kHz, one wavelength is ~34cm.
             num_elements: Number of microphone elements in the array.
             angle_min: Minimum scanning angle in degrees.
-            angle_max: Maximum scanning angle in degrees.
+            angle_max: Maximum scanning angle in degrees (use 360 for UCA).
             method: DOA algorithm to use: 'bartlett', 'capon', or 'mem'.
+            array_type: Array geometry: 'ula' (linear) or 'uca' (circular).
+            radius: Array radius in wavelengths for UCA.
+                   ReSpeaker 4-Mic Array: ~0.093 at 1kHz (32mm / 343mm).
         """
         self.element_spacing = element_spacing
         self.num_elements = num_elements
         self.angle_min = angle_min
         self.angle_max = angle_max
         self.method = method
-
-        # Generate array geometry
-        self._array_alignment = np.arange(0, num_elements, 1) * element_spacing
+        self.array_type = array_type
+        self.radius = radius
 
         # Generate scanning angles
         self._incident_angles = np.arange(angle_min, angle_max + 1, 1)
 
-        # Pre-compute scanning vectors for efficiency
-        self._scanning_vectors = gen_ula_scanning_vectors(
-            self._array_alignment,
-            self._incident_angles,
-        )
-
-        logger.debug(
-            "doa_estimator_initialized",
-            elements=num_elements,
-            spacing=element_spacing,
-            angles=f"{angle_min}-{angle_max}",
-        )
+        # Pre-compute scanning vectors based on array geometry
+        if array_type == "uca":
+            # Uniform Circular Array - full 360° coverage
+            self._scanning_vectors = gen_uca_scanning_vectors(
+                num_elements,
+                radius,
+                np.deg2rad(self._incident_angles),  # UCA expects radians
+            )
+            logger.debug(
+                "doa_estimator_initialized",
+                array_type="uca",
+                elements=num_elements,
+                radius=radius,
+                angles=f"{angle_min}-{angle_max}",
+            )
+        else:
+            # Uniform Linear Array - 0-180° coverage
+            self._array_alignment = np.arange(0, num_elements, 1) * element_spacing
+            self._scanning_vectors = gen_ula_scanning_vectors(
+                self._array_alignment,
+                self._incident_angles,
+            )
+            logger.debug(
+                "doa_estimator_initialized",
+                array_type="ula",
+                elements=num_elements,
+                spacing=element_spacing,
+                angles=f"{angle_min}-{angle_max}",
+            )
 
     def estimate(
         self,
@@ -171,22 +200,46 @@ class DirectionEstimator:
             return (self._incident_angles, np.zeros_like(self._incident_angles))
 
 
-def angle_to_direction(angle: int) -> str:
+def angle_to_direction(angle: int, is_circular: bool = False) -> str:
     """Convert angle to human-readable direction.
 
     Args:
-        angle: Angle in degrees (0-180 for ULA).
+        angle: Angle in degrees.
+        is_circular: If True, use 360° compass directions (UCA).
+                    If False, use 0-180° left/right directions (ULA).
 
     Returns:
-        Direction string like "left", "front", "right".
+        Direction string like "front", "left", "back-right", etc.
     """
-    if angle < 30:
-        return "far left"
-    elif angle < 60:
-        return "left"
-    elif angle < 120:
-        return "front"
-    elif angle < 150:
-        return "right"
+    if is_circular:
+        # UCA: 360° compass-style directions (0° = front)
+        # Normalize to 0-360 range
+        angle = angle % 360
+        if angle < 22.5 or angle >= 337.5:
+            return "front"
+        elif angle < 67.5:
+            return "front-right"
+        elif angle < 112.5:
+            return "right"
+        elif angle < 157.5:
+            return "back-right"
+        elif angle < 202.5:
+            return "back"
+        elif angle < 247.5:
+            return "back-left"
+        elif angle < 292.5:
+            return "left"
+        else:
+            return "front-left"
     else:
-        return "far right"
+        # ULA: 0-180° linear directions
+        if angle < 30:
+            return "far left"
+        elif angle < 60:
+            return "left"
+        elif angle < 120:
+            return "front"
+        elif angle < 150:
+            return "right"
+        else:
+            return "far right"
