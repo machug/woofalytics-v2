@@ -534,7 +534,7 @@ sudo reboot
 ### Quick Start (Docker)
 
 ```bash
-git clone https://github.com/your-user/woofalytics.git
+git clone https://github.com/machug/woofalytics-v2.git
 cd woofalytics-v2
 cp .env.example .env
 docker-compose up -d
