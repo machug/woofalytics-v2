@@ -149,18 +149,6 @@ class ModelConfig(BaseModel):
         le=1.0,
         description="Bark detection probability threshold (legacy MLP).",
     )
-    window_ms: int = Field(
-        default=6,
-        ge=1,
-        le=100,
-        description="Inference window size in milliseconds.",
-    )
-    overlap_ms: int = Field(
-        default=3,
-        ge=0,
-        le=50,
-        description="Inference window overlap in milliseconds.",
-    )
 
 
 class DOAConfig(BaseModel):
@@ -327,14 +315,6 @@ class EvidenceConfig(BaseModel):
         le=60,
         description="Seconds of audio to record after bark detection.",
     )
-    include_metadata: bool = Field(
-        default=True,
-        description="Generate JSON sidecar with timestamp, DOA, and probability.",
-    )
-    auto_record: bool = Field(
-        default=True,
-        description="Automatically record when bark is detected.",
-    )
 
 
 class QuietHoursConfig(BaseModel):
@@ -458,10 +438,6 @@ class ServerConfig(BaseModel):
         ge=1,
         le=65535,
         description="Port number to listen on.",
-    )
-    enable_websocket: bool = Field(
-        default=True,
-        description="Enable WebSocket endpoint for real-time updates.",
     )
     cors_origins: list[str] | None = Field(
         default=None,

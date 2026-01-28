@@ -7,8 +7,7 @@
 	import type { Dog, FingerprintStats, EvidenceStats } from '$lib/api/types';
 	import { startBarkListener, stopBarkListener, barkStore, fetchTodayStats } from '$lib/stores/bark';
 	import { fetchRecentFingerprints } from '$lib/stores/fingerprints';
-	import { startAudioListener, stopAudioListener } from '$lib/stores/audio';
-	import { audioConnectionState } from '$lib/stores/websocket';
+	import { barkConnectionState } from '$lib/stores/websocket';
 
 	// State
 	let dogs = $state<Dog[]>([]);
@@ -18,7 +17,7 @@
 	let error = $state<string | null>(null);
 
 	// Derived
-	let connectionState = $derived($audioConnectionState);
+	let connectionState = $derived($barkConnectionState);
 
 	async function loadData() {
 		try {
@@ -76,12 +75,10 @@
 		fetchTodayStats();
 		fetchRecentFingerprints();
 		startBarkListener();
-		startAudioListener();
 	});
 
 	onDestroy(() => {
 		stopBarkListener();
-		stopAudioListener();
 	});
 </script>
 

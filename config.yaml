@@ -36,8 +36,6 @@ evidence:
   directory: ./evidence
   past_context_seconds: 15
   future_context_seconds: 15
-  include_metadata: true
-  auto_record: true
 webhook:
   enabled: false
   ifttt_event: woof
@@ -46,6 +44,5 @@ server:
   # Default: localhost only. Set to 0.0.0.0 to allow network access.
   host: 127.0.0.1
   port: 8000
-  enable_websocket: true
 log_level: INFO
 log_format: console

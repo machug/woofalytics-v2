@@ -347,48 +347,6 @@ class EvidenceStorage:
             "storage_directory": str(self.config.directory),
         }
 
-    async def cleanup_old_evidence(self, max_age_days: int = 90) -> int:
-        """Remove evidence files older than max_age_days.
-
-        Args:
-            max_age_days: Maximum age of evidence to keep.
-
-        Returns:
-            Number of files removed.
-        """
-        from datetime import timedelta
-
-        cutoff = datetime.now() - timedelta(days=max_age_days)
-        removed = 0
-
-        async with self._lock:
-            entries_to_keep = []
-
-            for entry in self._index.entries:
-                if entry.timestamp_local.replace(tzinfo=None) < cutoff:
-                    # Remove files
-                    wav_path = self.config.directory / entry.filename
-                    json_path = self.config.directory / entry.filename.replace(".wav", ".json")
-
-                    try:
-                        if wav_path.exists():
-                            await aiofiles.os.remove(wav_path)
-                        if json_path.exists():
-                            await aiofiles.os.remove(json_path)
-                        removed += 1
-                        logger.info("evidence_removed", filename=entry.filename)
-                    except Exception as e:
-                        logger.warning("evidence_removal_error", filename=entry.filename, error=str(e))
-                        entries_to_keep.append(entry)  # Keep if removal failed
-                else:
-                    entries_to_keep.append(entry)
-
-            self._index.entries = entries_to_keep
-            await self._save_index()
-
-        logger.info("evidence_cleanup_complete", removed=removed)
-        return removed
-
     async def purge_evidence(
         self,
         before: datetime | None = None,

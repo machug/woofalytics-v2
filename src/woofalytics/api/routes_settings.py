@@ -57,7 +57,6 @@ class EvidenceSettingsSchema(BaseModel):
     future_context_seconds: int = Field(
         ge=1, le=60, description="Seconds after last bark"
     )
-    auto_record: bool = Field(description="Automatically record on bark detection")
 
 
 class WebhookSettingsSchema(BaseModel):
@@ -131,7 +130,6 @@ def _settings_to_schema(settings: Settings) -> AllSettingsSchema:
         evidence=EvidenceSettingsSchema(
             past_context_seconds=settings.evidence.past_context_seconds,
             future_context_seconds=settings.evidence.future_context_seconds,
-            auto_record=settings.evidence.auto_record,
         ),
         webhook=WebhookSettingsSchema(
             enabled=settings.webhook.enabled,

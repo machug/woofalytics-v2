@@ -416,36 +416,6 @@ class TestWebSocketPipelineEndpoint:
             assert data2["type"] == "pipeline_state"
 
 
-class TestWebSocketAudioEndpoint:
-    """Tests for /ws/audio WebSocket endpoint."""
-
-    def test_audio_ws_connection(self, ws_client: TestClient) -> None:
-        """Test connecting to audio WebSocket endpoint."""
-        with ws_client.websocket_connect("/ws/audio") as websocket:
-            # Should receive initial audio level message
-            data = websocket.receive_json()
-            assert data["type"] == "audio_level"
-            assert "level" in data["data"]
-            assert "peak" in data["data"]
-
-    def test_audio_ws_initial_zeros(self, ws_client: TestClient) -> None:
-        """Test that audio starts with zero levels."""
-        with ws_client.websocket_connect("/ws/audio") as websocket:
-            data = websocket.receive_json()
-            assert data["data"]["level"] == 0.0
-            assert data["data"]["peak"] == 0.0
-
-    def test_audio_ws_continuous_updates(self, ws_client: TestClient) -> None:
-        """Test that audio sends continuous updates."""
-        with ws_client.websocket_connect("/ws/audio") as websocket:
-            # Receive multiple messages
-            data1 = websocket.receive_json()
-            data2 = websocket.receive_json()
-
-            assert data1["type"] == "audio_level"
-            assert data2["type"] == "audio_level"
-
-
 # --- Integration Tests ---
 
 
@@ -461,9 +431,9 @@ class TestWebSocketIntegration:
             bark_data = bark_ws.receive_json()
             assert bark_data["type"] == "status"
 
-        with ws_client.websocket_connect("/ws/audio") as audio_ws:
-            audio_data = audio_ws.receive_json()
-            assert audio_data["type"] == "audio_level"
+        with ws_client.websocket_connect("/ws/pipeline") as pipeline_ws:
+            pipeline_data = pipeline_ws.receive_json()
+            assert pipeline_data["type"] == "pipeline_state"
 
     def test_websocket_graceful_disconnect(self, ws_client: TestClient) -> None:
         """Test that WebSocket handles graceful disconnection."""

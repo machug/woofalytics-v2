@@ -508,13 +508,6 @@
 										<div class="form-hint">Audio captured after last bark</div>
 									</div>
 								</div>
-
-								<div class="checkbox-row">
-									<div class="checkbox-group">
-										<input type="checkbox" id="autoRecord" bind:checked={settings.evidence.auto_record} />
-										<label for="autoRecord">Auto-record on bark detection</label>
-									</div>
-								</div>
 							</div>
 
 							<!-- Webhook Settings -->

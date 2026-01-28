@@ -399,7 +399,6 @@ evidence:
   directory: ./evidence
   past_context_seconds: 15
   future_context_seconds: 15
-  include_metadata: true
 
 webhook:
   enabled: false
@@ -409,7 +408,6 @@ webhook:
 server:
   host: 0.0.0.0
   port: 8000
-  enable_websocket: true
 
 log_level: INFO            # DEBUG, INFO, WARNING, ERROR
 log_format: console        # console or json

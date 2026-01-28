@@ -407,12 +407,10 @@ async def get_configuration(
             # Directory path redacted for security
             "past_context_seconds": settings.evidence.past_context_seconds,
             "future_context_seconds": settings.evidence.future_context_seconds,
-            "include_metadata": settings.evidence.include_metadata,
         },
         server={
             # Host redacted - only expose port for client use
             "port": settings.server.port,
-            "enable_websocket": settings.server.enable_websocket,
         },
         log_level=settings.log_level,
     )

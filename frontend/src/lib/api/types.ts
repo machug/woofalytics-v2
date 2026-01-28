@@ -1489,11 +1489,6 @@ export interface components {
              * @description Seconds after last bark
              */
             future_context_seconds: number;
-            /**
-             * Auto Record
-             * @description Automatically record on bark detection
-             */
-            auto_record: boolean;
         };
         /**
          * EvidenceStatsSchema

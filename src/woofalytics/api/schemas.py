@@ -97,26 +97,11 @@ class ConfigurationSchema(BaseModel):
     log_level: str
 
 
-class WebSocketMessageSchema(BaseModel):
-    """WebSocket message format."""
-
-    type: str
-    data: dict[str, Any]
-
-
 class RecentEventsSchema(BaseModel):
     """Recent bark detection events."""
 
     count: int
     events: list[BarkEventSchema]
-
-
-class DirectionSchema(BaseModel):
-    """Direction of arrival information."""
-
-    angle_degrees: int | None
-    direction: str  # "left", "front", "right", etc.
-    method: str  # "bartlett", "capon", "mem"
 
 
 # --- Maintenance Schemas ---
