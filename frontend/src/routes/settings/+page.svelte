@@ -175,7 +175,7 @@
 		pendingAction = 'fingerprints';
 		pendingData = {
 			untagged_only: untaggedOnly,
-			...(fingerprintsBeforeDate && { before_date: fingerprintsBeforeDate + 'T23:59:59' })
+			...(fingerprintsBeforeDate && { before: fingerprintsBeforeDate + 'T23:59:59' })
 		};
 
 		let message = 'This will permanently delete ';
