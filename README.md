@@ -569,6 +569,8 @@ ollama pull qwen2.5:3b
 | `OLLAMA_URL` | `http://localhost:11434` | Ollama API base URL |
 | `OLLAMA_MODEL` | `qwen2.5:3b` | Model to use for generation |
 
+**Hardware note:** The default `qwen2.5:3b` model requires ~2GB RAM (Q4 quantized). Since woofalytics itself already uses significant RAM for CLAP + YAMNet, you'll want at least 8GB total if running Ollama on the same machine. Summaries are generated on-demand so generation speed isn't critical -- a few seconds on a modern x86 CPU is typical. You can also point `OLLAMA_URL` at a remote Ollama instance to offload generation entirely.
+
 If Ollama is not running, the AI summary endpoints return a `503` error; all other functionality is unaffected.
 
 ---
