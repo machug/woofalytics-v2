@@ -66,7 +66,7 @@ This project was created with specific intentions:
 │  ┌────────────┐  ┌────────────┐  ┌────────────────────────┐   │
 │  │  REST API  │  │  WebSocket │  │     Static Files       │   │
 │  │  /api/*    │  │  /ws/bark  │  │     /static/*          │   │
-│  │            │  │  /ws/audio │  │                        │   │
+│  │            │  │/ws/pipeline│  │                        │   │
 │  └─────┬──────┘  └─────┬──────┘  └────────────────────────┘   │
 │        │               │                                      │
 │        └───────┬───────┘                                      │
@@ -454,7 +454,7 @@ See [API Reference](#api-reference) below.
 
 - `ConnectionManager` - Manages active WebSocket connections
 - `/ws/bark` - Real-time bark events
-- `/ws/audio` - Real-time audio levels (VU meter)
+- `/ws/pipeline` - Detection pipeline state at 10Hz (VAD/YAMNet/CLAP stages, stats)
 
 ### `app.py` - FastAPI Application
 
@@ -670,7 +670,7 @@ If Ollama is not running, the AI summary endpoints return a `503` error; all oth
 | Endpoint | Description |
 |----------|-------------|
 | `/ws/bark` | Real-time bark events (JSON) |
-| `/ws/audio` | Audio level updates at 10Hz |
+| `/ws/pipeline` | Detection pipeline state at 10Hz (VAD/YAMNet/CLAP stages) |
 
 ### OpenAPI Documentation
 
