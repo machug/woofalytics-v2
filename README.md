@@ -1,8 +1,8 @@
 # 🐕 Woofalytics v2.5.0
 
-**AI-powered dog bark detection and cataloging for Linux**
+**AI-powered dog bark detection and cataloging**
 
-A complete modernization of the original woofalytics project, built for cataloging and fingerprinting barking dogs within earshot. Uses zero-shot audio classification (CLAP) to detect barks without training data, with automatic recording for documentation purposes. Runs on any Linux workstation with a microphone.
+A complete modernization of the original woofalytics project, built for cataloging and fingerprinting barking dogs within earshot. Uses zero-shot audio classification (CLAP) to detect barks without training data, with automatic recording for documentation purposes.
 
 ---
 
@@ -690,9 +690,9 @@ The SvelteKit frontend is built to static files and served directly by FastAPI. 
 
 ### Minimum
 
-- **Any Linux machine** (tested on x86_64 workstations; untested on ARM/Raspberry Pi)
+- **Python 3.11+** with a working PyAudio/PortAudio installation
 - **2GB+ RAM** (CLAP + YAMNet models need memory)
-- **Any USB microphone** (1+ channels)
+- **Any microphone** (1+ channels; 2+ for DOA)
 
 ### Recommended for DOA
 
@@ -1030,9 +1030,8 @@ For documentation purposes, metadata must be:
 
 ### Known Limitations
 
-1. **Linux Only** - ALSA volume control is Linux-specific
-2. **ARM Untested** - Developed on x86_64; ARM/Raspberry Pi may need platform-specific PyTorch wheels
-3. **CPU Only** - Inference is CPU-only (GPU not required)
+1. **ALSA Volume Control** - Microphone volume adjustment (`volume_percent`) uses ALSA and is Linux-specific; detection works on any OS with PyAudio
+2. **CPU Only** - Inference is CPU-only (GPU not required)
 
 ---
 

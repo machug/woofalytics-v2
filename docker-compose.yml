@@ -1,5 +1,4 @@
 # Woofalytics Docker Compose Configuration
-# For running on Linux hosts
 
 services:
   woofalytics:
