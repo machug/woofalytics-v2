@@ -53,6 +53,7 @@ This project was created with specific intentions:
 - **REST API** - Full OpenAPI documentation at `/api/docs`
 - **Docker Support** - Easy deployment with Docker Compose
 - **Flexible Configuration** - YAML config with environment variable overrides
+- **AI Summaries** - LLM-generated weekly/custom-range bark reports via Ollama (optional)
 - **Legacy MLP Support** - Optional TorchScript models for faster inference
 
 ---
@@ -207,6 +208,9 @@ woofalytics-v2/
 │   ├── observability/
 │   │   ├── __init__.py          # Module exports
 │   │   └── metrics.py           # Prometheus-format metrics
+│   │
+│   ├── prompts/
+│   │   └── weekly_summary.prompty  # Jinja2 prompt template for AI summaries
 │   │
 │   └── api/
 │       ├── __init__.py          # Module exports
@@ -543,6 +547,29 @@ WOOFALYTICS__MODEL__THRESHOLD=0.90
 WOOFALYTICS__AUDIO__DEVICE_NAME=ReSpeaker
 WOOFALYTICS__WEBHOOK__IFTTT_KEY=your_secret_key
 ```
+
+### AI Summaries (Ollama)
+
+The `/api/summary/weekly/ai` and `/api/summary/ai` endpoints generate natural-language bark reports using a local LLM via [Ollama](https://ollama.com/). This is entirely optional -- all other summary endpoints work without it.
+
+**Setup:**
+
+```bash
+# Install Ollama (https://ollama.com/download)
+curl -fsSL https://ollama.com/install.sh | sh
+
+# Pull the default model
+ollama pull qwen2.5:3b
+```
+
+**Environment variables:**
+
+| Variable | Default | Description |
+|----------|---------|-------------|
+| `OLLAMA_URL` | `http://localhost:11434` | Ollama API base URL |
+| `OLLAMA_MODEL` | `qwen2.5:3b` | Model to use for generation |
+
+If Ollama is not running, the AI summary endpoints return a `503` error; all other functionality is unaffected.
 
 ---
 
