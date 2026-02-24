@@ -1,5 +1,5 @@
 # Woofalytics Docker Compose Configuration
-# For running on Raspberry Pi or other Linux hosts
+# For running on Linux hosts
 
 services:
   woofalytics:
@@ -46,7 +46,7 @@ services:
     # Restart policy
     restart: unless-stopped
 
-    # Resource limits (adjust for RPi 4)
+    # Resource limits
     deploy:
       resources:
         limits:

@@ -1,8 +1,8 @@
 # 🐕 Woofalytics v2.5.0
 
-**AI-powered dog bark detection and cataloging for Raspberry Pi**
+**AI-powered dog bark detection and cataloging for Linux**
 
-A complete modernization of the original woofalytics project, built for cataloging and fingerprinting barking dogs within earshot. Uses zero-shot audio classification (CLAP) to detect barks without training data, with automatic recording for documentation purposes.
+A complete modernization of the original woofalytics project, built for cataloging and fingerprinting barking dogs within earshot. Uses zero-shot audio classification (CLAP) to detect barks without training data, with automatic recording for documentation purposes. Runs on any Linux workstation with a microphone.
 
 ---
 
@@ -34,8 +34,7 @@ This project was created with specific intentions:
 
 1. **Learning** - Push modern Python patterns to the limits (deliberately over-engineered)
 2. **Dog Cataloging** - Document and fingerprint all barking dogs within earshot
-3. **Hardware Optimization** - Maximize Raspberry Pi 4B capabilities
-4. **Best Practices** - Latest patterns, proper architecture, comprehensive documentation
+3. **Best Practices** - Latest patterns, proper architecture, comprehensive documentation
 
 ### Key Features
 
@@ -50,11 +49,11 @@ This project was created with specific intentions:
 - **Quiet Hours** - Schedule reduced sensitivity periods (e.g., nighttime) via Settings UI
 - **Clustering Analysis** - Visual interface for analyzing untagged barks and creating dog profiles
 - **Modern Web UI** - Real-time dashboard with WebSocket updates and persistent statistics
-- **Accessible by Design** - WCAG AA compliant, screen reader support, respects motion preferences
+- **Accessible by Design** - Aims for WCAG AA compliance, screen reader support, respects motion preferences
 - **REST API** - Full OpenAPI documentation at `/api/docs`
 - **Docker Support** - Easy deployment with Docker Compose
 - **Flexible Configuration** - YAML config with environment variable overrides
-- **Legacy MLP Support** - Optional TorchScript models for faster inference on constrained hardware
+- **Legacy MLP Support** - Optional TorchScript models for faster inference
 
 ---
 
@@ -177,9 +176,18 @@ woofalytics-v2/
 │   │   ├── __init__.py          # Module exports
 │   │   ├── model.py             # BarkDetector orchestrator + BarkEvent
 │   │   ├── clap.py              # CLAP zero-shot classifier (primary)
+│   │   ├── yamnet.py            # YAMNet pre-filter gate (TensorFlow)
 │   │   ├── vad.py               # Voice activity detection gate
 │   │   ├── features.py          # Mel filterbank feature extraction (legacy)
-│   │   └── doa.py               # Direction of arrival estimation
+│   │   ├── doa.py               # Direction of arrival estimation
+│   │   └── resample_cache.py    # Cached audio resampling
+│   │
+│   ├── events/
+│   │   ├── __init__.py          # Module exports
+│   │   ├── manager.py           # Notification manager orchestrator
+│   │   ├── debouncer.py         # Per-dog notification debouncing
+│   │   ├── models.py            # Event data models
+│   │   └── webhook.py           # IFTTT and custom webhook delivery
 │   │
 │   ├── evidence/
 │   │   ├── __init__.py          # Module exports
@@ -189,12 +197,31 @@ woofalytics-v2/
 │   ├── fingerprint/             # Dog identification system
 │   │   ├── __init__.py
 │   │   ├── storage.py           # SQLite fingerprint database
-│   │   └── matcher.py           # CLAP embedding matching
+│   │   ├── matcher.py           # CLAP embedding matching
+│   │   ├── extractor.py         # Feature extraction for fingerprints
+│   │   ├── acoustic_features.py # Acoustic feature computation
+│   │   ├── acoustic_matcher.py  # Acoustic similarity matching
+│   │   ├── clustering.py        # HDBSCAN bark clustering
+│   │   └── models.py            # Fingerprint data models
+│   │
+│   ├── observability/
+│   │   ├── __init__.py          # Module exports
+│   │   └── metrics.py           # Prometheus-format metrics
 │   │
 │   └── api/
 │       ├── __init__.py          # Module exports
-│       ├── routes.py            # REST API endpoints
-│       ├── schemas.py           # Pydantic response models
+│       ├── auth.py              # API key authentication
+│       ├── ratelimit.py         # Rate limiting (slowapi)
+│       ├── routes.py            # Core REST API endpoints
+│       ├── routes_export.py     # CSV/JSON data export
+│       ├── routes_fingerprint.py # Dog profiles and bark tagging
+│       ├── routes_notification.py # Notification status
+│       ├── routes_settings.py   # Runtime settings management
+│       ├── routes_summary.py    # Daily/weekly/monthly summaries + AI
+│       ├── schemas.py           # Core Pydantic response models
+│       ├── schemas_export.py    # Export response models
+│       ├── schemas_fingerprint.py # Fingerprint response models
+│       ├── schemas_summary.py   # Summary response models
 │       └── websocket.py         # WebSocket endpoints + ConnectionManager
 │
 ├── frontend/                    # SvelteKit frontend (NASA Mission Control theme)
@@ -203,6 +230,7 @@ woofalytics-v2/
 │   │   │   ├── +page.svelte     # Dashboard with real-time monitoring
 │   │   │   ├── dogs/            # Dog management page
 │   │   │   ├── fingerprints/    # Fingerprints explorer
+│   │   │   ├── reports/         # Bark activity reports
 │   │   │   └── settings/        # Settings & maintenance
 │   │   ├── lib/
 │   │   │   ├── api/             # Type-safe API client (openapi-fetch)
@@ -223,14 +251,23 @@ woofalytics-v2/
 ├── tests/
 │   ├── __init__.py
 │   ├── conftest.py              # Pytest fixtures
-│   ├── test_config.py           # Configuration tests
+│   ├── test_api_routes.py       # API endpoint tests
+│   ├── test_api_websocket.py    # WebSocket tests
 │   ├── test_audio.py            # Audio module tests
+│   ├── test_config.py           # Configuration tests
 │   ├── test_detection.py        # Detection module tests
-│   └── test_evidence.py         # Evidence module tests
+│   ├── test_evidence.py         # Evidence module tests
+│   ├── test_export.py           # Data export tests
+│   ├── test_fingerprint_clustering.py  # Clustering tests
+│   ├── test_fingerprint_matching.py    # Fingerprint matching tests
+│   ├── test_quiet_hours.py      # Quiet hours tests
+│   ├── test_resample_cache.py   # Resample cache tests
+│   ├── test_summary.py          # Summary endpoint tests
+│   └── test_yamnet.py           # YAMNet gate tests
 │
 ├── pyproject.toml               # Python packaging (PEP 517/518)
 ├── Dockerfile                   # Multi-stage Docker build
-├── docker-compose.yml           # Docker Compose for RPi
+├── docker-compose.yml           # Docker Compose deployment
 ├── config.yaml                  # Default configuration
 ├── .env.example                 # Environment variable template
 └── README.md                    # This file
@@ -290,13 +327,24 @@ class Settings(BaseSettings):
   - Uses `torchaudio.compliance.kaldi.fbank` for Kaldi compatibility
   - Output: `(1, 480)` tensor (6 frames × 80 mels)
 
+### `detection/yamnet.py` - YAMNet Pre-filter Gate
+
+- `YAMNetGate` - TensorFlow-based pre-filter (~3.7M params)
+  - Uses Google's YAMNet to detect dog/bark audio classes
+  - Skips expensive CLAP inference for non-dog sounds
+  - Falls back to CLAP-only if TensorFlow fails to load
+
+### `detection/resample_cache.py` - Cached Resampling
+
+- Caches resampled audio to avoid redundant computation across pipeline stages
+
 ### `detection/doa.py` - Direction of Arrival
 
-- `DirectionEstimator` - Estimates sound direction using ULA geometry
+- `DirectionEstimator` - Estimates sound direction using ULA or UCA geometry
   - **Bartlett** - Simple beamforming (default)
   - **Capon (MVDR)** - Higher resolution
   - **MEM** - Maximum entropy, best for close sources
-- `angle_to_direction(angle)` - Converts degrees to "left", "front", "right", etc.
+- `angle_to_direction(angle)` - Converts degrees to compass directions
 
 ### `detection/clap.py` - CLAP Zero-Shot Classifier (Primary)
 
@@ -346,7 +394,55 @@ class Settings(BaseSettings):
   - Saves WAV + JSON sidecar
   - Maintains searchable index
 
-### `api/routes.py` - REST Endpoints
+### `events/manager.py` - Notification Manager
+
+- `NotificationManager` - Orchestrates bark alert notifications
+  - Integrates quiet hours, debouncing, and webhook delivery
+  - Runs webhook calls in a thread pool to avoid blocking
+
+### `events/debouncer.py` - Notification Debouncing
+
+- Per-dog rate limiting to prevent notification spam
+- Configurable debounce window (default 5 minutes)
+
+### `events/webhook.py` - Webhook Delivery
+
+- IFTTT Maker Webhooks and custom HTTPS webhook support
+- SSRF protection (blocks private IPs and internal hostnames)
+- Retry with configurable timeout
+
+### `fingerprint/extractor.py` - Feature Extraction
+
+- Extracts CLAP embeddings and acoustic features from bark audio
+
+### `fingerprint/acoustic_features.py` - Acoustic Feature Computation
+
+- Computes spectral centroid, bandwidth, rolloff, and other acoustic features for bark characterization
+
+### `fingerprint/acoustic_matcher.py` - Acoustic Similarity
+
+- Weighted acoustic feature similarity for dog matching
+
+### `fingerprint/clustering.py` - Bark Clustering
+
+- HDBSCAN-based clustering of untagged bark fingerprints for discovering new dogs
+
+### `observability/metrics.py` - Prometheus Metrics
+
+- Prometheus-compatible metrics endpoint (`/api/metrics`)
+- Tracks bark counts, inference latency, VAD/YAMNet skip rates, evidence storage
+
+### `api/auth.py` - Authentication
+
+- Optional API key authentication via `X-API-Key` header
+- Configurable via `server.api_key` or `WOOFALYTICS__SERVER__API_KEY`
+
+### `api/ratelimit.py` - Rate Limiting
+
+- Per-endpoint rate limiting using slowapi
+- Configurable limits for read, write, download, and WebSocket operations
+
+### `api/routes.py` - Core REST Endpoints
 
 See [API Reference](#api-reference) below.
 
@@ -370,19 +466,23 @@ See [API Reference](#api-reference) below.
 
 ```yaml
 audio:
-  device_name: null        # null = auto-detect, or "ReSpeaker"
+  device_name: null        # null = auto-detect, or specific name e.g. "pulse"
   sample_rate: 44100       # Hz
-  channels: 2              # Minimum 2 for DOA
+  channels: 2              # Minimum 2 for DOA (use 4 for circular arrays)
   chunk_size: 441          # Samples per chunk (~10ms at 44.1kHz)
   volume_percent: 75       # Microphone gain (0-100)
 
 model:
   use_clap: true           # Use CLAP zero-shot (recommended)
   clap_model: laion/clap-htsat-unfused
-  clap_threshold: 0.5      # Bark confidence threshold
+  clap_threshold: 0.6      # Bark confidence threshold (0.0-1.0)
+  clap_bird_veto_threshold: 0.15  # Bird veto threshold (lower = more aggressive)
+  clap_min_harmonic_ratio: 0.1    # Minimum harmonic ratio (0 to disable)
   clap_device: cpu         # or cuda
   vad_enabled: true        # Fast rejection of silent audio
-  vad_threshold_db: -40    # Energy threshold for VAD
+  vad_threshold_db: -40    # Energy threshold for VAD (dBFS)
+  yamnet_enabled: true     # YAMNet pre-filter (skips CLAP on non-dog audio)
+  yamnet_threshold: 0.05   # YAMNet dog probability threshold (kept low)
   # Legacy MLP settings (when use_clap: false)
   path: ./models/traced_model.pt
   target_sample_rate: 16000
@@ -390,27 +490,48 @@ model:
 
 doa:
   enabled: true
-  element_spacing: 0.1     # In wavelengths
-  num_elements: 2
+  array_type: ula          # 'ula' (linear) or 'uca' (circular)
+  element_spacing: 0.1     # Inter-element spacing in wavelengths (ULA)
+  radius: 0.1              # Array radius in wavelengths (UCA, ~0.093 for ReSpeaker 4-Mic)
+  num_elements: 2          # Number of microphone elements
   angle_min: 0
-  angle_max: 180
+  angle_max: 180           # Use 360 for UCA
+  method: bartlett          # 'bartlett', 'capon', or 'mem'
 
 evidence:
   directory: ./evidence
   past_context_seconds: 15
   future_context_seconds: 15
 
+notification:
+  enabled: false           # Enable notification system
+
 webhook:
   enabled: false
   ifttt_event: woof
   # ifttt_key: set via environment
+  debounce_seconds: 300    # Min seconds between notifications per dog
+
+quiet_hours:
+  enabled: false
+  start: "22:00"           # Quiet period start (HH:MM)
+  end: "06:00"             # Quiet period end (HH:MM)
+  threshold: 0.9           # Higher threshold during quiet hours
+  notifications: false     # Suppress notifications during quiet hours
+  timezone: UTC            # IANA timezone (e.g. 'Australia/Sydney')
 
 server:
-  host: 0.0.0.0
+  host: 127.0.0.1          # Localhost only by default (use 0.0.0.0 for network access)
   port: 8000
+  api_key: null            # Set for API authentication (generate with: python -c 'import secrets; print(secrets.token_hex(16))')
+  rate_limit:
+    enabled: true
+    read_limit: "120/minute"
+    write_limit: "30/minute"
 
 log_level: INFO            # DEBUG, INFO, WARNING, ERROR
 log_format: console        # console or json
+debug: false               # Enable debug diagnostics
 ```
 
 ### Environment Variables
@@ -432,8 +553,9 @@ WOOFALYTICS__WEBHOOK__IFTTT_KEY=your_secret_key
 | Endpoint | Method | Description |
 |----------|--------|-------------|
 | `/api/health` | GET | Health check with uptime, bark count, evidence count |
-| `/api/status` | GET | Detector status (running, uptime, last event) |
+| `/api/status` | GET | Detector status (running, uptime, last event, gate stats) |
 | `/api/config` | GET | Current configuration (sanitized, no secrets) |
+| `/api/metrics` | GET | Prometheus-format metrics |
 
 ### Bark Detection
 
@@ -452,6 +574,67 @@ WOOFALYTICS__WEBHOOK__IFTTT_KEY=your_secret_key
 | `/api/evidence/stats` | GET | Storage statistics |
 | `/api/evidence/{filename}` | GET | Download WAV or JSON file |
 | `/api/evidence/date/{YYYY-MM-DD}` | GET | Evidence by date |
+| `/api/evidence/purge` | POST | Purge evidence older than N days |
+
+### Dog Profiles & Fingerprints
+
+| Endpoint | Method | Description |
+|----------|--------|-------------|
+| `/api/dogs` | GET | List all dog profiles |
+| `/api/dogs` | POST | Create a new dog profile |
+| `/api/dogs/{id}` | GET | Get dog profile |
+| `/api/dogs/{id}` | PUT | Update dog profile |
+| `/api/dogs/{id}` | DELETE | Delete dog profile |
+| `/api/dogs/{id}/barks` | GET | Get barks for a specific dog |
+| `/api/dogs/{id}/confirm` | POST | Confirm a dog profile |
+| `/api/dogs/{id}/unconfirm` | POST | Unconfirm a dog profile |
+| `/api/dogs/{id}/reset-embedding` | POST | Reset dog's embedding |
+| `/api/dogs/merge` | POST | Merge two dog profiles |
+| `/api/fingerprints` | GET | List fingerprints (with filtering) |
+| `/api/fingerprints/aggregates` | GET | Fingerprint aggregate stats |
+| `/api/fingerprints/stats` | GET | Fingerprint system statistics |
+| `/api/fingerprints/{id}` | DELETE | Delete a fingerprint |
+| `/api/fingerprints/purge` | POST | Purge fingerprints older than N days |
+| `/api/fingerprints/purge-without-evidence` | POST | Remove orphaned fingerprints |
+| `/api/fingerprints/recalculate-bark-counts` | POST | Recalculate bark counts |
+
+### Bark Tagging
+
+| Endpoint | Method | Description |
+|----------|--------|-------------|
+| `/api/barks/untagged` | GET | List untagged barks |
+| `/api/barks/{id}/tag` | POST | Tag a bark to a dog |
+| `/api/barks/bulk-tag` | POST | Bulk tag multiple barks |
+| `/api/barks/{id}/correct` | POST | Correct a bark's dog assignment |
+| `/api/barks/{id}/untag` | POST | Remove a bark's tag |
+| `/api/barks/{id}/reject` | POST | Mark a bark as false positive |
+| `/api/barks/{id}/unreject` | POST | Un-reject a bark |
+| `/api/barks/{id}/confirm` | POST | Confirm a bark detection |
+| `/api/barks/{id}/unconfirm` | POST | Unconfirm a bark detection |
+| `/api/barks/cluster` | POST | Cluster untagged barks (HDBSCAN) |
+| `/api/barks/cluster/{id}/create-dog` | POST | Create dog from cluster |
+
+### Summaries & Export
+
+| Endpoint | Method | Description |
+|----------|--------|-------------|
+| `/api/summary/daily` | GET | Daily bark summary |
+| `/api/summary/weekly` | GET | Weekly bark summary |
+| `/api/summary/monthly` | GET | Monthly bark summary |
+| `/api/summary/range` | GET | Custom date range summary |
+| `/api/summary/weekly/ai` | GET | AI-generated weekly summary (Ollama) |
+| `/api/summary/ai` | GET | AI-generated range summary (Ollama) |
+| `/api/export/json` | GET | Export bark data as JSON |
+| `/api/export/csv` | GET | Export bark data as CSV |
+| `/api/export/stats` | GET | Export statistics |
+
+### Settings & Notifications
+
+| Endpoint | Method | Description |
+|----------|--------|-------------|
+| `/api/settings` | GET | Get all runtime settings |
+| `/api/settings` | PUT | Update runtime settings (persisted to config.yaml) |
+| `/api/notifications/status` | GET | Notification system status |
 
 ### WebSocket
 
@@ -495,7 +678,7 @@ The frontend is a **SvelteKit SPA** with a NASA Mission Control-inspired theme (
 - **Persistent Dashboard Stats** - Bark counts survive page refreshes via API persistence
 - **Toast Notifications** - Non-blocking feedback replacing browser alerts
 - **Active Navigation** - Clear indication of current page with amber highlight
-- **Accessibility** - WCAG AA text contrast, labeled form inputs, `prefers-reduced-motion` support
+- **Accessibility** - Targets WCAG AA text contrast, labeled form inputs, `prefers-reduced-motion` support
 
 ### Production Serving
 
@@ -507,13 +690,14 @@ The SvelteKit frontend is built to static files and served directly by FastAPI. 
 
 ### Minimum
 
-- **Raspberry Pi 4 Model B** (2GB+ RAM)
+- **Any Linux machine** (tested on x86_64 workstations; untested on ARM/Raspberry Pi)
+- **2GB+ RAM** (CLAP + YAMNet models need memory)
 - **Any USB microphone** (1+ channels)
 
 ### Recommended for DOA
 
 - **ReSpeaker 2-Mic HAT** (~$12) - HAT form factor, 2 mics
-- **ReSpeaker 4-Mic Array** (~$35) - 360° coverage
+- **ReSpeaker 4-Mic Array** (~$35) - 360° coverage, use `array_type: uca`
 
 ### ReSpeaker HAT Setup
 
@@ -541,7 +725,7 @@ docker-compose up -d
 ### Manual Installation
 
 ```bash
-# System dependencies (Debian/Ubuntu/Raspberry Pi OS)
+# System dependencies (Debian/Ubuntu)
 sudo apt-get update
 sudo apt-get install -y \
     python3.11 python3.11-venv \
@@ -601,6 +785,7 @@ Options:
 services:
   woofalytics:
     build: .
+    container_name: woofalytics
     ports:
       - "8000:8000"
     devices:
@@ -614,7 +799,25 @@ services:
     environment:
       - TZ=Europe/London
       - WOOFALYTICS__WEBHOOK__IFTTT_KEY=${IFTTT_KEY:-}
+      - WOOFALYTICS__LOG_LEVEL=${LOG_LEVEL:-INFO}
     restart: unless-stopped
+    deploy:
+      resources:
+        limits:
+          memory: 1G
+        reservations:
+          memory: 512M
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/api/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 10s
 ```
 
 ### Commands
@@ -718,10 +921,19 @@ pytest -s
 ### Test Structure
 
 - `conftest.py` - Shared fixtures (mock PyAudio, test settings, etc.)
-- `test_config.py` - Configuration validation
+- `test_api_routes.py` - API endpoint tests
+- `test_api_websocket.py` - WebSocket tests
 - `test_audio.py` - Audio frame and device tests
+- `test_config.py` - Configuration validation
 - `test_detection.py` - DOA and bark event tests
 - `test_evidence.py` - Metadata and storage tests
+- `test_export.py` - Data export tests
+- `test_fingerprint_clustering.py` - Bark clustering tests
+- `test_fingerprint_matching.py` - Fingerprint matching tests
+- `test_quiet_hours.py` - Quiet hours scheduling tests
+- `test_resample_cache.py` - Resample cache tests
+- `test_summary.py` - Summary endpoint tests
+- `test_yamnet.py` - YAMNet gate tests
 
 ### Mocking
 
@@ -776,7 +988,7 @@ The downside is slower inference (~500ms vs 80ms), which is why:
 
 ### Why Legacy MLP Mode?
 
-For constrained hardware (RPi 3, RPi Zero), the legacy MLP model offers:
+For constrained hardware or faster inference, the legacy MLP model offers:
 - 80ms inference interval (12.5 inferences/second)
 - Smaller memory footprint
 - Less accurate but faster
@@ -795,15 +1007,13 @@ For documentation purposes, metadata must be:
 
 ### Not Yet Implemented
 
-1. **Event Filter** (`events/filter.py`) - Rate limiting/debouncing
-2. **Evidence Cleanup** - Automatic old file removal
-3. **Audio Spectrogram** - Visual display in web UI
+1. **Evidence Cleanup** - Automatic old file removal (manual purge available via API)
+2. **Audio Spectrogram** - Visual display in web UI
 
 ### Potential Improvements
 
-1. **Prometheus Metrics** - For Grafana dashboards
-2. **Home Assistant Integration** - MQTT or REST
-3. **SMS/Push Notifications** - Via Pushover/Twilio
+1. **Home Assistant Integration** - MQTT or REST
+2. **SMS/Push Notifications** - Via Pushover/Twilio
 
 ### Recently Implemented (v2.5.0)
 
@@ -812,12 +1022,17 @@ For documentation purposes, metadata must be:
 3. **Bark Pattern Analysis** - Clustering UI for analyzing bark patterns
 4. **Quiet Hours** - Scheduled reduced sensitivity periods
 5. **Fingerprint Purge** - Remove orphaned fingerprints without audio evidence
+6. **Notification Debouncing** - Per-dog rate limiting via `events/debouncer.py`
+7. **Prometheus Metrics** - Prometheus-format metrics at `/api/metrics`
+8. **API Authentication** - Optional API key authentication
+9. **Rate Limiting** - Per-endpoint rate limiting
+10. **Runtime Settings** - Update settings via UI, persisted to config.yaml
 
 ### Known Limitations
 
 1. **Linux Only** - ALSA volume control is Linux-specific
-2. **x86/ARM** - PyTorch may need ARM-specific wheels on RPi
-3. **No GPU** - Inference is CPU-only (fine for RPi)
+2. **ARM Untested** - Developed on x86_64; ARM/Raspberry Pi may need platform-specific PyTorch wheels
+3. **CPU Only** - Inference is CPU-only (GPU not required)
 
 ---
 
@@ -825,7 +1040,7 @@ For documentation purposes, metadata must be:
 
 This is a fork/rewrite of the original woofalytics project. Key changes:
 
-| Aspect | Original | v2.0 |
+| Aspect | Original | v2.5 |
 |--------|----------|------|
 | Python | 3.9+ | 3.11+ |
 | Detection | Custom MLP | CLAP zero-shot (+ legacy MLP) |
