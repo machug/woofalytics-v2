@@ -1,14 +1,14 @@
 [project]
 name = "woofalytics"
 version = "2.5.0"
-description = "AI-powered dog bark detection with evidence collection for Raspberry Pi"
+description = "AI-powered dog bark detection with evidence collection"
 readme = "README.md"
 license = { text = "MIT" }
 requires-python = ">=3.11"
 authors = [
     { name = "Original: woofalytics team" },
 ]
-keywords = ["dog", "bark", "detection", "raspberry-pi", "audio", "ml", "pytorch"]
+keywords = ["dog", "bark", "detection", "audio", "ml", "pytorch", "clap"]
 classifiers = [
     "Development Status :: 4 - Beta",
     "Environment :: Console",
@@ -66,10 +66,10 @@ clustering = [
 woofalytics = "woofalytics.__main__:main"
 
 [project.urls]
-Homepage = "https://github.com/YOUR_USERNAME/woofalytics-v2"
-Documentation = "https://github.com/YOUR_USERNAME/woofalytics-v2#readme"
-Repository = "https://github.com/YOUR_USERNAME/woofalytics-v2"
-Issues = "https://github.com/YOUR_USERNAME/woofalytics-v2/issues"
+Homepage = "https://github.com/machug/woofalytics-v2"
+Documentation = "https://github.com/machug/woofalytics-v2#readme"
+Repository = "https://github.com/machug/woofalytics-v2"
+Issues = "https://github.com/machug/woofalytics-v2/issues"
 
 [build-system]
 requires = ["hatchling"]

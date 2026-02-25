@@ -1,7 +1,7 @@
 """Rate limiting for API endpoints.
 
 This module provides configurable rate limiting using SlowAPI middleware
-to protect the Raspberry Pi from resource exhaustion through request flooding.
+to protect the server from resource exhaustion through request flooding.
 
 Rate limits are applied globally based on HTTP method:
 - GET requests: Higher limits (read operations)
@@ -91,7 +91,7 @@ class RateLimitMiddleware(BaseHTTPMiddleware):
     """Simple in-memory rate limiting middleware.
 
     Uses a sliding window approach to track requests per client IP.
-    Suitable for single-instance Raspberry Pi deployment.
+    Suitable for single-instance deployment.
     """
 
     def __init__(self, app, window_seconds: int = 60):
