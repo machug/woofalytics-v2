@@ -137,11 +137,15 @@ def _filter_by_date_range(
 
 
 def _parse_date(date_str: str | None, default: datetime) -> datetime:
-    """Parse a date string or return default."""
+    """Parse a date string or return default.
+
+    Dates are interpreted in local timezone since bark events are
+    associated with local calendar days.
+    """
     if date_str is None:
         return default
     try:
-        return datetime.strptime(date_str, "%Y-%m-%d").replace(tzinfo=timezone.utc)
+        return datetime.strptime(date_str, "%Y-%m-%d").replace(tzinfo=LOCAL_TZ)
     except ValueError:
         raise HTTPException(
             status_code=400,
@@ -152,11 +156,13 @@ def _parse_date(date_str: str | None, default: datetime) -> datetime:
 def _parse_date_range(start_date: str, end_date: str) -> tuple[datetime, datetime]:
     """Parse and validate a date range.
 
+    Dates are interpreted in local timezone. Returns UTC datetimes.
+
     Returns:
-        Tuple of (range_start, range_end_exclusive)
+        Tuple of (range_start_utc, range_end_exclusive_utc)
     """
     try:
-        range_start = datetime.strptime(start_date, "%Y-%m-%d").replace(tzinfo=timezone.utc)
+        range_start = datetime.strptime(start_date, "%Y-%m-%d").replace(tzinfo=LOCAL_TZ)
     except ValueError:
         raise HTTPException(
             status_code=400,
@@ -164,7 +170,7 @@ def _parse_date_range(start_date: str, end_date: str) -> tuple[datetime, datetim
         )
 
     try:
-        range_end = datetime.strptime(end_date, "%Y-%m-%d").replace(tzinfo=timezone.utc)
+        range_end = datetime.strptime(end_date, "%Y-%m-%d").replace(tzinfo=LOCAL_TZ)
     except ValueError:
         raise HTTPException(
             status_code=400,
@@ -177,24 +183,33 @@ def _parse_date_range(start_date: str, end_date: str) -> tuple[datetime, datetim
             detail="start_date must be before or equal to end_date.",
         )
 
-    return range_start, range_end + timedelta(days=1)
+    range_end_exclusive = range_end + timedelta(days=1)
+    return range_start.astimezone(timezone.utc), range_end_exclusive.astimezone(timezone.utc)
 
 
 def _get_week_boundaries(date: datetime) -> tuple[datetime, datetime]:
-    """Get Monday-Sunday boundaries for the week containing the date."""
-    monday = date - timedelta(days=date.weekday())
+    """Get Monday-Sunday boundaries for the week containing the date.
+
+    Returns UTC datetimes based on local timezone day boundaries.
+    """
+    local_date = date.astimezone(LOCAL_TZ) if date.tzinfo else date.replace(tzinfo=LOCAL_TZ)
+    monday = local_date - timedelta(days=local_date.weekday())
     monday = monday.replace(hour=0, minute=0, second=0, microsecond=0)
-    return monday, monday + timedelta(days=7)
+    sunday_end = monday + timedelta(days=7)
+    return monday.astimezone(timezone.utc), sunday_end.astimezone(timezone.utc)
 
 
 def _get_month_boundaries(year: int, month: int) -> tuple[datetime, datetime]:
-    """Get first and last+1 day boundaries for a month."""
-    start = datetime(year, month, 1, tzinfo=timezone.utc)
+    """Get first and last+1 day boundaries for a month.
+
+    Returns UTC datetimes based on local timezone day boundaries.
+    """
+    start = datetime(year, month, 1, tzinfo=LOCAL_TZ)
     if month == 12:
-        end = datetime(year + 1, 1, 1, tzinfo=timezone.utc)
+        end = datetime(year + 1, 1, 1, tzinfo=LOCAL_TZ)
     else:
-        end = datetime(year, month + 1, 1, tzinfo=timezone.utc)
-    return start, end
+        end = datetime(year, month + 1, 1, tzinfo=LOCAL_TZ)
+    return start.astimezone(timezone.utc), end.astimezone(timezone.utc)
 
 
 # --- Summary Endpoints ---
@@ -209,11 +224,17 @@ async def daily_summary(
     ),
 ) -> DailySummarySchema:
     """Get daily bark summary with hourly breakdown."""
-    today = datetime.now(timezone.utc).replace(hour=0, minute=0, second=0, microsecond=0)
+    today = datetime.now(LOCAL_TZ).replace(hour=0, minute=0, second=0, microsecond=0)
     target_date = _parse_date(date, today)
 
+    # Use local timezone day boundaries, convert to UTC for filtering
     day_start = target_date.replace(hour=0, minute=0, second=0, microsecond=0)
-    entries = _filter_by_date_range(evidence._index.entries, day_start, day_start + timedelta(days=1))
+    day_end = day_start + timedelta(days=1)
+    entries = _filter_by_date_range(
+        evidence._index.entries,
+        day_start.astimezone(timezone.utc),
+        day_end.astimezone(timezone.utc),
+    )
 
     total_barks, total_events, total_duration, avg_confidence, peak_hour, hourly = (
         _calculate_period_stats(entries)
@@ -239,7 +260,7 @@ async def weekly_summary(
     ),
 ) -> WeeklySummarySchema:
     """Get weekly bark summary with daily breakdown."""
-    target_date = _parse_date(date, datetime.now(timezone.utc))
+    target_date = _parse_date(date, datetime.now(LOCAL_TZ))
     week_start, week_end = _get_week_boundaries(target_date)
 
     entries = _filter_by_date_range(evidence._index.entries, week_start, week_end)
@@ -268,7 +289,7 @@ async def monthly_summary(
     ),
 ) -> MonthlySummarySchema:
     """Get monthly bark summary with daily breakdown."""
-    today = datetime.now(timezone.utc)
+    today = datetime.now(LOCAL_TZ)
 
     if month is None:
         year, mon = today.year, today.month
@@ -444,7 +465,7 @@ async def weekly_ai_summary(
     ),
 ) -> AISummarySchema:
     """Get AI-generated summary of weekly bark data."""
-    target_date = _parse_date(date, datetime.now(timezone.utc))
+    target_date = _parse_date(date, datetime.now(LOCAL_TZ))
     week_start, week_end = _get_week_boundaries(target_date)
 
     entries = _filter_by_date_range(evidence._index.entries, week_start, week_end)
