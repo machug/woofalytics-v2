@@ -296,12 +296,14 @@ async def download_evidence(
         opus_filename = filename.replace(".wav", ".opus")
         opus_path = cache_dir / opus_filename
 
-        # Transcode if not cached
-        if not opus_path.exists():
+        # Transcode if not cached (also re-transcode empty files from prior failures)
+        if not opus_path.exists() or opus_path.stat().st_size == 0:
             try:
                 # FFmpeg: convert to Opus at 64kbps (excellent quality for voice/barks)
+                # -ac 1: downmix to mono (input may be multi-channel from mic array)
                 proc = await asyncio.create_subprocess_exec(
                     "ffmpeg", "-y", "-i", str(file_path),
+                    "-ac", "1",
                     "-c:a", "libopus", "-b:a", "64k",
                     "-vbr", "on", "-compression_level", "10",
                     str(opus_path),
@@ -310,6 +312,8 @@ async def download_evidence(
                 )
                 await proc.wait()
                 if proc.returncode != 0:
+                    # Clean up empty/corrupt output file
+                    opus_path.unlink(missing_ok=True)
                     raise HTTPException(status_code=500, detail="Audio transcoding failed")
             except FileNotFoundError:
                 raise HTTPException(status_code=500, detail="FFmpeg not available")
