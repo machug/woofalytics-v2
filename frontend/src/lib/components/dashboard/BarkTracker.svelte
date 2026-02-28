@@ -84,7 +84,7 @@
 	.bark-tracker {
 		display: flex;
 		flex-direction: column;
-		gap: var(--space-md);
+		gap: var(--space-sm);
 	}
 
 	.tracker-header {
@@ -146,21 +146,21 @@
 	.metric-grid {
 		display: grid;
 		grid-template-columns: repeat(2, minmax(0, 1fr));
-		gap: var(--space-md);
+		gap: var(--space-xs);
 	}
 
 	.metric-card {
 		display: flex;
 		flex-direction: column;
-		gap: 4px;
-		padding: var(--space-sm) var(--space-md);
+		gap: 2px;
+		padding: var(--space-xs) var(--space-sm);
 		background: var(--bg-overlay);
 		border: 1px solid var(--border-subtle);
 		border-radius: var(--radius-sm);
 	}
 
 	.metric-label {
-		font-size: 0.65rem;
+		font-size: 0.6rem;
 		font-weight: 600;
 		letter-spacing: 0.08em;
 		text-transform: uppercase;
@@ -168,7 +168,7 @@
 	}
 
 	.metric-value {
-		font-size: 1.2rem;
+		font-size: 1rem;
 		font-weight: 700;
 		font-family: 'JetBrains Mono', monospace;
 		color: var(--text-primary);

@@ -66,11 +66,11 @@
 		background: var(--bg-surface);
 		border: 1px solid var(--border-default);
 		border-radius: var(--radius-md);
-		padding: var(--space-lg);
+		padding: var(--space-sm) var(--space-md);
 		display: flex;
 		flex-direction: column;
-		gap: var(--space-md);
-		max-height: 400px;
+		gap: var(--space-sm);
+		max-height: 260px;
 		overflow: hidden;
 	}
 
@@ -124,9 +124,9 @@
 	.bark-item {
 		display: grid;
 		grid-template-columns: auto 1fr auto;
-		gap: var(--space-md);
+		gap: var(--space-sm);
 		align-items: center;
-		padding: var(--space-sm) var(--space-md);
+		padding: var(--space-xs) var(--space-sm);
 		background: var(--bg-overlay);
 		border: 1px solid var(--border-subtle);
 		border-radius: var(--radius-sm);

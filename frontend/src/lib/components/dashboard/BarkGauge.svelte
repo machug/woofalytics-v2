@@ -95,10 +95,10 @@
 		background: var(--bg-surface);
 		border: 1px solid var(--border-default);
 		border-radius: var(--radius-md);
-		padding: var(--space-lg);
+		padding: var(--space-md);
 		display: flex;
 		flex-direction: column;
-		gap: var(--space-md);
+		gap: var(--space-sm);
 		transition: all 0.2s ease;
 	}
 
@@ -174,11 +174,11 @@
 		display: flex;
 		flex-direction: column;
 		align-items: center;
-		padding: var(--space-lg) 0;
+		padding: var(--space-xs) 0;
 	}
 
 	.count-value {
-		font-size: 4rem;
+		font-size: 2.5rem;
 		font-weight: 700;
 		font-family: 'JetBrains Mono', monospace;
 		color: var(--accent-amber);
@@ -186,11 +186,11 @@
 	}
 
 	.count-label {
-		font-size: 0.75rem;
+		font-size: 0.7rem;
 		font-weight: 500;
 		letter-spacing: 0.05em;
 		color: var(--text-muted);
-		margin-top: var(--space-xs);
+		margin-top: 2px;
 	}
 
 	.last-bark-info {

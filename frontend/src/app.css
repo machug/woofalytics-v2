@@ -223,7 +223,7 @@ body::before {
 	background: rgba(22, 27, 34, 0.7);
 	border: 1px solid var(--border-default);
 	border-radius: var(--radius-lg);
-	padding: var(--space-lg);
+	padding: var(--space-md);
 	transition: border-color var(--transition-base), box-shadow var(--transition-base),
 		transform var(--transition-base);
 	position: relative;

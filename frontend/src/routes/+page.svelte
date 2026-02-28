@@ -122,11 +122,7 @@
 			<DetectionPipeline />
 
 			<Card title="Audio Waveform">
-				<WaveformVisualizer height={120} />
-			</Card>
-
-			<Card title="Bark Tracker">
-				<BarkTracker fingerprintStats={fingerprintStats} dogs={dogs} />
+				<WaveformVisualizer height={80} />
 			</Card>
 		</div>
 
@@ -142,7 +138,7 @@
 				</div>
 				<div class="stat-card">
 					<span class="stat-value">{formatNumber(fingerprintStats?.fingerprints ?? 0)}</span>
-					<span class="stat-label">Total Barks</span>
+					<span class="stat-label">Barks</span>
 				</div>
 				<div class="stat-card">
 					<span class="stat-value">{formatNumber(fingerprintStats?.untagged ?? 0)}</span>
@@ -153,6 +149,10 @@
 					<span class="stat-label">Evidence</span>
 				</div>
 			</div>
+
+			<Card title="Bark Tracker">
+				<BarkTracker fingerprintStats={fingerprintStats} dogs={dogs} />
+			</Card>
 
 			<!-- Dog Overview -->
 			{#if dogs.length > 0}
@@ -183,7 +183,7 @@
 	.dashboard {
 		display: flex;
 		flex-direction: column;
-		gap: var(--space-lg);
+		gap: var(--space-md);
 	}
 
 	.dashboard-header {
@@ -285,60 +285,60 @@
 	.dashboard-grid {
 		display: grid;
 		grid-template-columns: 1fr 1fr;
-		gap: var(--space-lg);
+		gap: var(--space-md);
 	}
 
 	.monitoring-section,
 	.stats-section {
 		display: flex;
 		flex-direction: column;
-		gap: var(--space-md);
+		gap: var(--space-sm);
 	}
 
 	.quick-stats {
 		display: grid;
-		grid-template-columns: repeat(2, 1fr);
-		gap: var(--space-md);
+		grid-template-columns: repeat(4, 1fr);
+		gap: var(--space-xs);
 	}
 
 	.stat-card {
 		display: flex;
 		flex-direction: column;
 		align-items: center;
-		gap: var(--space-xs);
-		padding: var(--space-lg);
+		gap: 2px;
+		padding: var(--space-sm) var(--space-xs);
 		background: var(--bg-surface);
 		border: 1px solid var(--border-default);
-		border-radius: var(--radius-md);
+		border-radius: var(--radius-sm);
 	}
 
 	.stat-value {
-		font-size: 1.5rem;
+		font-size: 1rem;
 		font-weight: 700;
 		font-family: 'JetBrains Mono', monospace;
 		color: var(--accent-teal);
 	}
 
 	.stat-label {
-		font-size: 0.75rem;
+		font-size: 0.6rem;
 		font-weight: 600;
 		text-transform: uppercase;
-		letter-spacing: 0.1em;
+		letter-spacing: 0.08em;
 		color: var(--text-muted);
 	}
 
 	.dog-grid {
 		display: grid;
-		grid-template-columns: repeat(auto-fill, minmax(120px, 1fr));
-		gap: var(--space-sm);
+		grid-template-columns: repeat(auto-fill, minmax(100px, 1fr));
+		gap: var(--space-xs);
 	}
 
 	.dog-card {
 		display: flex;
 		flex-direction: column;
 		align-items: center;
-		gap: var(--space-xs);
-		padding: var(--space-md);
+		gap: 2px;
+		padding: var(--space-sm);
 		background: var(--bg-overlay);
 		border: 1px solid var(--border-subtle);
 		border-radius: var(--radius-sm);
@@ -352,16 +352,17 @@
 	}
 
 	.dog-emoji {
-		font-size: 1.5rem;
+		font-size: 1.25rem;
 	}
 
 	.dog-name {
 		font-weight: 600;
+		font-size: 0.8rem;
 		color: var(--text-primary);
 	}
 
 	.dog-barks {
-		font-size: 0.75rem;
+		font-size: 0.65rem;
 		color: var(--text-muted);
 	}
 
