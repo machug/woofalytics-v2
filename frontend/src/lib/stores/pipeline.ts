@@ -59,9 +59,8 @@ function createPipelineStore() {
 		if (ws?.readyState === WebSocket.OPEN) return;
 
 		const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
-		const host = window.location.hostname;
-		const port = '8000'; // Backend port
-		const url = `${protocol}//${host}:${port}/ws/pipeline`;
+		// Same host:port as the page (backend serves the UI; Vite proxies /ws in dev)
+		const url = `${protocol}//${window.location.host}/ws/pipeline`;
 
 		console.log('[PipelineStore] Connecting to', url);
 		ws = new WebSocket(url);

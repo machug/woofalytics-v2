@@ -22,7 +22,7 @@ interface WebSocketConfig {
 }
 
 export function createWebSocketStore(config: WebSocketConfig): WebSocketStore {
-	const { url, reconnectInterval = 3000, maxReconnectAttempts = 10 } = config;
+	const { url, reconnectInterval = 3000, maxReconnectAttempts = Infinity } = config;
 
 	let ws: WebSocket | null = null;
 	let reconnectAttempts = 0;
