@@ -28,7 +28,7 @@ from urllib.parse import urlparse
 from zoneinfo import ZoneInfo
 
 import structlog
-from pydantic import BaseModel, Field, SecretStr, field_validator
+from pydantic import BaseModel, Field, SecretStr, field_validator, model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 logger = structlog.get_logger(__name__)
@@ -55,7 +55,19 @@ class AudioConfig(BaseModel):
         default=2,
         ge=1,
         le=8,
-        description="Number of audio channels.",
+        description="Number of audio channels the app works with (after channel_indices selection).",
+    )
+    device_channels: int | None = Field(
+        default=None,
+        ge=1,
+        le=16,
+        description="Channels to open on the device. None = same as channels. "
+        "Example: ReSpeaker USB array gives 6 (0=processed, 1-4=raw mics, 5=playback).",
+    )
+    channel_indices: list[int] | None = Field(
+        default=None,
+        description="Device channels to keep, in order. Length must equal channels. "
+        "Example: [1, 2, 3, 4] for the ReSpeaker raw mics.",
     )
     chunk_size: int = Field(
         default=441,
@@ -69,6 +81,19 @@ class AudioConfig(BaseModel):
         le=100,
         description="Microphone capture volume percentage.",
     )
+
+    @model_validator(mode="after")
+    def _check_channel_selection(self) -> AudioConfig:
+        if self.channel_indices is None:
+            if self.device_channels not in (None, self.channels):
+                raise ValueError("channel_indices is required when device_channels differs from channels")
+        else:
+            open_channels = self.device_channels or self.channels
+            if len(self.channel_indices) != self.channels:
+                raise ValueError("channel_indices length must equal channels")
+            if any(i < 0 or i >= open_channels for i in self.channel_indices):
+                raise ValueError(f"channel_indices must be in range 0..{open_channels - 1}")
+        return self
 
 
 class ModelConfig(BaseModel):
@@ -314,6 +339,12 @@ class EvidenceConfig(BaseModel):
         ge=1,
         le=60,
         description="Seconds of audio to record after bark detection.",
+    )
+    max_clip_seconds: int = Field(
+        default=300,
+        ge=30,
+        le=1800,
+        description="Longest single clip. A longer bark episode is split into several clips.",
     )
 
 

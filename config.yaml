@@ -6,10 +6,14 @@
 # Example: WOOFALYTICS__MODEL__CLAP_THRESHOLD=0.7
 
 audio:
-  device_name: pulse
-  sample_rate: 44100
+  # ReSpeaker USB 4 Mic Array, read directly (not via PipeWire, which exposes only 3ch).
+  # Device gives 6ch @ 16 kHz: 0=processed, 1-4=raw mics, 5=playback. Keep the raw mics.
+  device_name: ReSpeaker
+  sample_rate: 16000
   channels: 4
-  chunk_size: 441
+  device_channels: 6
+  channel_indices: [1, 2, 3, 4]
+  chunk_size: 160  # 10 ms chunks; the detector assumes 100 chunks = 1 s
   volume_percent: 75
 model:
   use_clap: true
@@ -36,6 +40,7 @@ evidence:
   directory: ./evidence
   past_context_seconds: 15
   future_context_seconds: 15
+  max_clip_seconds: 300
 webhook:
   enabled: false
   ifttt_event: woof

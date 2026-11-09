@@ -73,6 +73,11 @@ class AsyncAudioCapture:
     _running: bool = field(default=False, init=False)
     _thread: threading.Thread | None = field(default=None, init=False)
     _error: Exception | None = field(default=None, init=False)
+    _last_frame_time: float = field(default=0.0, init=False)
+    _stop_event: threading.Event = field(default_factory=threading.Event, init=False)
+
+    # Seconds without a new frame before capture counts as stalled.
+    STALL_SECONDS = 5.0
 
     def __post_init__(self) -> None:
         # Calculate max buffer size based on buffer_seconds
@@ -88,11 +93,13 @@ class AsyncAudioCapture:
         """
         if self._running:
             raise RuntimeError("Audio capture is already running")
+        if self._thread and self._thread.is_alive():
+            raise RuntimeError("Previous audio capture thread has not exited yet")
 
         # Find microphone
         self._microphone = find_microphone(
             device_name=self.config.device_name,
-            min_channels=self.config.channels,
+            min_channels=self._open_channels,
         )
 
         # Set volume
@@ -100,6 +107,7 @@ class AsyncAudioCapture:
 
         # Start capture thread
         self._running = True
+        self._stop_event.clear()
         self._error = None
         self._thread = threading.Thread(
             target=self._capture_loop,
@@ -126,6 +134,7 @@ class AsyncAudioCapture:
             return
 
         self._running = False
+        self._stop_event.set()  # wakes a retry backoff immediately
 
         if self._thread and self._thread.is_alive():
             # Wait for thread to finish with timeout
@@ -134,8 +143,37 @@ class AsyncAudioCapture:
 
         logger.info("audio_capture_stopped")
 
+    @property
+    def _open_channels(self) -> int:
+        """Channels to open on the device (may be more than we keep)."""
+        return self.config.device_channels or self.config.channels
+
+    def _select_channels(self, data: bytes) -> bytes:
+        """Keep only config.channel_indices from interleaved int16 data."""
+        if self.config.channel_indices is None:
+            return data
+        arr = np.frombuffer(data, dtype=np.int16).reshape(-1, self._open_channels)
+        return np.ascontiguousarray(arr[:, self.config.channel_indices]).tobytes()
+
+    def _open_stream(self, p: pyaudio.PyAudio) -> pyaudio.Stream:
+        import pyaudio
+
+        return p.open(
+            format=pyaudio.paInt16,
+            channels=self._open_channels,
+            rate=self.config.sample_rate,
+            frames_per_buffer=self.config.chunk_size,
+            input=True,
+            input_device_index=self._microphone.index if self._microphone else None,
+        )
+
     def _capture_loop(self) -> None:
-        """Main capture loop running in background thread."""
+        """Main capture loop running in background thread.
+
+        Read errors (e.g. USB mic unplugged) do not end the loop: the
+        stream is reopened with backoff until it works or stop() is called.
+        Only a failure on the very first open is fatal (reported to start()).
+        """
         import pyaudio
 
         p: pyaudio.PyAudio | None = None
@@ -143,57 +181,54 @@ class AsyncAudioCapture:
 
         try:
             p = pyaudio.PyAudio()
-            stream = p.open(
-                format=pyaudio.paInt16,
-                channels=self.config.channels,
-                rate=self.config.sample_rate,
-                frames_per_buffer=self.config.chunk_size,
-                input=True,
-                input_device_index=self._microphone.index if self._microphone else None,
-            )
-
+            stream = self._open_stream(p)
             logger.debug("audio_stream_opened")
-
-            while self._running:
-                try:
-                    data = stream.read(self.config.chunk_size, exception_on_overflow=False)
-
-                    frame = AudioFrame(
-                        timestamp=time.time(),
-                        data=data,
-                        channels=self.config.channels,
-                        sample_rate=self.config.sample_rate,
-                    )
-
-                    with self._buffer_lock:
-                        self._buffer.append(frame)
-
-                except OSError as e:
-                    logger.warning("audio_read_error", error=str(e))
-                    # Try to recover by reopening stream
-                    if stream:
-                        stream.stop_stream()
-                        stream.close()
-
-                    stream = p.open(
-                        format=pyaudio.paInt16,
-                        channels=self.config.channels,
-                        rate=self.config.sample_rate,
-                        frames_per_buffer=self.config.chunk_size,
-                        input=True,
-                        input_device_index=self._microphone.index if self._microphone else None,
-                    )
-
         except Exception as e:
             logger.error("audio_capture_error", error=str(e))
             self._error = e
-
-        finally:
-            if stream:
-                stream.stop_stream()
-                stream.close()
             if p:
                 p.terminate()
+            return
+
+        backoff = 1.0
+        try:
+            while self._running:
+                try:
+                    if stream is None:
+                        stream = self._open_stream(p)
+                        logger.info("audio_stream_reopened")
+                        backoff = 1.0
+                    data = stream.read(self.config.chunk_size, exception_on_overflow=False)
+                    now = time.time()
+                    frame = AudioFrame(
+                        timestamp=now,
+                        data=self._select_channels(data),
+                        channels=self.config.channels,
+                        sample_rate=self.config.sample_rate,
+                    )
+                    with self._buffer_lock:
+                        self._buffer.append(frame)
+                    self._last_frame_time = now
+
+                except Exception as e:
+                    logger.error("audio_read_error", error=str(e), retry_in=backoff)
+                    if stream:
+                        try:
+                            stream.stop_stream()
+                            stream.close()
+                        except Exception:
+                            pass
+                        stream = None
+                    self._stop_event.wait(backoff)
+                    backoff = min(backoff * 2, 30.0)
+        finally:
+            if stream:
+                try:
+                    stream.stop_stream()
+                    stream.close()
+                except Exception:
+                    pass
+            p.terminate()
 
     def get_recent_frames(self, count: int | None = None) -> list[AudioFrame]:
         """Get recent audio frames from the buffer.
@@ -252,10 +287,46 @@ class AsyncAudioCapture:
 
         return combined, frames[0].timestamp
 
+    def get_audio_between(
+        self,
+        start: float,
+        end: float,
+    ) -> tuple[np.ndarray, float, float]:
+        """Get buffered audio for a wall-clock window.
+
+        Args:
+            start: Unix timestamp of the window start.
+            end: Unix timestamp of the window end.
+
+        Returns:
+            Tuple of (audio_array, first_frame_start, last_frame_end).
+            Array shape is (channels, samples). Empty array if no frames.
+            Frame timestamps mark the end of each chunk.
+        """
+        frame_s = self.config.chunk_size / self.config.sample_rate
+        with self._buffer_lock:
+            frames = [f for f in self._buffer if start < f.timestamp and f.timestamp - frame_s <= end]
+
+        if not frames:
+            return np.array([], dtype=np.int16), start, start
+
+        combined = np.concatenate([f.to_numpy() for f in frames], axis=1)
+        return combined, frames[0].timestamp - frame_s, frames[-1].timestamp
+
     @property
     def is_running(self) -> bool:
         """Check if capture is currently running."""
         return self._running
+
+    @property
+    def is_healthy(self) -> bool:
+        """True when the capture thread is alive and frames are still arriving."""
+        return (
+            self._running
+            and self._thread is not None
+            and self._thread.is_alive()
+            and time.time() - self._last_frame_time < self.STALL_SECONDS
+        )
 
     @property
     def microphone(self) -> MicrophoneInfo | None:

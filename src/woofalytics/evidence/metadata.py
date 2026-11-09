@@ -17,6 +17,14 @@ import structlog
 logger = structlog.get_logger(__name__)
 
 
+def _iso(dt: datetime | None) -> str | None:
+    return dt.isoformat() if dt else None
+
+
+def _parse_iso(value: str | None) -> datetime | None:
+    return datetime.fromisoformat(value) if value else None
+
+
 @dataclass
 class DetectionInfo:
     """Detection metrics for the bark event."""
@@ -78,6 +86,11 @@ class EvidenceMetadata:
     channels: int
     detection: DetectionInfo
     device: DeviceInfo
+    # Chain-of-custody fields. None on clips recorded before these existed.
+    recording_start_utc: datetime | None = None
+    recording_end_utc: datetime | None = None
+    sha256: str | None = None
+    software_version: str | None = None
 
     @classmethod
     def create(
@@ -93,8 +106,12 @@ class EvidenceMetadata:
         doa_bartlett: int | None = None,
         doa_capon: int | None = None,
         doa_mem: int | None = None,
+        timestamp_utc: datetime | None = None,
+        recording_start_utc: datetime | None = None,
+        recording_end_utc: datetime | None = None,
+        sha256: str | None = None,
     ) -> EvidenceMetadata:
-        """Create metadata with current timestamp.
+        """Create metadata for a saved clip.
 
         Args:
             filename: Name of the WAV file.
@@ -108,12 +125,18 @@ class EvidenceMetadata:
             doa_bartlett: Direction of arrival (Bartlett method).
             doa_capon: Direction of arrival (Capon method).
             doa_mem: Direction of arrival (MEM method).
+            timestamp_utc: Time of the first bark (trigger). Defaults to now.
+            recording_start_utc: Wall-clock time of the first sample in the WAV.
+            recording_end_utc: Wall-clock time of the last sample in the WAV.
+            sha256: SHA-256 hex digest of the WAV file.
 
         Returns:
             Configured EvidenceMetadata instance.
         """
-        now_utc = datetime.now(timezone.utc)
-        now_local = datetime.now().astimezone()
+        from woofalytics import __version__
+
+        now_utc = (timestamp_utc or datetime.now(timezone.utc)).astimezone(timezone.utc)
+        now_local = now_utc.astimezone()
 
         return cls(
             filename=filename,
@@ -133,6 +156,10 @@ class EvidenceMetadata:
             device=DeviceInfo(
                 microphone=microphone_name,
             ),
+            recording_start_utc=recording_start_utc,
+            recording_end_utc=recording_end_utc,
+            sha256=sha256,
+            software_version=__version__,
         )
 
     def to_dict(self) -> dict[str, Any]:
@@ -146,6 +173,10 @@ class EvidenceMetadata:
             "channels": self.channels,
             "detection": self.detection.to_dict(),
             "device": self.device.to_dict(),
+            "recording_start_utc": _iso(self.recording_start_utc),
+            "recording_end_utc": _iso(self.recording_end_utc),
+            "sha256": self.sha256,
+            "software_version": self.software_version,
         }
 
     @classmethod
@@ -177,6 +208,10 @@ class EvidenceMetadata:
                 hostname=data["device"]["hostname"],
                 microphone=data["device"]["microphone"],
             ),
+            recording_start_utc=_parse_iso(data.get("recording_start_utc")),
+            recording_end_utc=_parse_iso(data.get("recording_end_utc")),
+            sha256=data.get("sha256"),
+            software_version=data.get("software_version"),
         )
 
 

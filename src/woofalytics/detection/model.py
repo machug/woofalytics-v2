@@ -215,7 +215,12 @@ class BarkDetector:
         self._start_time = time.time()
 
         # Start audio capture
-        self._audio_capture = AsyncAudioCapture(config=self.settings.audio)
+        ev = self.settings.evidence
+        # Buffer must hold a whole clip: past context + longest clip + future context.
+        self._audio_capture = AsyncAudioCapture(
+            config=self.settings.audio,
+            buffer_seconds=ev.past_context_seconds + ev.max_clip_seconds + ev.future_context_seconds + 10,
+        )
         await self._audio_capture.start()
 
         # Start inference loop

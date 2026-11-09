@@ -34,7 +34,7 @@ services:
     # Environment variables
     environment:
       # Timezone (adjust for your location)
-      - TZ=Europe/London
+      - TZ=Australia/Melbourne
 
       # IFTTT webhook key (optional, for notifications)
       - WOOFALYTICS__WEBHOOK__IFTTT_KEY=${IFTTT_KEY:-}

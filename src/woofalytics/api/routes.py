@@ -107,7 +107,11 @@ async def health_check(
     bark count, and evidence file count.
     """
     return HealthSchema(
-        status="healthy" if detector.is_running else "degraded",
+        status=(
+            "healthy"
+            if detector.is_running and detector.audio_capture and detector.audio_capture.is_healthy
+            else "degraded"
+        ),
         uptime_seconds=detector.uptime_seconds,
         total_barks_detected=detector.total_barks_detected,
         evidence_files_count=evidence.total_recordings,

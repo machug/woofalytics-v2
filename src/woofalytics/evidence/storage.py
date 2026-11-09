@@ -7,11 +7,14 @@ structured metadata for council complaints and legal documentation.
 from __future__ import annotations
 
 import asyncio
+import hashlib
 import json
+import os
+import time
 import wave
 from collections.abc import Callable
 from dataclasses import dataclass, field
-from datetime import datetime
+from datetime import datetime, timezone
 from pathlib import Path
 from typing import TYPE_CHECKING
 
@@ -40,6 +43,21 @@ class PendingRecording:
     trigger_event: BarkEvent
     start_time: float
     events: list[BarkEvent] = field(default_factory=list)
+    # Set on a continuation clip: audio starts where the previous clip ended
+    # (instead of trigger - past_context_seconds).
+    clip_start: float | None = None
+    # Last bark of the previous clip. Sets the future-context deadline of a
+    # continuation, but is not counted as a detection in this clip.
+    carried_last_bark: BarkEvent | None = None
+
+    def last_bark(self) -> BarkEvent:
+        candidates = self.events + ([self.carried_last_bark] if self.carried_last_bark else [])
+        return max(candidates, key=lambda e: e.timestamp)
+
+    def audio_start(self, past_context_seconds: float) -> float:
+        if self.clip_start is not None:
+            return self.clip_start
+        return self.start_time - past_context_seconds
 
 
 @dataclass
@@ -90,18 +108,58 @@ class EvidenceStorage:
                     count=len(self._index.entries),
                 )
             except Exception as e:
-                logger.warning("evidence_index_load_error", error=str(e))
-                self._index = EvidenceIndex()
+                # Keep the broken file for inspection, then rebuild from sidecars
+                # so a corrupt index never makes existing clips disappear.
+                broken = index_path.with_name(f"index.broken-{int(time.time())}.json")
+                index_path.rename(broken)
+                logger.error("evidence_index_load_error", error=str(e), moved_to=broken.name)
+                self._index = self._rebuild_index()
         else:
-            self._index = EvidenceIndex()
+            self._index = self._rebuild_index()
+
+    def _rebuild_index(self) -> EvidenceIndex:
+        """Build the index from the JSON sidecar next to each WAV."""
+        index = EvidenceIndex()
+        for json_path in sorted(self.config.directory.glob("*_bark*.json")):
+            try:
+                index.entries.append(EvidenceMetadata.from_dict(json.loads(json_path.read_text())))
+            except Exception as e:
+                logger.warning("evidence_sidecar_unreadable", file=json_path.name, error=str(e))
+        if index.entries:
+            logger.warning("evidence_index_rebuilt", count=len(index.entries))
+            self._atomic_write(self.config.directory / "index.json", json.dumps(index.to_dict(), indent=2))
+        return index
+
+    @staticmethod
+    def _atomic_write(path: Path, text: str) -> None:
+        """Write text so a crash leaves either the old or the new file, never half of one."""
+        tmp = path.with_name(path.name + ".tmp")
+        with open(tmp, "w") as f:
+            f.write(text)
+            f.flush()
+            os.fsync(f.fileno())
+        os.replace(tmp, path)
+
+    def _audit(self, action: str, **fields: object) -> None:
+        """Append one line to evidence/audit.log (JSON lines).
+
+        ponytail: append-only by convention, not cryptographically chained.
+        Hashes in it let anyone check a WAV was not changed; upgrade to a
+        hash-chained log if someone needs to prove the log itself is complete.
+        """
+        entry = {"time_utc": datetime.now(timezone.utc).isoformat(), "action": action, **fields}
+        try:
+            with open(self.config.directory / "audit.log", "a") as f:
+                f.write(json.dumps(entry) + "\n")
+        except Exception as e:
+            logger.error("evidence_audit_write_error", error=str(e))
 
     async def _save_index(self) -> None:
-        """Save the evidence index to disk."""
+        """Save the evidence index to disk atomically."""
         index_path = self.config.directory / "index.json"
-
+        text = json.dumps(self._index.to_dict(), indent=2)
         try:
-            async with aiofiles.open(index_path, "w") as f:
-                await f.write(json.dumps(self._index.to_dict(), indent=2))
+            await asyncio.get_running_loop().run_in_executor(None, self._atomic_write, index_path, text)
         except Exception as e:
             logger.error("evidence_index_save_error", error=str(e))
 
@@ -145,16 +203,33 @@ class EvidenceStorage:
                 return None
 
             # Get the last bark event time
-            if not self._pending.events:
+            if not self._pending.events and self._pending.carried_last_bark is None:
                 return None
 
-            last_bark_time = max(e.timestamp.timestamp() for e in self._pending.events)
-            now = datetime.now().timestamp()
+            last_bark_time = self._pending.last_bark().timestamp.timestamp()
+            clip_start = self._pending.audio_start(self.config.past_context_seconds)
+            now = time.time()
 
-            # Check if future context window has expired
-            if now - last_bark_time >= self.config.future_context_seconds:
+            # Save when barking has stopped for future_context_seconds, or when
+            # the clip reaches max_clip_seconds (a long episode is split; the
+            # next bark starts a new clip with its own past context).
+            quiet_long_enough = now - last_bark_time >= self.config.future_context_seconds
+            clip_full = now - clip_start >= self.config.max_clip_seconds
+            if quiet_long_enough or clip_full:
+                previous = self._pending
                 metadata = await self._save_recording()
                 self._pending = None
+                if not quiet_long_enough and metadata and metadata.recording_end_utc:
+                    # Episode still inside its future-context window: continue
+                    # seamlessly so the trailing context is not lost.
+                    last = previous.last_bark()
+                    self._pending = PendingRecording(
+                        trigger_event=last,
+                        start_time=last.timestamp.timestamp(),
+                        carried_last_bark=last,
+                        clip_start=metadata.recording_end_utc.timestamp(),
+                    )
+                    logger.info("evidence_clip_continued", previous=metadata.filename)
                 return metadata
 
         return None
@@ -171,31 +246,41 @@ class EvidenceStorage:
         try:
             # Calculate time range for the recording
             trigger_time = self._pending.trigger_event.timestamp.timestamp()
-            last_bark_time = max(e.timestamp.timestamp() for e in self._pending.events)
+            last_bark_time = self._pending.last_bark().timestamp.timestamp()
 
-            start_time = trigger_time - self.config.past_context_seconds
-            end_time = last_bark_time + self.config.future_context_seconds
+            start_time = self._pending.audio_start(self.config.past_context_seconds)
+            end_time = min(last_bark_time + self.config.future_context_seconds, time.time())
 
-            # Get audio data from buffer
-            audio_data, actual_start = self.audio_capture.get_buffer_as_array(
-                seconds=end_time - start_time + 5  # Extra buffer
-            )
+            # Get exactly this time window from the buffer
+            audio_data, rec_start, rec_end = self.audio_capture.get_audio_between(start_time, end_time)
 
             if audio_data.size == 0:
                 logger.warning("evidence_no_audio_data")
                 return None
 
-            # Generate filename with timestamp
-            timestamp_str = self._pending.trigger_event.timestamp.strftime("%Y-%m-%d_%H-%M-%S")
-            wav_filename = f"{timestamp_str}_bark.wav"
-            json_filename = f"{timestamp_str}_bark.json"
+            if self._pending.clip_start is None and rec_start > trigger_time:
+                # Should not happen with a correctly sized buffer; flag it loudly.
+                logger.error("evidence_trigger_not_in_clip", missing_seconds=round(rec_start - trigger_time, 1))
+
+            # Filename: trigger time in UTC (the sidecar holds local time too).
+            # A numeric suffix avoids overwriting a clip saved in the same second.
+            timestamp_str = self._pending.trigger_event.timestamp.astimezone(timezone.utc).strftime(
+                "%Y-%m-%d_%H-%M-%S"
+            )
+            suffix = ""
+            n = 1
+            while (self.config.directory / f"{timestamp_str}_bark{suffix}.wav").exists():
+                n += 1
+                suffix = f"-{n}"
+            wav_filename = f"{timestamp_str}_bark{suffix}.wav"
+            json_filename = f"{timestamp_str}_bark{suffix}.json"
 
             wav_path = self.config.directory / wav_filename
             json_path = self.config.directory / json_filename
 
             # Calculate recording stats
             duration_seconds = audio_data.shape[1] / self.audio_capture.config.sample_rate
-            peak_probability = max(e.probability for e in self._pending.events)
+            peak_probability = max((e.probability for e in self._pending.events), default=0.0)
             bark_count = len(self._pending.events)
 
             # Get DOA from trigger event
@@ -205,7 +290,7 @@ class EvidenceStorage:
 
             # Save WAV file (run in executor since wave is blocking)
             loop = asyncio.get_event_loop()
-            await loop.run_in_executor(
+            sha256 = await loop.run_in_executor(
                 None,
                 self._write_wav,
                 wav_path,
@@ -227,11 +312,17 @@ class EvidenceStorage:
                 doa_bartlett=doa_bartlett,
                 doa_capon=doa_capon,
                 doa_mem=doa_mem,
+                timestamp_utc=self._pending.trigger_event.timestamp,
+                recording_start_utc=datetime.fromtimestamp(rec_start, timezone.utc),
+                recording_end_utc=datetime.fromtimestamp(rec_end, timezone.utc),
+                sha256=sha256,
             )
 
             # Save metadata JSON
-            async with aiofiles.open(json_path, "w") as f:
-                await f.write(json.dumps(metadata.to_dict(), indent=2))
+            await loop.run_in_executor(
+                None, self._atomic_write, json_path, json.dumps(metadata.to_dict(), indent=2)
+            )
+            self._audit("saved", filename=wav_filename, sha256=sha256)
 
             # Update index
             self._index.add(metadata)
@@ -248,7 +339,7 @@ class EvidenceStorage:
             # Notify callbacks with bark time range for fingerprint linking
             # Run callbacks in executor to avoid blocking the event loop
             first_bark = self._pending.trigger_event.timestamp
-            last_bark = max(e.timestamp for e in self._pending.events)
+            last_bark = self._pending.last_bark().timestamp
             loop = asyncio.get_event_loop()
             for callback in self._on_saved_callbacks:
                 try:
@@ -274,8 +365,8 @@ class EvidenceStorage:
         audio: np.ndarray,
         sample_rate: int,
         channels: int,
-    ) -> None:
-        """Write audio array to WAV file.
+    ) -> str:
+        """Write audio array to WAV file and return its SHA-256 hex digest.
 
         Args:
             path: Path to save the WAV file.
@@ -295,6 +386,12 @@ class EvidenceStorage:
             wav.setsampwidth(2)  # 16-bit
             wav.setframerate(sample_rate)
             wav.writeframes(interleaved.tobytes())
+
+        h = hashlib.sha256()
+        with open(path, "rb") as f:
+            for block in iter(lambda: f.read(1 << 20), b""):
+                h.update(block)
+        return h.hexdigest()
 
     def get_recent_evidence(self, count: int = 10) -> list[EvidenceMetadata]:
         """Get most recent evidence recordings.
@@ -393,6 +490,7 @@ class EvidenceStorage:
                             await aiofiles.os.remove(opus_path)
                         removed += 1
                         logger.info("evidence_purged", filename=entry.filename)
+                        self._audit("deleted", filename=entry.filename, sha256=entry.sha256, via="purge")
                     except Exception as e:
                         logger.warning("evidence_purge_error", filename=entry.filename, error=str(e))
                         entries_to_keep.append(entry)
@@ -427,6 +525,7 @@ class EvidenceStorage:
                     if opus_path.exists():
                         await aiofiles.os.remove(opus_path)
                     removed += 1
+                    self._audit("deleted", filename=entry.filename, sha256=entry.sha256, via="purge_all")
                 except Exception as e:
                     logger.warning("evidence_purge_error", filename=entry.filename, error=str(e))
 
